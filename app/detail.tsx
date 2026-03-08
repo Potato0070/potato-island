@@ -27,12 +27,12 @@ export default function DetailScreen() {
       const { data: colData } = await supabase.from('collections').select('*').eq('id', id).single();
       setCollectionData(colData);
 
-      // 2. 查全服寄售单
+      // 2. 查全服寄售单 (🔥 修复：同时查询 listed 和 consigning 状态)
       const { data: sells } = await supabase
         .from('nfts')
-        .select('*, seller:profiles!owner_id(username)')
+        .select('*, seller:profiles(username)')
         .eq('collection_id', id)
-        .eq('status', 'listed')
+        .in('status', ['listed', 'consigning']) 
         .order('price', { ascending: true });
       setSellListings(sells || []);
 
@@ -56,14 +56,10 @@ export default function DetailScreen() {
 
   // 卖家主动撮合逻辑
   const handleSellToBuyer = (order: any) => {
-    Alert.alert('撮合成交', `确认以 ¥${order.offer_price} 卖给 ${order.profiles?.username} 吗？成交后对方质押的Potato卡将被销毁。`, [
+    Alert.alert('撮合成交', `确认以 ¥${order.offer_price} 卖给 ${order.profiles?.username || '该玩家'} 吗？成交后对方质押的Potato卡将被销毁。`, [
       { text: '取消', style: 'cancel' },
       { text: '确认成交', onPress: async () => {
-          // 这里需要调用 RPC 并传入卖家提供的一张对应 NFT 卡片 ID
-          // 实际开发中应该先验证卖家金库里有没有这张卡
           Alert.alert('提示', '后端 RPC 销毁逻辑已就绪，正在对接金库检测...');
-          // const { error } = await supabase.rpc('accept_buy_order_with_burn', { p_order_id: order.id, p_seller_id: currentUser.id, p_nft_id: '这里填入卖家的卡片ID' });
-          // if (!error) fetchData();
       }}
     ]);
   };
@@ -74,8 +70,8 @@ export default function DetailScreen() {
          <Image source={{ uri: collectionData?.image_url }} style={styles.heroImg} />
          <Text style={styles.title}>{collectionData?.name}</Text>
          <View style={styles.tagRow}>
-            <Text style={styles.tagText}>发行 {collectionData?.total_minted}份</Text>
-            <Text style={styles.tagText}>流通 {collectionData?.circulating_supply}份</Text>
+            <Text style={styles.tagText}>发行 {collectionData?.total_minted || 0}份</Text>
+            <Text style={styles.tagText}>流通 {collectionData?.circulating_supply || 0}份</Text>
          </View>
       </View>
 
@@ -105,7 +101,7 @@ export default function DetailScreen() {
       <Text style={styles.rowUser} numberOfLines={1}>{item.seller?.username || '岛民'}</Text>
       <View style={{flexDirection: 'row', alignItems: 'center'}}>
         <Text style={styles.rowSerial}>#{item.serial_number}</Text>
-        <Text style={styles.rowPrice}>¥{item.price.toFixed(2)}</Text>
+        <Text style={styles.rowPrice}>¥{item.price?.toFixed(2)}</Text>
       </View>
     </View>
   );
@@ -116,7 +112,7 @@ export default function DetailScreen() {
       <View style={{flexDirection: 'row', alignItems: 'center'}}>
         <Text style={styles.rowTag}>🔒已质押</Text>
         <View style={{ alignItems: 'flex-end', width: 80 }}>
-          <Text style={[styles.rowPrice, {color: '#FF3B30'}]}>¥{item.offer_price.toFixed(2)}</Text>
+          <Text style={[styles.rowPrice, {color: '#FF3B30'}]}>¥{item.offer_price?.toFixed(2)}</Text>
           <TouchableOpacity style={styles.sellBtn} onPress={() => handleSellToBuyer(item)}>
             <Text style={styles.sellBtnText}>卖给TA</Text>
           </TouchableOpacity>
@@ -133,7 +129,7 @@ export default function DetailScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.navBar}>
         <TouchableOpacity onPress={() => router.back()}><Text style={styles.backBtn}>〈</Text></TouchableOpacity>
-        <Text style={styles.navTitle}>藏品详情</Text>
+        <Text style={styles.navTitle}>{collectionData?.name}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -146,7 +142,7 @@ export default function DetailScreen() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-             <Text style={{fontSize: 40, color: '#0066FF', opacity: 0.5}}>📦</Text>
+             <Image source={{uri: 'https://via.placeholder.com/100/FFF/EEE?text=Box'}} style={{width: 80, height: 80, marginBottom: 10}} />
              <Text style={styles.emptyTitle}>暂无数据</Text>
              <Text style={styles.emptyDesc}>{activeTab === 'sell' ? '当前藏品无人寄售' : '当前藏品无人求购'}</Text>
           </View>
@@ -183,7 +179,7 @@ const styles = StyleSheet.create({
   
   headerContainer: { backgroundColor: '#FFF', paddingBottom: 10 },
   heroBox: { alignItems: 'center', paddingTop: 20 },
-  heroImg: { width: 140, height: 140, borderRadius: 20, borderWidth: 1, borderColor: '#EEE', marginBottom: 16 },
+  heroImg: { width: 120, height: 120, borderRadius: 20, borderWidth: 1, borderColor: '#EEE', marginBottom: 16 },
   title: { fontSize: 22, fontWeight: '900', color: '#111', marginBottom: 10 },
   tagRow: { flexDirection: 'row', backgroundColor: '#F5F5F5', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
   tagText: { fontSize: 12, color: '#666', marginHorizontal: 6 },
