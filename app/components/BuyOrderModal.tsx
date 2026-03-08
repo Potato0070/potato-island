@@ -33,7 +33,7 @@ export default function BuyOrderModal({ currentUser, collectionData, onClose, on
     }
   };
 
-  const handleToggleSelect = (id: string) => {
+  const toggleSelect = (id: string) => {
     if (selectedCards.includes(id)) {
       setSelectedCards(selectedCards.filter(i => i !== id));
     } else {
@@ -51,7 +51,7 @@ export default function BuyOrderModal({ currentUser, collectionData, onClose, on
     if (selectedCards.length !== quantity) return Alert.alert('提示', `请先添加 ${quantity} 张材料卡`);
 
     try {
-      const { error } = await supabase.rpc('create_batch_buy_order_v3', {
+      const { error } = await supabase.rpc('create_batch_buy_order_v2', {
         p_user_id: currentUser.id,
         p_collection_id: collectionData.id,
         p_price: numPrice,
@@ -68,27 +68,43 @@ export default function BuyOrderModal({ currentUser, collectionData, onClose, on
 
   if (isSelecting) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => setIsSelecting(false)}><Text style={styles.cancelLink}>取消</Text></TouchableOpacity>
-          <Text style={styles.headerTitle}>选择质押材料 ({selectedCards.length}/{quantity})</Text>
-          <TouchableOpacity onPress={() => setIsSelecting(false)}><Text style={styles.confirmLink}>确定</Text></TouchableOpacity>
+      <View style={{ flex: 1, backgroundColor: '#FFF', height: '100%' }}>
+        <View style={styles.selectHeader}>
+           <Text style={styles.selectTitle}>从金库勾选 ({selectedCards.length}/{quantity})</Text>
         </View>
-        {loadingCards ? <ActivityIndicator style={{marginTop: 50}} /> : (
+        
+        {loadingCards ? (
+          <ActivityIndicator style={{marginTop: 50}} color="#0066FF" />
+        ) : (
           <FlatList
             data={myPotatoCards}
             numColumns={3}
+            style={{ flex: 1, paddingHorizontal: 10 }}
             keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.cardItem} onPress={() => handleToggleSelect(item.id)}>
-                <Image source={{ uri: item.collections?.image_url }} style={[styles.cardImg, selectedCards.includes(item.id) && styles.cardImgActive]} />
-                {selectedCards.includes(item.id) && <View style={styles.checkIcon}><Ionicons name="checkmark-circle" size={20} color="#3B82F6" /></View>}
-                <Text style={styles.cardSn}>#{item.serial_number}</Text>
+            renderItem={({item}) => (
+              <TouchableOpacity style={styles.cardItem} onPress={() => toggleSelect(item.id)}>
+                <Image source={{uri: item.collections?.image_url}} style={[styles.cardImg, selectedCards.includes(item.id) && {borderColor: '#0066FF', borderWidth: 3}]} />
+                {selectedCards.includes(item.id) && (
+                  <View style={styles.checkBadge}>
+                    <Text style={{color:'#FFF', fontSize:12, fontWeight:'900'}}>✓</Text>
+                  </View>
+                )}
+                <Text style={{fontSize: 11, color: '#666', marginTop: 4}}>#{item.serial_number}</Text>
               </TouchableOpacity>
             )}
-            ListEmptyComponent={<Text style={styles.emptyText}>金库里没有可用的 Potato 卡</Text>}
+            ListEmptyComponent={<Text style={{textAlign: 'center', marginTop: 50, color: '#999'}}>金库里没有可用的 Potato 卡</Text>}
           />
         )}
+
+        {/* 🌟 核心修复：绝对吸底的确定按钮，永不丢失 */}
+        <View style={{ padding: 20, paddingBottom: 40, borderTopWidth: 1, borderColor: '#EEE', backgroundColor: '#FFF' }}>
+           <TouchableOpacity 
+              style={[styles.submitBtn, selectedCards.length === quantity ? {backgroundColor: '#0066FF'} : {backgroundColor: '#CCC'}]} 
+              onPress={() => setIsSelecting(false)}
+           >
+              <Text style={styles.submitBtnText}>{selectedCards.length === quantity ? '确认选卡' : `还需选 ${quantity - selectedCards.length} 张`}</Text>
+           </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -140,10 +156,8 @@ export default function BuyOrderModal({ currentUser, collectionData, onClose, on
 
 const styles = StyleSheet.create({
   container: { padding: 20, backgroundColor: '#FFF' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  headerTitle: { fontSize: 16, fontWeight: '800' },
-  cancelLink: { color: '#999' },
-  confirmLink: { color: '#3B82F6', fontWeight: '800' },
+  selectHeader: { flexDirection: 'row', justifyContent: 'center', marginBottom: 20, paddingTop: 20 },
+  selectTitle: { fontSize: 16, fontWeight: '800' },
   mainTitle: { fontSize: 20, fontWeight: '900', color: '#111', marginBottom: 20 },
   inputCard: { backgroundColor: '#F7F7F7', borderRadius: 16, paddingHorizontal: 16, marginBottom: 20 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 60 },
@@ -166,8 +180,5 @@ const styles = StyleSheet.create({
   submitBtnText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
   cardItem: { flex: 1/3, padding: 8, alignItems: 'center' },
   cardImg: { width: '100%', aspectRatio: 1, borderRadius: 12, backgroundColor: '#F5F5F5' },
-  cardImgActive: { borderWidth: 3, borderColor: '#3B82F6' },
-  checkIcon: { position: 'absolute', top: 12, right: 12 },
-  cardSn: { fontSize: 11, color: '#999', marginTop: 4 },
-  emptyText: { textAlign: 'center', marginTop: 50, color: '#999' }
+  checkBadge: { position: 'absolute', right: 12, top: 12, backgroundColor: '#0066FF', width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }
 });
