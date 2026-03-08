@@ -12,7 +12,6 @@ export default function BuyOrderModal({ currentUser, collectionData, onClose, on
   const [loadingCards, setLoadingCards] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 🔥 修复点：正常的求购价格风控，首发无地板价时 1 元起
   const minLimit = collectionData?.floor_price 
     ? collectionData.floor_price * 0.7 
     : 1.00; 
@@ -52,19 +51,21 @@ export default function BuyOrderModal({ currentUser, collectionData, onClose, on
 
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.rpc('create_batch_buy_order_v2', {
+      // 🚀 核心修复：调用刚刚在数据库执行的 v3 合约
+      const { error } = await supabase.rpc('create_batch_buy_order_v3', {
         p_user_id: currentUser.id,
         p_collection_id: collectionData.id,
         p_price: numPrice,
         p_nft_ids: selectedCards
       });
+      
       if (error) throw error;
 
       Alert.alert('🎉 发布成功', '求购单已挂出！大盘正在为您匹配...');
       onRefresh();
       onClose();
     } catch (e: any) {
-      Alert.alert('发布失败', e.message);
+      Alert.alert('发布失败', e.message); // 有任何错误立刻弹出，绝不死转圈
     } finally {
       setIsSubmitting(false);
     }
@@ -120,13 +121,7 @@ export default function BuyOrderModal({ currentUser, collectionData, onClose, on
       <View style={styles.inputCard}>
         <View style={styles.row}>
           <Text style={styles.label}>求购出价</Text>
-          <TextInput 
-            style={styles.input} 
-            keyboardType="decimal-pad" 
-            placeholder={`最低 ¥${minLimit.toFixed(2)}`} 
-            value={price} 
-            onChangeText={setPrice} 
-          />
+          <TextInput style={styles.input} keyboardType="decimal-pad" placeholder={`最低 ¥${minLimit.toFixed(2)}`} value={price} onChangeText={setPrice} />
         </View>
         <View style={styles.divider} />
         <View style={styles.row}>
