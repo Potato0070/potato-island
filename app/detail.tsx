@@ -17,26 +17,27 @@ export default function DetailScreen() {
   const [buyOrders, setBuyOrders] = useState<any[]>([]);
   const [isBuyModalVisible, setBuyModalVisible] = useState(false);
 
+  // 统一抓取大盘数据
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
       if (session) setCurrentUser(session.user);
 
-      // 1. 查藏品信息
+      // 1. 查藏品基础信息
       const { data: colData } = await supabase.from('collections').select('*').eq('id', id).single();
       setCollectionData(colData);
 
-      // 2. 查全服寄售单 (🔥 修复：同时查询 listed 和 consigning 状态)
+      // 2. 查全服寄售单 (修复：同时查询 listed 和 consigning 状态的卡片)
       const { data: sells } = await supabase
         .from('nfts')
-        .select('*, seller:profiles(username)')
+        .select('*, seller:profiles!owner_id(username)')
         .eq('collection_id', id)
         .in('status', ['listed', 'consigning']) 
         .order('price', { ascending: true });
       setSellListings(sells || []);
 
-      // 3. 查全服求购单
+      // 3. 查全服求购单 (状态必须是 active)
       const { data: buys } = await supabase
         .from('buy_orders')
         .select('*, profiles(username)')
@@ -54,16 +55,48 @@ export default function DetailScreen() {
 
   useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 
-  // 卖家主动撮合逻辑
-  const handleSellToBuyer = (order: any) => {
-    Alert.alert('撮合成交', `确认以 ¥${order.offer_price} 卖给 ${order.profiles?.username || '该玩家'} 吗？成交后对方质押的Potato卡将被销毁。`, [
+  // 🌟 卖家主动撮合终极逻辑（全链路打通版）
+  const handleSellToBuyer = async (order: any) => {
+    // 1. 防呆：不能自己接自己的单
+    if (order.user_id === currentUser?.id) {
+      return Alert.alert('提示', '不能接自己的求购单哦！');
+    }
+
+    // 2. 验资：检查卖家金库里有没有该系列的“闲置(idle)”藏品
+    const { data: availableNfts } = await supabase
+      .from('nfts')
+      .select('id')
+      .eq('owner_id', currentUser.id)
+      .eq('collection_id', order.collection_id)
+      .eq('status', 'idle')
+      .limit(1);
+
+    if (!availableNfts || availableNfts.length === 0) {
+      return Alert.alert('库存不足', '您的金库中没有处于“闲置”状态的该系列藏品，无法接单。');
+    }
+
+    // 3. 二次确认与交易执行
+    Alert.alert('撮合成交', `确认以 ¥${order.offer_price} 卖给 ${order.profiles?.username || '该玩家'} 吗？\n\n系统将扣除您金库中的1件藏品，对方质押的材料将被永久销毁！`, [
       { text: '取消', style: 'cancel' },
-      { text: '确认成交', onPress: async () => {
-          Alert.alert('提示', '后端 RPC 销毁逻辑已就绪，正在对接金库检测...');
+      { text: '确认卖出', style: 'destructive', onPress: async () => {
+          // 调用核心销毁合约 RPC
+          const { error } = await supabase.rpc('accept_buy_order_with_burn', { 
+            p_order_id: order.id, 
+            p_seller_id: currentUser.id, 
+            p_nft_id: availableNfts[0].id // 扣除卖家刚查出来的这张卡
+          });
+          
+          if (error) {
+            Alert.alert('交易失败', error.message);
+          } else {
+            Alert.alert('🎉 交易成功', '资金已入账，对方的质押材料已在宇宙中蒸发！');
+            fetchData(); // 刷新大盘
+          }
       }}
     ]);
   };
 
+  // 渲染头部和选项卡
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <View style={styles.heroBox}>
@@ -96,6 +129,7 @@ export default function DetailScreen() {
     </View>
   );
 
+  // 寄售行UI
   const renderSellItem = ({ item }: { item: any }) => (
     <View style={styles.rowItem}>
       <Text style={styles.rowUser} numberOfLines={1}>{item.seller?.username || '岛民'}</Text>
@@ -106,6 +140,7 @@ export default function DetailScreen() {
     </View>
   );
 
+  // 求购行UI
   const renderBuyItem = ({ item }: { item: any }) => (
     <View style={styles.rowItem}>
       <Text style={styles.rowUser} numberOfLines={1}>{item.profiles?.username || '岛民'}</Text>
@@ -127,12 +162,14 @@ export default function DetailScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* 顶部导航 */}
       <View style={styles.navBar}>
         <TouchableOpacity onPress={() => router.back()}><Text style={styles.backBtn}>〈</Text></TouchableOpacity>
         <Text style={styles.navTitle}>{collectionData?.name}</Text>
         <View style={{ width: 24 }} />
       </View>
 
+      {/* 核心列表区 */}
       <FlatList
         data={currentData}
         keyExtractor={item => item.id}
@@ -142,13 +179,14 @@ export default function DetailScreen() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-             <Image source={{uri: 'https://via.placeholder.com/100/FFF/EEE?text=Box'}} style={{width: 80, height: 80, marginBottom: 10}} />
+             <Text style={{fontSize: 40, color: '#0066FF', opacity: 0.5}}>📦</Text>
              <Text style={styles.emptyTitle}>暂无数据</Text>
              <Text style={styles.emptyDesc}>{activeTab === 'sell' ? '当前藏品无人寄售' : '当前藏品无人求购'}</Text>
           </View>
         }
       />
 
+      {/* 底部悬浮操作台 */}
       <View style={styles.bottomBar}>
         <TouchableOpacity 
            style={styles.mainBtn} 
@@ -158,11 +196,17 @@ export default function DetailScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* 求购弹窗挂载 */}
       <Modal visible={isBuyModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={{ flex: 1 }} onPress={() => setBuyModalVisible(false)} />
           <View style={styles.modalContent}>
-             <BuyOrderModal currentUser={currentUser} collectionData={collectionData} onClose={() => setBuyModalVisible(false)} onRefresh={fetchData} />
+             <BuyOrderModal 
+                currentUser={currentUser} 
+                collectionData={collectionData} 
+                onClose={() => setBuyModalVisible(false)} 
+                onRefresh={fetchData} 
+             />
           </View>
         </View>
       </Modal>
