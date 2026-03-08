@@ -17,18 +17,15 @@ export default function DetailScreen() {
   const [buyOrders, setBuyOrders] = useState<any[]>([]);
   const [isBuyModalVisible, setBuyModalVisible] = useState(false);
 
-  // 统一抓取大盘数据
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
       if (session) setCurrentUser(session.user);
 
-      // 1. 查藏品基础信息
       const { data: colData } = await supabase.from('collections').select('*').eq('id', id).single();
       setCollectionData(colData);
 
-      // 2. 查全服寄售单 (修复：同时查询 listed 和 consigning 状态的卡片)
       const { data: sells } = await supabase
         .from('nfts')
         .select('*, seller:profiles!owner_id(username)')
@@ -37,7 +34,6 @@ export default function DetailScreen() {
         .order('price', { ascending: true });
       setSellListings(sells || []);
 
-      // 3. 查全服求购单 (状态必须是 active)
       const { data: buys } = await supabase
         .from('buy_orders')
         .select('*, profiles(username)')
@@ -55,14 +51,11 @@ export default function DetailScreen() {
 
   useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 
-  // 🌟 卖家主动撮合终极逻辑（全链路打通版）
   const handleSellToBuyer = async (order: any) => {
-    // 1. 防呆：不能自己接自己的单
     if (order.user_id === currentUser?.id) {
       return Alert.alert('提示', '不能接自己的求购单哦！');
     }
 
-    // 2. 验资：检查卖家金库里有没有该系列的“闲置(idle)”藏品
     const { data: availableNfts } = await supabase
       .from('nfts')
       .select('id')
@@ -75,28 +68,25 @@ export default function DetailScreen() {
       return Alert.alert('库存不足', '您的金库中没有处于“闲置”状态的该系列藏品，无法接单。');
     }
 
-    // 3. 二次确认与交易执行
     Alert.alert('撮合成交', `确认以 ¥${order.offer_price} 卖给 ${order.profiles?.username || '该玩家'} 吗？\n\n系统将扣除您金库中的1件藏品，对方质押的材料将被永久销毁！`, [
       { text: '取消', style: 'cancel' },
       { text: '确认卖出', style: 'destructive', onPress: async () => {
-          // 调用核心销毁合约 RPC
           const { error } = await supabase.rpc('accept_buy_order_with_burn', { 
             p_order_id: order.id, 
             p_seller_id: currentUser.id, 
-            p_nft_id: availableNfts[0].id // 扣除卖家刚查出来的这张卡
+            p_nft_id: availableNfts[0].id 
           });
           
           if (error) {
             Alert.alert('交易失败', error.message);
           } else {
             Alert.alert('🎉 交易成功', '资金已入账，对方的质押材料已在宇宙中蒸发！');
-            fetchData(); // 刷新大盘
+            fetchData(); 
           }
       }}
     ]);
   };
 
-  // 渲染头部和选项卡
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <View style={styles.heroBox}>
@@ -129,18 +119,22 @@ export default function DetailScreen() {
     </View>
   );
 
-  // 寄售行UI
+  // 🔥 修复点：将死列表变成可点击的跳转区域，带参进入 item-detail 收银台
   const renderSellItem = ({ item }: { item: any }) => (
-    <View style={styles.rowItem}>
+    <TouchableOpacity 
+       style={styles.rowItem} 
+       activeOpacity={0.7}
+       onPress={() => router.push({ pathname: '/item-detail', params: { listingId: item.id } })}
+    >
       <Text style={styles.rowUser} numberOfLines={1}>{item.seller?.username || '岛民'}</Text>
       <View style={{flexDirection: 'row', alignItems: 'center'}}>
         <Text style={styles.rowSerial}>#{item.serial_number}</Text>
-        <Text style={styles.rowPrice}>¥{item.price?.toFixed(2)}</Text>
+        <Text style={[styles.rowPrice, {color: '#0066FF'}]}>¥{item.price?.toFixed(2)}</Text>
+        <Text style={{fontSize: 12, color: '#999', marginLeft: 8}}>购买 〉</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
-  // 求购行UI
   const renderBuyItem = ({ item }: { item: any }) => (
     <View style={styles.rowItem}>
       <Text style={styles.rowUser} numberOfLines={1}>{item.profiles?.username || '岛民'}</Text>
@@ -162,14 +156,12 @@ export default function DetailScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 顶部导航 */}
       <View style={styles.navBar}>
         <TouchableOpacity onPress={() => router.back()}><Text style={styles.backBtn}>〈</Text></TouchableOpacity>
         <Text style={styles.navTitle}>{collectionData?.name}</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      {/* 核心列表区 */}
       <FlatList
         data={currentData}
         keyExtractor={item => item.id}
@@ -186,7 +178,6 @@ export default function DetailScreen() {
         }
       />
 
-      {/* 底部悬浮操作台 */}
       <View style={styles.bottomBar}>
         <TouchableOpacity 
            style={styles.mainBtn} 
@@ -196,17 +187,11 @@ export default function DetailScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 求购弹窗挂载 */}
       <Modal visible={isBuyModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={{ flex: 1 }} onPress={() => setBuyModalVisible(false)} />
           <View style={styles.modalContent}>
-             <BuyOrderModal 
-                currentUser={currentUser} 
-                collectionData={collectionData} 
-                onClose={() => setBuyModalVisible(false)} 
-                onRefresh={fetchData} 
-             />
+             <BuyOrderModal currentUser={currentUser} collectionData={collectionData} onClose={() => setBuyModalVisible(false)} onRefresh={fetchData} />
           </View>
         </View>
       </Modal>
@@ -220,23 +205,19 @@ const styles = StyleSheet.create({
   navBar: { flexDirection: 'row', justifyContent: 'space-between', padding: 16, alignItems: 'center', backgroundColor: '#FFF' },
   backBtn: { fontSize: 24, color: '#333' },
   navTitle: { fontSize: 17, fontWeight: '800' },
-  
   headerContainer: { backgroundColor: '#FFF', paddingBottom: 10 },
   heroBox: { alignItems: 'center', paddingTop: 20 },
   heroImg: { width: 120, height: 120, borderRadius: 20, borderWidth: 1, borderColor: '#EEE', marginBottom: 16 },
   title: { fontSize: 22, fontWeight: '900', color: '#111', marginBottom: 10 },
   tagRow: { flexDirection: 'row', backgroundColor: '#F5F5F5', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
   tagText: { fontSize: 12, color: '#666', marginHorizontal: 6 },
-
   tabBar: { flexDirection: 'row', marginTop: 30, borderBottomWidth: 1, borderColor: '#EEE', paddingHorizontal: 20 },
   tabBtn: { marginRight: 30, paddingBottom: 10, position: 'relative' },
   tabText: { fontSize: 16, color: '#999', fontWeight: '600' },
   tabTextActive: { color: '#0066FF', fontWeight: '900' },
   activeLine: { position: 'absolute', bottom: -1, left: 0, right: 0, height: 3, backgroundColor: '#0066FF', borderRadius: 2 },
-
   listHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
   listHeaderText: { fontSize: 12, color: '#999' },
-  
   rowItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#FFF', borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#EEE' },
   rowUser: { fontSize: 14, fontWeight: '700', color: '#333', flex: 1 },
   rowSerial: { fontSize: 14, color: '#666', width: 60, textAlign: 'right' },
@@ -244,15 +225,12 @@ const styles = StyleSheet.create({
   rowPrice: { fontSize: 16, fontWeight: '900', color: '#111', textAlign: 'right' },
   sellBtn: { backgroundColor: '#111', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 4 },
   sellBtnText: { color: '#FFF', fontSize: 10, fontWeight: '800' },
-
   emptyBox: { alignItems: 'center', marginTop: 60 },
   emptyTitle: { fontSize: 16, fontWeight: '800', color: '#333', marginTop: 10, marginBottom: 4 },
   emptyDesc: { fontSize: 13, color: '#999' },
-
   bottomBar: { position: 'absolute', bottom: 0, width: '100%', padding: 16, paddingBottom: 34, backgroundColor: '#FFF', borderTopWidth: 1, borderColor: '#EEE' },
   mainBtn: { backgroundColor: '#0066FF', height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
   mainBtnText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
-
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '85%' },
 });

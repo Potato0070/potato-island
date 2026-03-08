@@ -12,9 +12,10 @@ export default function BuyOrderModal({ currentUser, collectionData, onClose, on
   const [loadingCards, setLoadingCards] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 🔥 修复点：正常的求购价格风控，首发无地板价时 1 元起
   const minLimit = collectionData?.floor_price 
     ? collectionData.floor_price * 0.7 
-    : (collectionData?.max_price || 9999) * 0.7;
+    : 1.00; 
 
   const fetchMyCards = async () => {
     setIsSelecting(true);
@@ -51,7 +52,6 @@ export default function BuyOrderModal({ currentUser, collectionData, onClose, on
 
     setIsSubmitting(true);
     try {
-      // 执行发布指令
       const { error } = await supabase.rpc('create_batch_buy_order_v2', {
         p_user_id: currentUser.id,
         p_collection_id: collectionData.id,
@@ -70,7 +70,6 @@ export default function BuyOrderModal({ currentUser, collectionData, onClose, on
     }
   };
 
-  // 🔥 修复点 1：选卡界面的按钮绝对吸底！
   if (isSelecting) {
     return (
       <View style={{ flex: 1, backgroundColor: '#FFF', height: '100%', paddingBottom: 80 }}>
@@ -99,7 +98,6 @@ export default function BuyOrderModal({ currentUser, collectionData, onClose, on
           />
         )}
 
-        {/* 🌟 核心：永远悬浮在底部的确认按钮 */}
         <View style={styles.fixedBottomBar}>
            <TouchableOpacity 
               style={[styles.confirmSelBtn, selectedCards.length === quantity ? {backgroundColor: '#0066FF'} : {backgroundColor: '#CCC'}]} 
@@ -159,7 +157,6 @@ export default function BuyOrderModal({ currentUser, collectionData, onClose, on
         <Text style={styles.tipText}>· 预扣款 ¥{price ? (parseFloat(price) * quantity * 1.01).toFixed(2) : '0.00'} (含1%服务费)</Text>
       </View>
 
-      {/* 提交按钮：如果不达标会变灰 */}
       <TouchableOpacity 
          style={[styles.submitBtn, isReady && styles.submitBtnActive]} 
          onPress={handleSubmit}
@@ -178,7 +175,6 @@ const styles = StyleSheet.create({
   fixedBottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 20, paddingBottom: 30, backgroundColor: '#FFF', borderTopWidth: 1, borderColor: '#EEE' },
   confirmSelBtn: { height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
   confirmSelText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
-  
   mainTitle: { fontSize: 20, fontWeight: '900', color: '#111', marginBottom: 20 },
   inputCard: { backgroundColor: '#F7F7F7', borderRadius: 16, paddingHorizontal: 16, marginBottom: 20 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 60 },
