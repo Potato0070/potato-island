@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -9,202 +9,212 @@ const { width } = Dimensions.get('window');
 export default function LaunchDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
-  
-  const [eventData, setEventData] = useState<any>(null);
+  const [launch, setLaunch] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [buying, setBuying] = useState(false);
   
+  // 倒计时状态
   const [timeLeftStr, setTimeLeftStr] = useState('计算中...');
   const [isStarted, setIsStarted] = useState(false);
-  const [isUrgent, setIsUrgent] = useState(false);
+  const [isSoldOut, setIsSoldOut] = useState(false);
 
   useEffect(() => {
-    fetchDetail();
+    fetchLaunchData();
   }, [id]);
 
-  const fetchDetail = async () => {
+  const fetchLaunchData = async () => {
     try {
-      const { data, error } = await supabase
-        .from('launch_events')
-        .select(`*, collection:collection_id(name, image_url, description)`)
-        .eq('id', id)
-        .single();
+      const { data, error } = await supabase.from('launch_events')
+        .select('*, collection:collection_id(*)').eq('id', id).single();
       if (error) throw error;
-      setEventData(data);
-    } catch (err: any) {
-      Alert.alert('获取失败', err.message);
-      router.back();
-    } finally {
-      setLoading(false);
-    }
+      setLaunch(data);
+      if (data.remaining_supply <= 0) setIsSoldOut(true);
+    } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
   useEffect(() => {
-    if (!eventData) return;
+    if (!launch) return;
     const timer = setInterval(() => {
       const now = new Date().getTime();
-      const start = new Date(eventData.start_time).getTime();
+      const start = new Date(launch.start_time).getTime();
       const diff = start - now;
 
-      if (diff <= 0) {
-        setIsStarted(true);
-        setIsUrgent(false);
-        if (eventData.remaining_supply <= 0) {
-            setTimeLeftStr('已售罄');
-        } else {
-            setTimeLeftStr('抢购进行中');
-        }
+      if (launch.remaining_supply <= 0) {
+         setTimeLeftStr('已全部售罄');
+         setIsStarted(true);
+         setIsSoldOut(true);
+      } else if (diff <= 0) {
+         setTimeLeftStr('抢购进行中！');
+         setIsStarted(true);
       } else {
-        setIsStarted(false);
-        const d = Math.floor(diff / (1000 * 60 * 60 * 24));
-        const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
-        const m = Math.floor((diff / 1000 / 60) % 60);
-        const s = Math.floor((diff / 1000) % 60);
-
-        if (d === 0 && h === 0 && m < 10) {
-            setIsUrgent(true);
-            setTimeLeftStr(`🚨 距离开抢 00:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
-        } else {
-            setIsUrgent(false);
-            setTimeLeftStr(`预热中: ${d}天 ${h}时 ${m}分`);
-        }
+         setIsStarted(false);
+         const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+         const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+         const m = Math.floor((diff / 1000 / 60) % 60);
+         const s = Math.floor((diff / 1000) % 60);
+         setTimeLeftStr(`距离开售还剩: ${d}天 ${h}时 ${m}分 ${s}秒`);
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [eventData]);
+  }, [launch]);
 
-  const handleBuy = async (buyCount: number = 1) => {
-    if (!isStarted) return Alert.alert('提示', '发售尚未开始！');
-    if (eventData.remaining_supply < buyCount) return Alert.alert('提示', '手慢了，库存不足！');
-    
-    setBuying(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('请先登录');
+  const handleMint = async () => {
+    Alert.alert(
+      '🚀 确认抢购',
+      `将扣除 ¥${launch.price} 土豆币购买【${launch.collection?.name}】首发盲盒，是否继续？`,
+      [
+        { text: '取消', style: 'cancel' },
+        { 
+          text: '确认支付', 
+          style: 'destructive',
+          onPress: async () => {
+            setBuying(true);
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (!user) throw new Error('未登录');
 
-      const { error } = await supabase.rpc('execute_launch_buy', {
-        p_user_id: user.id,
-        p_launch_id: id,
-        p_buy_count: buyCount
-      });
+              // 1. 查余额
+              const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
+              if (!profile || profile.potato_coin_balance < launch.price) throw new Error('土豆币余额不足！');
 
-      if (error) throw error;
-      
-      Alert.alert('🎉 抢购成功', `恭喜！已将 ${buyCount} 份【${eventData.collection.name}】收入囊中！`, [
-        { text: '查看金库', onPress: () => router.push('/(tabs)/profile') },
-        { text: '继续抢', onPress: () => fetchDetail() } 
-      ]);
-    } catch (err: any) {
-      Alert.alert('抢购失败', err.message);
-    } finally {
-      setBuying(false);
-    }
+              // 2. 查库存并扣减 (这里用前端模拟事务，真实高并发需转写 RPC)
+              const { data: currentLaunch } = await supabase.from('launch_events').select('remaining_supply').eq('id', id).single();
+              if (!currentLaunch || currentLaunch.remaining_supply <= 0) throw new Error('手慢了，已被抢空！');
+
+              // 3. 扣钱
+              await supabase.from('profiles').update({ potato_coin_balance: profile.potato_coin_balance - launch.price }).eq('id', user.id);
+              
+              // 4. 减库存
+              await supabase.from('launch_events').update({ remaining_supply: currentLaunch.remaining_supply - 1 }).eq('id', id);
+
+              // 5. 印钞发货 (状态 idle)
+              const newSerial = launch.total_supply - currentLaunch.remaining_supply + 1;
+              const { error: mintErr } = await supabase.from('nfts').insert([{
+                 collection_id: launch.collection_id,
+                 owner_id: user.id,
+                 serial_number: newSerial.toString(),
+                 status: 'idle'
+              }]);
+              if (mintErr) throw mintErr;
+
+              // 6. 更新大盘数据
+              await supabase.from('collections').update({
+                 total_minted: newSerial,
+                 circulating_supply: newSerial
+              }).eq('id', launch.collection_id);
+
+              Alert.alert('🎉 抢购成功', '首发藏品已打入您的金库！', [{text: '去查看', onPress: () => router.push('/(tabs)/profile')}]);
+              fetchLaunchData();
+            } catch (err: any) { Alert.alert('抢购失败', err.message); } finally { setBuying(false); }
+          }
+        }
+      ]
+    );
   };
 
-  if (loading || !eventData) return <View style={styles.center}><ActivityIndicator color="#D49A36" /></View>;
+  if (loading || !launch) return <View style={styles.center}><ActivityIndicator color="#FFD700" /></View>;
 
-  const progressPercent = ((eventData.total_supply - eventData.remaining_supply) / eventData.total_supply) * 100;
-  const isSoldOut = eventData.remaining_supply <= 0;
+  const progress = ((launch.total_supply - launch.remaining_supply) / launch.total_supply) * 100;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.navBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}><Text style={styles.iconText}>〈 返回</Text></TouchableOpacity>
-        <Text style={styles.navTitle}>创世首发</Text>
-        <View style={styles.navBtn} />
-      </View>
-
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-        <View style={styles.imageStage}>
-          <Image source={{ uri: eventData.collection.image_url }} style={styles.mainImage} />
-          {isSoldOut && (
-            <View style={styles.soldOutStamp}>
-               <Text style={styles.soldOutText}>已售罄</Text>
+      <ImageBackground source={{ uri: launch.collection?.image_url }} style={styles.headerBg} blurRadius={20}>
+         <View style={styles.headerOverlay}>
+            <View style={styles.navBar}>
+               <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}><Text style={[styles.iconText, {color: '#FFF'}]}>〈</Text></TouchableOpacity>
+               <Text style={styles.navTitle}>发售详情</Text>
+               <View style={styles.navBtn} />
             </View>
-          )}
-        </View>
-
-        <View style={styles.infoBox}>
-          <Text style={styles.title}>{eventData.collection.name}</Text>
-          <Text style={styles.desc}>{eventData.collection.description || '来自土豆宇宙的全新基因序列。'}</Text>
-          
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>首发价格</Text>
-            <Text style={styles.price}>¥ {eventData.price.toFixed(2)}</Text>
-          </View>
-
-          <View style={styles.progressContainer}>
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressText}>发行总量: {eventData.total_supply}</Text>
-              <Text style={styles.progressTextHighlight}>剩余: {eventData.remaining_supply}</Text>
+            <View style={styles.heroBox}>
+               <Image source={{ uri: launch.collection?.image_url }} style={styles.heroImg} />
+               <View style={styles.timerBadge}>
+                  <Text style={styles.timerText}>{timeLeftStr}</Text>
+               </View>
             </View>
-            <View style={styles.progressBarBg}>
-               <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
+         </View>
+      </ImageBackground>
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+         <View style={styles.infoCard}>
+            <Text style={styles.title}>{launch.collection?.name}</Text>
+            <View style={styles.priceRow}>
+               <Text style={styles.priceLabel}>首发价</Text>
+               <Text style={styles.priceValue}>¥ {launch.price.toFixed(2)}</Text>
             </View>
-          </View>
-        </View>
+            
+            {/* 进度条 */}
+            <View style={styles.progressSection}>
+               <View style={styles.progressLabels}>
+                  <Text style={styles.progressText}>已抢 {launch.total_supply - launch.remaining_supply} 份</Text>
+                  <Text style={styles.progressText}>限量 {launch.total_supply} 份</Text>
+               </View>
+               <View style={styles.progressBarBg}>
+                  <View style={[styles.progressBarFill, {width: `${progress}%`}]} />
+               </View>
+            </View>
+         </View>
+
+         <View style={styles.ruleCard}>
+            <Text style={styles.ruleTitle}>发售规则</Text>
+            <Text style={styles.ruleText}>1. 藏品采用先到先得模式，抢完即止。</Text>
+            <Text style={styles.ruleText}>2. 抢购成功后资产将自动发放至您的金库。</Text>
+            <Text style={styles.ruleText}>3. 为防止黄牛刷单，同一账户可能面临限购策略。</Text>
+            <Text style={styles.ruleText}>4. 抢购行为不可逆，请确保您的土豆币余额充足。</Text>
+         </View>
       </ScrollView>
 
+      {/* 底部抢购栏 */}
       <View style={styles.bottomBar}>
-        <View style={styles.timerRow}>
-           <Text style={[styles.timerText, isUrgent && {color: '#FF3B30'}]}>{timeLeftStr}</Text>
-        </View>
-
-        <View style={styles.btnGroup}>
-           <TouchableOpacity 
-              style={[styles.batchBtn, (!isStarted || isSoldOut) && {opacity: 0.5}]} 
-              activeOpacity={0.8}
-              disabled={!isStarted || isSoldOut || buying}
-              onPress={() => Alert.alert('特权验证', '检测到您尚未激活【优先购白名单】，无法进行批量包场抢购！')}
-           >
-              <Text style={styles.batchBtnText}>📦 特权批量购</Text>
-           </TouchableOpacity>
-
-           <TouchableOpacity 
-              style={[styles.buyBtn, (!isStarted || isSoldOut) && {backgroundColor: '#CCC'}]} 
-              activeOpacity={0.8}
-              disabled={!isStarted || isSoldOut || buying}
-              onPress={() => handleBuy(1)}
-           >
-              {buying ? <ActivityIndicator color="#FFF" /> : (
-                 <Text style={styles.buyBtnText}>{isSoldOut ? '已被抢空' : (isStarted ? '⚡ 立即抢购' : '等待发售')}</Text>
-              )}
-           </TouchableOpacity>
-        </View>
+         <TouchableOpacity 
+            style={[styles.buyBtn, (!isStarted || isSoldOut) && {backgroundColor: '#555'}]} 
+            onPress={handleMint}
+            disabled={!isStarted || isSoldOut || buying}
+         >
+            {buying ? <ActivityIndicator color="#111" /> : (
+               <Text style={[styles.buyBtnText, (!isStarted || isSoldOut) && {color: '#999'}]}>
+                  {isSoldOut ? '已被抢空' : (isStarted ? '立即抢购' : '等待开售')}
+               </Text>
+            )}
+         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9F6F0' },
-  container: { flex: 1, backgroundColor: '#F9F6F0' },
-  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FFF' },
-  navBtn: { width: 60, justifyContent: 'center' },
-  iconText: { fontSize: 16, color: '#4A2E1B', fontWeight: '700' },
-  navTitle: { fontSize: 18, fontWeight: '900', color: '#4A2E1B' },
-  imageStage: { width: width, height: width, backgroundColor: '#FDF9F1', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
-  mainImage: { width: '85%', height: '85%', borderRadius: 16, resizeMode: 'cover', borderWidth: 4, borderColor: '#FFF' },
-  soldOutStamp: { position: 'absolute', backgroundColor: 'rgba(0,0,0,0.7)', width: 120, height: 120, borderRadius: 60, justifyContent: 'center', alignItems: 'center', transform: [{rotate: '-15deg'}] },
-  soldOutText: { color: '#FFF', fontSize: 24, fontWeight: '900', letterSpacing: 2 },
-  infoBox: { padding: 20, backgroundColor: '#FFF', marginTop: -20, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  title: { fontSize: 24, fontWeight: '900', color: '#4A2E1B', marginBottom: 8 },
-  desc: { fontSize: 14, color: '#888', lineHeight: 22, marginBottom: 20 },
-  priceRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 24, paddingBottom: 16, borderBottomWidth: 1, borderColor: '#F0F0F0' },
-  priceLabel: { fontSize: 14, color: '#999', marginRight: 10, fontWeight: '600' },
-  price: { fontSize: 32, fontWeight: '900', color: '#D49A36' },
-  progressContainer: { backgroundColor: '#FDF9F1', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#F5E8D4' },
-  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  progressText: { fontSize: 12, color: '#666', fontWeight: '600' },
-  progressTextHighlight: { fontSize: 12, color: '#D49A36', fontWeight: '800' },
-  progressBarBg: { height: 8, backgroundColor: '#EFEFEF', borderRadius: 4, overflow: 'hidden' },
-  progressBarFill: { height: '100%', backgroundColor: '#D49A36', borderRadius: 4 },
-  bottomBar: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 30, shadowColor: '#000', shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
-  timerRow: { alignItems: 'center', marginBottom: 12 },
-  timerText: { fontSize: 14, fontWeight: '800', color: '#4A2E1B', fontFamily: 'monospace' },
-  btnGroup: { flexDirection: 'row', justifyContent: 'space-between' },
-  batchBtn: { flex: 0.35, backgroundColor: '#FFF', borderWidth: 2, borderColor: '#4A2E1B', borderRadius: 12, justifyContent: 'center', alignItems: 'center', height: 50, marginRight: 10 },
-  batchBtnText: { color: '#4A2E1B', fontSize: 14, fontWeight: '800' },
-  buyBtn: { flex: 0.65, backgroundColor: '#D49A36', borderRadius: 12, justifyContent: 'center', alignItems: 'center', height: 50, shadowColor: '#D49A36', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: {width:0, height:4} },
-  buyBtnText: { color: '#FFF', fontSize: 18, fontWeight: '900', letterSpacing: 1 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#111' },
+  container: { flex: 1, backgroundColor: '#F5F6F8' },
+  
+  headerBg: { width: '100%', height: 350 },
+  headerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' },
+  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, marginTop: 10 },
+  navBtn: { width: 40, justifyContent: 'center' },
+  iconText: { fontSize: 20 },
+  navTitle: { fontSize: 17, fontWeight: '900', color: '#FFF' },
+
+  heroBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  heroImg: { width: 180, height: 180, borderRadius: 16, borderWidth: 2, borderColor: '#FFD700', marginBottom: 20 },
+  timerBadge: { backgroundColor: '#FF3B30', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  timerText: { color: '#FFF', fontSize: 14, fontWeight: '900', fontFamily: 'monospace' },
+
+  scrollContent: { padding: 16, paddingBottom: 100, marginTop: -20 },
+  infoCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
+  title: { fontSize: 20, fontWeight: '900', color: '#111', marginBottom: 16 },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 20, borderBottomWidth: 1, borderColor: '#F0F0F0', paddingBottom: 16 },
+  priceLabel: { fontSize: 13, color: '#666', marginRight: 8 },
+  priceValue: { fontSize: 28, fontWeight: '900', color: '#FF3B30' },
+
+  progressSection: { width: '100%' },
+  progressLabels: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  progressText: { fontSize: 12, color: '#888', fontWeight: '600' },
+  progressBarBg: { height: 8, backgroundColor: '#F0F0F0', borderRadius: 4, overflow: 'hidden' },
+  progressBarFill: { height: '100%', backgroundColor: '#FFD700', borderRadius: 4 },
+
+  ruleCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 20 },
+  ruleTitle: { fontSize: 15, fontWeight: '900', color: '#111', marginBottom: 12 },
+  ruleText: { fontSize: 13, color: '#666', lineHeight: 22, marginBottom: 6 },
+
+  bottomBar: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30, borderTopWidth: 1, borderColor: '#F0F0F0' },
+  buyBtn: { backgroundColor: '#FFD700', height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
+  buyBtnText: { color: '#111', fontSize: 18, fontWeight: '900', letterSpacing: 2 }
 });
