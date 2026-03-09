@@ -1,10 +1,8 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
-
-const { width } = Dimensions.get('window');
 
 export default function LotteryScreen() {
   const router = useRouter();
@@ -12,7 +10,17 @@ export default function LotteryScreen() {
   const [processing, setProcessing] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // 🌟 高级弹窗状态
+  const [confirmModal, setConfirmModal] = useState(false);
+  const [resultModal, setResultModal] = useState<{title: string, msg: string} | null>(null);
+  const [toastMsg, setToastMsg] = useState('');
+
   useEffect(() => { fetchProfile(); }, []);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 2500);
+  };
 
   const fetchProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -23,19 +31,10 @@ export default function LotteryScreen() {
     setLoading(false);
   };
 
-  // 🛡️ 强制二次弹窗确认
-  const handleDraw = () => {
-    if (!profile) return Alert.alert('提示', '数据加载中...');
-    if ((profile.potato_cards || 0) < 5) return Alert.alert('余额不足', '命运抽签需要消耗 5 张 Potato卡！');
-
-    Alert.alert(
-      '🎰 开启命运盲盒',
-      '将立即扣除 5 张 Potato卡，盲盒开启后结果不可逆。是否确认投入？',
-      [
-        { text: '再想想', style: 'cancel' },
-        { text: '确认抽签', style: 'destructive', onPress: executeDraw }
-      ]
-    );
+  const handleDrawClick = () => {
+    if (!profile) return showToast('数据加载中...');
+    if ((profile.potato_cards || 0) < 5) return showToast('余额不足！需要消耗 5 张 Potato卡');
+    setConfirmModal(true);
   };
 
   const executeDraw = async () => {
@@ -43,69 +42,58 @@ export default function LotteryScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // 1. 扣除门票
       let currentPotato = profile.potato_cards - 5;
       let currentUniversal = profile.universal_cards || 0;
       
-      // 2. 🌟 核心：100份真实概率引擎
-      const roll = Math.floor(Math.random() * 100); // 0-99
+      // 🌟 核心：100份真实概率引擎
+      const roll = Math.floor(Math.random() * 100); 
       let prizeMsg = '';
       let isElder = false;
-      let mintNftName = ''; // 如果抽中数字藏品，记录名字用于印钞
+      let mintNftName = ''; 
 
-      if (roll < 40) { // 40%
+      if (roll < 40) { // 40份
          currentPotato += 1;
          prizeMsg = 'Potato卡 * 1';
-      } else if (roll < 70) { // 30%
+      } else if (roll < 70) { // 30份
          currentPotato += 2;
          prizeMsg = 'Potato卡 * 2';
-      } else if (roll < 80) { // 10%
+      } else if (roll < 80) { // 10份
          currentPotato += 3;
          prizeMsg = 'Potato卡 * 3';
-      } else if (roll < 90) { // 10%
+      } else if (roll < 90) { // 10份
          mintNftName = '原生土豆种子';
          prizeMsg = '原生土豆种子 * 1';
-      } else if (roll < 94) { // 4%
+      } else if (roll < 94) { // 4份
          mintNftName = '白皮土豆劳动者';
          prizeMsg = '白皮土豆劳动者 * 1';
-      } else if (roll < 98) { // 4%
+      } else if (roll < 98) { // 4份
          mintNftName = '红皮土豆艺术家';
          prizeMsg = '红皮土豆艺术家 * 1';
-      } else if (roll < 99) { // 1%
+      } else if (roll < 99) { // 1份
          currentUniversal += 1;
          prizeMsg = '🌟 万能土豆卡 * 1';
-      } else { // 1% (99)
+      } else { // 1份
          mintNftName = '褐皮土豆长老';
          prizeMsg = '👑 史诗级：褐皮土豆长老 * 1';
          isElder = true;
       }
 
-      // 3. 更新基础资产
-      await supabase.from('profiles').update({ 
-         potato_cards: currentPotato,
-         universal_cards: currentUniversal
-      }).eq('id', user?.id);
+      await supabase.from('profiles').update({ potato_cards: currentPotato, universal_cards: currentUniversal }).eq('id', user?.id);
 
-      // 4. 如果抽中藏品，执行铸造 (前提是数据库里要有这些名字的 collection)
       if (mintNftName) {
-         // 查找对应系列的 ID
          const { data: colData } = await supabase.from('collections').select('id, total_minted').eq('name', mintNftName).single();
          if (colData) {
             const newSerial = colData.total_minted + 1;
             await supabase.from('nfts').insert([{ collection_id: colData.id, owner_id: user?.id, serial_number: newSerial.toString(), status: 'idle' }]);
             await supabase.from('collections').update({ total_minted: newSerial, circulating_supply: newSerial }).eq('id', colData.id);
             
-            // 🌟 史诗级狂欢：抽中长老，全服播报并空投 10 个种子
             if (isElder) {
-               // 全服公告
                await supabase.from('announcements').insert([{ 
                   title: '👑 命运的抉择！史诗降临！', 
-                  content: `恭喜岛民【${profile.nickname || '神秘玩家'}】在命运抽签中获得了极其稀有的【褐皮土豆长老】！\n王国已为其空投 10 份原生土豆种子作为嘉奖！`, 
+                  content: `恭喜岛民【${profile.nickname || '神秘玩家'}】在命运抽签中获得了极其稀有的【褐皮土豆长老】！王国已为其空投 10 份原生土豆种子作为嘉奖！`, 
                   author_name: '王国大喇叭', 
                   is_featured: true 
                }]);
-               
-               // 找到种子系列并连发 10 张
                const { data: seedCol } = await supabase.from('collections').select('id, total_minted').eq('name', '原生土豆种子').single();
                if (seedCol) {
                   let seedSerial = seedCol.total_minted;
@@ -121,9 +109,13 @@ export default function LotteryScreen() {
          }
       }
 
-      // 5. 成功弹窗
-      Alert.alert('🎉 盲盒开启成功', `恭喜您获得了：\n\n${prizeMsg}`, [{ text: '收下奖励', onPress: fetchProfile }]);
-    } catch (err: any) { Alert.alert('抽签失败', err.message); } finally { setProcessing(false); }
+      setConfirmModal(false);
+      setResultModal({ title: '🎉 盲盒开启成功', msg: `恭喜您获得了：\n\n${prizeMsg}` });
+      fetchProfile();
+    } catch (err: any) { 
+       setConfirmModal(false);
+       showToast(`抽签失败: ${err.message}`); 
+    } finally { setProcessing(false); }
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator color="#0066FF" /></View>;
@@ -135,6 +127,8 @@ export default function LotteryScreen() {
         <Text style={styles.navTitle}>命运抽签</Text>
         <View style={styles.navBtn} />
       </View>
+
+      {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
       <ScrollView contentContainerStyle={{padding: 20}}>
          <View style={styles.banner}>
@@ -155,14 +149,40 @@ export default function LotteryScreen() {
             <View style={styles.infoRow}><Text style={styles.infoLabel}>稀有奖励</Text><Text style={styles.infoValue}>万能土豆卡 (1%)</Text></View>
             <View style={[styles.infoRow, {borderBottomWidth: 0, paddingBottom: 0}]}><Text style={styles.infoLabel}>基础奖励</Text><Text style={styles.infoValue}>随机数量Potato卡/劳动者等</Text></View>
 
-            <TouchableOpacity 
-               style={[styles.joinBtn, (profile?.potato_cards || 0) < 5 && {backgroundColor: '#CCC'}]} 
-               onPress={handleDraw} disabled={processing || (profile?.potato_cards || 0) < 5}
-            >
-               {processing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.joinBtnText}>{(profile?.potato_cards || 0) < 5 ? 'Potato卡不足' : '立即投入并开启'}</Text>}
+            <TouchableOpacity style={[styles.joinBtn, (profile?.potato_cards || 0) < 5 && {backgroundColor: '#CCC'}]} onPress={handleDrawClick} disabled={processing || (profile?.potato_cards || 0) < 5}>
+               <Text style={styles.joinBtnText}>{(profile?.potato_cards || 0) < 5 ? 'Potato卡不足' : '立即投入并开启'}</Text>
             </TouchableOpacity>
          </View>
       </ScrollView>
+
+      {/* 🌟 抽签确认弹窗 */}
+      <Modal visible={confirmModal} transparent animationType="fade">
+         <View style={styles.modalOverlay}>
+            <View style={styles.confirmBox}>
+               <Text style={styles.confirmTitle}>🎰 开启命运盲盒</Text>
+               <Text style={styles.confirmDesc}>将立即扣除 <Text style={{color:'#FF3B30', fontWeight:'900'}}>5 张</Text> Potato卡，盲盒开启后结果不可逆。是否确认投入？</Text>
+               <View style={styles.confirmBtnRow}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmModal(false)}><Text style={styles.cancelBtnText}>再想想</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.confirmBtn} onPress={executeDraw} disabled={processing}>
+                     {processing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认抽签</Text>}
+                  </TouchableOpacity>
+               </View>
+            </View>
+         </View>
+      </Modal>
+
+      {/* 🌟 中奖结果展示弹窗 */}
+      <Modal visible={!!resultModal} transparent animationType="fade">
+         <View style={styles.modalOverlay}>
+            <View style={[styles.confirmBox, {borderColor: '#FFD700', borderWidth: 2}]}>
+               <Text style={[styles.confirmTitle, {color: '#FF3B30', fontSize: 20}]}>{resultModal?.title}</Text>
+               <Text style={[styles.confirmDesc, {fontSize: 16, color: '#111', fontWeight: '800'}]}>{resultModal?.msg}</Text>
+               <TouchableOpacity style={[styles.confirmBtn, {width: '100%'}]} onPress={() => setResultModal(null)}>
+                  <Text style={styles.confirmBtnText}>开心收下</Text>
+               </TouchableOpacity>
+            </View>
+         </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -174,6 +194,8 @@ const styles = StyleSheet.create({
   navBtn: { width: 40, justifyContent: 'center' },
   iconText: { fontSize: 20, color: '#111' },
   navTitle: { fontSize: 17, fontWeight: '900', color: '#111' },
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
+  toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
   banner: { backgroundColor: '#111', padding: 24, borderRadius: 16, marginBottom: 20 },
   bannerTitle: { fontSize: 24, fontWeight: '900', color: '#FFD700', marginBottom: 8 },
   bannerSub: { fontSize: 13, color: '#CCC', lineHeight: 20, marginBottom: 16 },
@@ -189,5 +211,15 @@ const styles = StyleSheet.create({
   infoValueCost: { fontSize: 14, fontWeight: '900', color: '#FF3B30' },
   infoValueHot: { fontSize: 14, fontWeight: '900', color: '#D49A36' },
   joinBtn: { backgroundColor: '#0066FF', paddingVertical: 16, borderRadius: 25, alignItems: 'center', marginTop: 30 },
-  joinBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1 }
+  joinBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
+  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 16 },
+  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#F5F5F5', alignItems: 'center' },
+  cancelBtnText: { color: '#666', fontSize: 15, fontWeight: '800' },
+  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#0066FF', alignItems: 'center' },
+  confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });

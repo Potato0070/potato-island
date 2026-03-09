@@ -10,7 +10,7 @@ export default function GenesisExchangeScreen() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
 
-  // 高级定制确认弹窗
+  // 🌟 高级定制确认弹窗
   const [confirmModal, setConfirmModal] = useState<{visible: boolean, type: 'universal' | 'elder', costStr: string} | null>(null);
   const [toastMsg, setToastMsg] = useState('');
 
@@ -19,7 +19,7 @@ export default function GenesisExchangeScreen() {
   const fetchProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      const { data } = await supabase.from('profiles').select('potato_cards, universal_cards').eq('id', user.id).single();
+      const { data } = await supabase.from('profiles').select('potato_cards, universal_cards, nickname').eq('id', user.id).single();
       setProfile(data);
     }
     setLoading(false);
@@ -76,7 +76,7 @@ export default function GenesisExchangeScreen() {
          // 全服播报
          await supabase.from('announcements').insert([{ 
             title: '👑 创世殿堂降临神迹！', 
-            content: `恭喜岛民在创世发新殿堂，成功兑换出神级资产【褐皮土豆长老】！全岛震动！`, 
+            content: `恭喜岛民【${profile.nickname || '神秘玩家'}】在创世发新殿堂，用 10 张万能卡成功兑换出神级资产【褐皮土豆长老】！全岛震动！`, 
             author_name: '创世中枢', 
             is_featured: true 
          }]);
@@ -162,7 +162,7 @@ export default function GenesisExchangeScreen() {
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmModal(null)}><Text style={styles.cancelBtnText}>暂不兑换</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.confirmBtn} onPress={executeExchange} disabled={processing}>
-                     {processing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认燃烧与兑换</Text>}
+                     {processing ? <ActivityIndicator color="#111" /> : <Text style={styles.confirmBtnText}>确认燃烧</Text>}
                   </TouchableOpacity>
                </View>
             </View>
