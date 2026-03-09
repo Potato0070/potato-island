@@ -32,14 +32,21 @@ export default function ChangeAvatarScreen() {
       const { data: nfts } = await supabase.from('nfts').select('collection_id, collections(name, image_url)').eq('owner_id', user.id).neq('status', 'burned');
       
       if (nfts) {
-         const uniqueMap = new Map();
-         nfts.forEach(nft => {
-            if (!uniqueMap.has(nft.collection_id)) {
-               uniqueMap.set(nft.collection_id, { id: nft.collection_id, image_url: nft.collections?.image_url, name: nft.collections?.name });
-            }
-         });
-         setUniqueNfts(Array.from(uniqueMap.values()));
-      }
+        const uniqueMap = new Map();
+        nfts.forEach((nft: any) => {
+           // 兼容 Supabase 联表查询可能返回数组的情况
+           const col = Array.isArray(nft.collections) ? nft.collections[0] : nft.collections;
+           
+           if (!uniqueMap.has(nft.collection_id) && col) {
+              uniqueMap.set(nft.collection_id, { 
+                 id: nft.collection_id, 
+                 image_url: col.image_url, 
+                 name: col.name 
+              });
+           }
+        });
+        setUniqueNfts(Array.from(uniqueMap.values()));
+     }
     } catch (err) { console.error(err); } finally { setFetching(false); }
   };
 
