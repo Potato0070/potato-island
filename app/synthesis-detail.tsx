@@ -1,6 +1,6 @@
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -14,258 +14,233 @@ export default function SynthesisDetailScreen() {
   const [requirements, setRequirements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [synthesizing, setSynthesizing] = useState(false);
-  const [canSynthesize, setCanSynthesize] = useState(false);
+
+  const [showPicker, setShowPicker] = useState(false);
+  const [activeReqIndex, setActiveReqIndex] = useState<number | null>(null);
+  const [myIdleNfts, setMyIdleNfts] = useState<any[]>([]);
+  const [selectedNfts, setSelectedNfts] = useState<Record<number, string[]>>({});
+
+  useEffect(() => {
+    fetchDetail();
+  }, [id]);
 
   const fetchDetail = async () => {
     try {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-
-      // 1. 拉取合成活动主信息
-      const { data: evData, error: evErr } = await supabase
+      const { data: ev, error: evErr } = await supabase
         .from('synthesis_events')
-        .select('*, target_collection:target_collection_id(name, image_url, description)')
+        .select(`*, target_collection:target_collection_id(name, image_url)`)
         .eq('id', id)
         .single();
       if (evErr) throw evErr;
+      setEventData(ev);
 
-      // 🔥 防弹修复 1：目标产物类型安全化
-      if (evData && evData.target_collection) {
-          const tc: any = evData.target_collection;
-          evData.target_collection = Array.isArray(tc) ? tc[0] : tc;
-      }
-      setEventData(evData);
-
-      // 2. 拉取所需的献祭材料清单
-      const { data: reqData, error: reqErr } = await supabase
+      const { data: reqs, error: reqErr } = await supabase
         .from('synthesis_requirements')
-        .select('req_count, collection:req_collection_id(id, name, image_url)')
+        .select(`*, collection:req_collection_id(name, image_url)`)
         .eq('event_id', id);
       if (reqErr) throw reqErr;
-
-      // 3. 盘点玩家金库里的闲置材料
-      let userInventory: Record<string, number> = {};
-      if (user) {
-          const { data: nfts } = await supabase
-              .from('nfts')
-              .select('collection_id')
-              .eq('owner_id', user.id)
-              .eq('status', 'idle');
-          
-          if (nfts) {
-              nfts.forEach(nft => {
-                  userInventory[nft.collection_id] = (userInventory[nft.collection_id] || 0) + 1;
-              });
-          }
-      }
-
-      // 4. 🔥 防弹修复 2：材料类型安全化，并合并数据
-      let allMet = true;
-      const enrichedReqs = (reqData || []).map(req => {
-          // 剥除可能的数组外壳，安全提取 ID
-          const c: any = req.collection;
-          const colObj = Array.isArray(c) ? (c[0] || {}) : (c || {});
-          const colId = colObj.id;
-          
-          const owned = colId ? (userInventory[colId] || 0) : 0;
-          const isMet = owned >= req.req_count;
-          if (!isMet) allMet = false;
-          
-          return {
-              ...req,
-              collection: colObj, // 把剥好皮的安全对象覆盖回去
-              owned_count: owned,
-              is_met: isMet
-          };
-      });
-
-      setRequirements(enrichedReqs);
-      
-      // 判断熔断和时间
-      const isMelted = evData.max_count > 0 && evData.current_count >= evData.max_count;
-      const isExpired = new Date(evData.end_time).getTime() < new Date().getTime();
-      
-      setCanSynthesize(allMet && !isMelted && !isExpired && !!user);
-
+      setRequirements(reqs || []);
     } catch (err: any) {
-      Alert.alert('获取失败', err.message);
+      Alert.alert('获取配方失败', err.message);
       router.back();
     } finally {
       setLoading(false);
     }
   };
 
-  useFocusEffect(useCallback(() => { fetchDetail(); }, [id]));
-
-  // 🚀 触发原子级变异合约
-  const handleSynthesize = async () => {
-      if (!canSynthesize) return;
+  const openMaterialPicker = async (reqIndex: number) => {
+    setActiveReqIndex(reqIndex);
+    setShowPicker(true);
+    setMyIdleNfts([]);
+    
+    const req = requirements[reqIndex];
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
       
-      Alert.alert(
-          '⚠️ 危险警告', 
-          '献祭一旦开始不可逆！所有作为材料的藏品将被永久销毁！是否确认开启变异？',
-          [
-              { text: '取消', style: 'cancel' },
-              { text: '确认献祭', style: 'destructive', onPress: executeContract }
-          ]
-      );
+      const { data } = await supabase
+        .from('nfts')
+        .select('id, serial_number')
+        .eq('collection_id', req.req_collection_id)
+        .eq('owner_id', user.id)
+        .eq('status', 'idle');
+        
+      if (data) setMyIdleNfts(data);
+    } catch (e) { console.error(e); }
   };
 
-  const executeContract = async () => {
-      setSynthesizing(true);
-      try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) throw new Error('请先登录');
-
-          const { error } = await supabase.rpc('execute_nft_synthesis', {
-              p_user_id: user.id,
-              p_event_id: id
-          });
-
-          if (error) throw error;
-
-          Alert.alert('🧬 变异成功！', `神圣的火焰吞噬了材料！恭喜你获得了全新的【${eventData.target_collection?.name || '神级资产'}】！`, [
-              { text: '查看金库', onPress: () => router.push('/(tabs)/profile') },
-              { text: '继续合成', onPress: () => fetchDetail() }
-          ]);
-
-      } catch (err: any) {
-          Alert.alert('变异失败', err.message);
-      } finally {
-          setSynthesizing(false);
+  const toggleNftSelection = (nftId: string) => {
+    if (activeReqIndex === null) return;
+    const req = requirements[activeReqIndex];
+    const currentSelected = selectedNfts[activeReqIndex] || [];
+    
+    if (currentSelected.includes(nftId)) {
+      setSelectedNfts({ ...selectedNfts, [activeReqIndex]: currentSelected.filter(id => id !== nftId) });
+    } else {
+      if (currentSelected.length >= req.req_count) {
+         Alert.alert('提示', '该材料槽已满');
+         return;
       }
+      setSelectedNfts({ ...selectedNfts, [activeReqIndex]: [...currentSelected, nftId] });
+    }
+  };
+
+  const handleExecute = async () => {
+    let allNftsToBurn: string[] = [];
+    for (let i = 0; i < requirements.length; i++) {
+      const selected = selectedNfts[i] || [];
+      if (selected.length < requirements[i].req_count) {
+        return Alert.alert('能量不足', '请填满所有基因材料槽！');
+      }
+      allNftsToBurn = [...allNftsToBurn, ...selected];
+    }
+
+    setSynthesizing(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase.rpc('execute_synthesis', {
+        p_user_id: user?.id,
+        p_event_id: id,
+        p_material_nft_ids: allNftsToBurn
+      });
+      if (error) throw error;
+      
+      Alert.alert('🧬 进化成功', `材料已成功燃烧！恭喜获得全新的【${eventData.target_collection.name}】！`, [
+        { text: '查看金库', onPress: () => router.push('/(tabs)/profile') }
+      ]);
+    } catch (err: any) {
+      Alert.alert('💥 进化失败', err.message);
+    } finally {
+      setSynthesizing(false);
+    }
   };
 
   if (loading || !eventData) return <View style={styles.center}><ActivityIndicator color="#00E5FF" /></View>;
 
-  const isMelted = eventData.max_count > 0 && eventData.current_count >= eventData.max_count;
-  const isExpired = new Date(eventData.end_time).getTime() < new Date().getTime();
-
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* 导航栏 */}
+    <SafeAreaView style={styles.container}>
       <View style={styles.navBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}><Text style={styles.iconText}>〈</Text></TouchableOpacity>
-        <Text style={styles.navTitle}>配方实验室</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}><Text style={styles.iconText}>〈 返回</Text></TouchableOpacity>
+        <Text style={styles.navTitle}>进化舱中心</Text>
         <View style={styles.navBtn} />
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
-        
-        {/* 顶部目标神级产物展示 */}
-        <ImageBackground source={{ uri: eventData.target_collection?.image_url }} style={styles.topStage} blurRadius={30}>
-            <View style={styles.stageOverlay}>
-                <Image source={{ uri: eventData.target_collection?.image_url }} style={styles.targetImage} />
-                <View style={styles.targetBadge}><Text style={styles.targetBadgeText}>终极变异产物</Text></View>
-                <Text style={styles.targetName}>{eventData.target_collection?.name}</Text>
-                
-                <View style={styles.statusBox}>
-                    <Text style={styles.statusText}>
-                        全岛限量: <Text style={{color: '#00E5FF'}}>{eventData.max_count === 0 ? '无限' : eventData.max_count}</Text>
-                    </Text>
-                    <Text style={styles.statusText}>
-                        已被合成: <Text style={{color: '#FFD700'}}>{eventData.current_count}</Text>
-                    </Text>
-                </View>
-            </View>
-        </ImageBackground>
-
-        {/* 中间材料盘点区 */}
-        <View style={styles.reqContainer}>
-            <View style={styles.reqHeader}>
-                <Text style={styles.reqTitle}>🧬 必须献祭的材料</Text>
-                <Text style={styles.reqSubtitle}>系统已自动盘点您的金库</Text>
-            </View>
-
-            {requirements.map((req, index) => (
-                <View key={index} style={styles.reqCard}>
-                    <Image source={{ uri: req.collection?.image_url }} style={styles.reqImg} />
-                    <View style={styles.reqInfo}>
-                        <Text style={styles.reqName} numberOfLines={1}>{req.collection?.name}</Text>
-                        <View style={styles.progressRow}>
-                            <Text style={styles.progressLabel}>需要数量: {req.req_count}</Text>
-                            <Text style={[styles.progressValue, req.is_met ? {color: '#00E5FF'} : {color: '#FF3B30'}]}>
-                                拥有: {req.owned_count}
-                            </Text>
-                        </View>
-                        {/* 进度条可视化 */}
-                        <View style={styles.progressBarBg}>
-                            <View style={[styles.progressBarFill, { 
-                                width: `${Math.min((req.owned_count / req.req_count) * 100, 100)}%`,
-                                backgroundColor: req.is_met ? '#00E5FF' : '#FF3B30'
-                            }]} />
-                        </View>
-                    </View>
-                </View>
-            ))}
+      <ScrollView contentContainerStyle={{padding: 16, alignItems: 'center'}}>
+        <View style={styles.mechaScreen}>
+           <Text style={styles.mechaScreenTitle}> {eventData.name} </Text>
+           <Image source={{ uri: eventData.target_collection?.image_url || 'https://via.placeholder.com/300' }} style={styles.mainImage} />
+           <View style={styles.mechaInfoBox}>
+             <Text style={styles.mechaText}>剩余额度: {eventData.max_count > 0 ? eventData.max_count - eventData.current_count : '能量无限'}</Text>
+             <Text style={styles.mechaText}>关闭时间: {new Date(eventData.end_time).toLocaleString()}</Text>
+           </View>
         </View>
 
+        <Text style={styles.sectionHeader}>◆ 注入进化基因 ◆</Text>
+
+        <View style={styles.materialsGrid}>
+          {requirements.map((req, index) => {
+            const selectedCount = (selectedNfts[index] || []).length;
+            const isFull = selectedCount === req.req_count;
+            return (
+              <TouchableOpacity 
+                key={req.id} 
+                style={[styles.materialSlot, isFull && styles.materialSlotFull]}
+                onPress={() => openMaterialPicker(index)}
+              >
+                <Image source={{ uri: req.collection.image_url }} style={[styles.slotImage, { opacity: isFull ? 1 : 0.3 }]} />
+                {!isFull && <Text style={styles.slotEmptyText}>点击注入</Text>}
+                <View style={[styles.reqBadge, isFull && {backgroundColor: '#00E5FF'}]}>
+                  <Text style={[styles.reqBadgeText, isFull && {color: '#000'}]}>{selectedCount}/{req.req_count}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </ScrollView>
 
-      {/* 底部操作台 */}
       <View style={styles.bottomBar}>
-         {isMelted ? (
-             <View style={[styles.actionBtn, {backgroundColor: '#333'}]}>
-                 <Text style={{color: '#888', fontWeight: '800'}}>通道已熔断</Text>
-             </View>
-         ) : isExpired ? (
-             <View style={[styles.actionBtn, {backgroundColor: '#333'}]}>
-                 <Text style={{color: '#888', fontWeight: '800'}}>配方已失效</Text>
-             </View>
-         ) : (
-             <TouchableOpacity 
-                 style={[styles.actionBtn, !canSynthesize && {backgroundColor: '#333', borderColor: '#555'}]} 
-                 activeOpacity={0.8}
-                 disabled={!canSynthesize || synthesizing}
-                 onPress={handleSynthesize}
-             >
-                 {synthesizing ? <ActivityIndicator color="#000" /> : (
-                     <Text style={[styles.actionBtnText, !canSynthesize && {color: '#888'}]}>
-                         {canSynthesize ? '⚡ 启动变异炉' : '材料不足，前往集市扫货'}
-                     </Text>
-                 )}
-             </TouchableOpacity>
-         )}
+         <TouchableOpacity style={styles.cyberBtn} activeOpacity={0.8} onPress={handleExecute} disabled={synthesizing}>
+            {synthesizing ? <ActivityIndicator color="#000" /> : <Text style={styles.cyberBtnText}>⚡ 启动进化舱 ⚡</Text>}
+         </TouchableOpacity>
       </View>
+
+      <Modal visible={showPicker} animationType="slide">
+        <SafeAreaView style={styles.pickerContainer}>
+          <View style={styles.pickerNav}>
+             <TouchableOpacity onPress={() => setShowPicker(false)}><Text style={{fontSize: 16, color: '#999'}}>取消</Text></TouchableOpacity>
+             <Text style={{fontSize: 18, color: '#FFF', fontWeight: '800'}}>选择基因序列</Text>
+             <Text style={{width: 32}}></Text>
+          </View>
+
+          {activeReqIndex !== null && (
+            <Text style={{color: '#00E5FF', textAlign: 'center', marginBottom: 20}}>
+              请选择 {requirements[activeReqIndex].req_count} 个【{requirements[activeReqIndex].collection.name}】
+            </Text>
+          )}
+
+          <ScrollView style={{flex: 1, paddingHorizontal: 16}}>
+             {myIdleNfts.length === 0 ? (
+               <View style={{alignItems: 'center', marginTop: 100}}>
+                  <Text style={{color: '#666', marginBottom: 20}}>该基因序列材料不足，请前往大盘扫货</Text>
+                  <TouchableOpacity style={styles.buyBtn} onPress={() => { setShowPicker(false); router.push('/(tabs)/market'); }}>
+                    <Text style={{color: '#000', fontWeight: '800'}}>去扫货</Text>
+                  </TouchableOpacity>
+               </View>
+             ) : (
+               myIdleNfts.map((nft) => {
+                 const isSelected = (selectedNfts[activeReqIndex as number] || []).includes(nft.id);
+                 return (
+                   <TouchableOpacity 
+                     key={nft.id} 
+                     style={[styles.nftPickerRow, isSelected && {borderColor: '#00E5FF', backgroundColor: 'rgba(0,229,255,0.1)'}]}
+                     onPress={() => toggleNftSelection(nft.id)}
+                   >
+                     <Text style={{color: '#FFF', fontSize: 16}}>编号: #{nft.serial_number}</Text>
+                     <View style={[styles.checkbox, isSelected && {backgroundColor: '#00E5FF'}]} />
+                   </TouchableOpacity>
+                 )
+               })
+             )}
+          </ScrollView>
+
+          <View style={{padding: 20}}>
+            <TouchableOpacity style={styles.confirmPickBtn} onPress={() => setShowPicker(false)}>
+              <Text style={{color: '#000', fontSize: 16, fontWeight: '800'}}>确认注入</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0B0B0C' },
-  container: { flex: 1, backgroundColor: '#0B0B0C' },
-  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 50, backgroundColor: '#0B0B0C' },
-  navBtn: { width: 40, height: 40, justifyContent: 'center' },
-  iconText: { fontSize: 22, color: '#00E5FF', fontWeight: 'bold' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#090E17' },
+  container: { flex: 1, backgroundColor: '#090E17' },
+  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44 },
+  navBtn: { width: 60, justifyContent: 'center' },
+  iconText: { fontSize: 16, color: '#00E5FF', fontWeight: '700' },
   navTitle: { fontSize: 18, fontWeight: '900', color: '#FFF', letterSpacing: 2 },
-
-  topStage: { width: width, height: 320, backgroundColor: '#111' },
-  stageOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', paddingTop: 30 },
-  targetImage: { width: 140, height: 140, borderRadius: 16, borderWidth: 2, borderColor: '#00E5FF', marginBottom: -15, zIndex: 2 },
-  targetBadge: { backgroundColor: '#00E5FF', paddingHorizontal: 16, paddingVertical: 4, borderRadius: 20, zIndex: 3, shadowColor: '#00E5FF', shadowOpacity: 0.8, shadowRadius: 10, elevation: 5 },
-  targetBadgeText: { color: '#000', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
-  targetName: { fontSize: 24, fontWeight: '900', color: '#FFF', marginTop: 16, letterSpacing: 2, textShadowColor: '#00E5FF', textShadowOffset: {width: 0, height: 0}, textShadowRadius: 10 },
-  
-  statusBox: { flexDirection: 'row', marginTop: 16, backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 12 },
-  statusText: { color: '#CCC', fontSize: 12, fontWeight: '700', marginHorizontal: 10 },
-
-  reqContainer: { padding: 20, marginTop: -20, backgroundColor: '#0B0B0C', borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  reqHeader: { marginBottom: 20 },
-  reqTitle: { fontSize: 18, fontWeight: '900', color: '#FFF', marginBottom: 4 },
-  reqSubtitle: { fontSize: 12, color: '#666' },
-
-  reqCard: { flexDirection: 'row', backgroundColor: '#161618', padding: 16, borderRadius: 16, marginBottom: 16, borderWidth: 1, borderColor: '#2A2A2D' },
-  reqImg: { width: 60, height: 60, borderRadius: 8, marginRight: 16 },
-  reqInfo: { flex: 1, justifyContent: 'center' },
-  reqName: { fontSize: 15, fontWeight: '800', color: '#FFF', marginBottom: 8 },
-  progressRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 },
-  progressLabel: { fontSize: 12, color: '#888', fontWeight: '600' },
-  progressValue: { fontSize: 14, fontWeight: '900' },
-  
-  progressBarBg: { height: 6, backgroundColor: '#222', borderRadius: 3, overflow: 'hidden' },
-  progressBarFill: { height: '100%', borderRadius: 3 },
-
-  bottomBar: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: 'rgba(11, 11, 12, 0.95)', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30, borderTopWidth: 1, borderColor: '#222' },
-  actionBtn: { height: 55, backgroundColor: '#00E5FF', borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowColor: '#00E5FF', shadowOpacity: 0.3, shadowRadius: 10, elevation: 5 },
-  actionBtnText: { color: '#000', fontSize: 18, fontWeight: '900', letterSpacing: 2 },
+  mechaScreen: { width: width - 32, backgroundColor: '#0D1623', borderWidth: 2, borderColor: '#1F3C5A', borderRadius: 16, padding: 16, alignItems: 'center', shadowColor: '#00E5FF', shadowOpacity: 0.3, shadowRadius: 20, shadowOffset: {width: 0, height: 0} },
+  mechaScreenTitle: { color: '#00E5FF', fontSize: 18, fontWeight: '900', marginBottom: 16, letterSpacing: 1 },
+  mainImage: { width: width * 0.6, height: width * 0.6, resizeMode: 'cover', borderRadius: 8, borderWidth: 1, borderColor: '#00E5FF' },
+  mechaInfoBox: { width: '100%', backgroundColor: '#060A10', padding: 12, borderRadius: 8, marginTop: 16, borderWidth: 1, borderColor: '#1A2E44' },
+  mechaText: { color: '#8AB4F8', fontSize: 12, marginBottom: 4, fontFamily: 'monospace' },
+  sectionHeader: { color: '#00E5FF', fontSize: 16, fontWeight: '900', marginVertical: 24, letterSpacing: 2 },
+  materialsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
+  materialSlot: { width: 100, height: 100, backgroundColor: '#0D1623', borderWidth: 1, borderColor: '#1F3C5A', borderRadius: 12, margin: 8, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  materialSlotFull: { borderColor: '#00E5FF', shadowColor: '#00E5FF', shadowOpacity: 0.5, shadowRadius: 10 },
+  slotImage: { position: 'absolute', width: '100%', height: '100%', resizeMode: 'cover' },
+  slotEmptyText: { color: '#4A6D8C', fontSize: 12, fontWeight: '800', zIndex: 2 },
+  reqBadge: { position: 'absolute', top: -1, right: -1, backgroundColor: '#FF3B30', paddingHorizontal: 6, paddingVertical: 2, borderBottomLeftRadius: 8 },
+  reqBadgeText: { color: '#FFF', fontSize: 10, fontWeight: '900' },
+  bottomBar: { padding: 20, borderTopWidth: 1, borderColor: '#1F3C5A', backgroundColor: '#060A10' },
+  cyberBtn: { height: 50, backgroundColor: '#00E5FF', borderRadius: 8, justifyContent: 'center', alignItems: 'center', shadowColor: '#00E5FF', shadowOpacity: 0.8, shadowRadius: 10, shadowOffset: {width: 0, height: 0} },
+  cyberBtnText: { color: '#000', fontSize: 18, fontWeight: '900', letterSpacing: 2 },
+  pickerContainer: { flex: 1, backgroundColor: '#090E17' },
+  pickerNav: { flexDirection: 'row', justifyContent: 'space-between', padding: 16, alignItems: 'center', borderBottomWidth: 1, borderColor: '#1F3C5A', marginBottom: 16 },
+  buyBtn: { backgroundColor: '#00E5FF', paddingHorizontal: 30, paddingVertical: 12, borderRadius: 24 },
+  nftPickerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#0D1623', borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: '#1F3C5A' },
+  checkbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#00E5FF' },
+  confirmPickBtn: { height: 50, backgroundColor: '#00E5FF', borderRadius: 25, justifyContent: 'center', alignItems: 'center' }
 });

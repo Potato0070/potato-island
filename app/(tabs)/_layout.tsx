@@ -1,45 +1,66 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import { Text } from 'react-native';
 
 export default function TabLayout() {
   return (
-    <Tabs screenOptions={{ 
-      tabBarActiveTintColor: '#007AFF', // 选中时的颜色（比如类似支付宝的蓝色）
-      headerShown: false // 显示顶部标题栏
-    }}>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: '#D49A36', // 土豆岛专属金
+        tabBarInactiveTintColor: '#999',
+        tabBarStyle: {
+          backgroundColor: '#FFF',
+          borderTopWidth: 1,
+          borderColor: '#F0F0F0',
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 10,
+          elevation: 5,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '700',
+          marginTop: 2,
+        },
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
           title: '首页',
-          tabBarIcon: ({ color }) => <Ionicons name="home" size={24} color={color} />,
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>🏠</Text>,
         }}
       />
       <Tabs.Screen
         name="market"
         options={{
-          title: '市场',
-          tabBarIcon: ({ color }) => <Ionicons name="storefront" size={24} color={color} />,
+          title: '集市',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>⚖️</Text>,
         }}
       />
       <Tabs.Screen
         name="community"
         options={{
-          title: '社区',
-          tabBarIcon: ({ color }) => <Ionicons name="planet" size={24} color={color} />,
+          title: '旨意',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>📜</Text>,
         }}
       />
       <Tabs.Screen
         name="messages"
         options={{
           title: '消息',
-          tabBarIcon: ({ color }) => <Ionicons name="chatbubble-ellipses" size={24} color={color} />,
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>🔔</Text>,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: '我的',
-          tabBarIcon: ({ color }) => <Ionicons name="person" size={24} color={color} />,
+          title: '金库',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>💰</Text>,
         }}
       />
     </Tabs>

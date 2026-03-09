@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, ImageBackground, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -9,24 +9,20 @@ export default function SynthesisListScreen() {
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchEvents();
+    }, [])
+  );
+
   const fetchEvents = async () => {
     try {
-      setLoading(true);
-      // 获取所有未过期且未熔断的变异活动，并带上目标藏品的图
       const { data, error } = await supabase
         .from('synthesis_events')
-        .select(`
-          *,
-          target_collection:target_collection_id(name, image_url)
-        `)
-        .gte('end_time', new Date().toISOString())
+        .select(`id, name, end_time, current_count, max_count, is_active, target_collection:target_collection_id(name, image_url)`)
         .order('created_at', { ascending: false });
-
       if (error) throw error;
-
-      // 过滤掉已经达到熔断上限的配方
-      const activeEvents = (data || []).filter(e => e.max_count === 0 || e.current_count < e.max_count);
-      setEvents(activeEvents);
+      setEvents(data || []);
     } catch (err: any) {
       console.error(err);
     } finally {
@@ -34,52 +30,28 @@ export default function SynthesisListScreen() {
     }
   };
 
-  useFocusEffect(useCallback(() => { fetchEvents(); }, []));
-
   const renderItem = ({ item }: { item: any }) => {
-    const isLimited = item.max_count > 0;
-    const remain = isLimited ? item.max_count - item.current_count : '无限';
-    
+    const isEnded = new Date(item.end_time) < new Date() || !item.is_active || (item.max_count > 0 && item.current_count >= item.max_count);
+    const coverImage = item.target_collection?.image_url || 'https://via.placeholder.com/150';
+
     return (
       <TouchableOpacity 
-         style={styles.card} 
-         activeOpacity={0.8}
-         onPress={() => router.push({ pathname: '/synthesis-detail', params: { id: item.id } })}
+        style={[styles.card, isEnded && {opacity: 0.6}]} 
+        activeOpacity={0.8}
+        onPress={() => !isEnded && router.push({ pathname: '/synthesis-detail', params: { id: item.id } })}
       >
-        <ImageBackground source={{ uri: item.target_collection?.image_url }} style={styles.cardBg} blurRadius={20}>
-           <View style={styles.overlay}>
-              
-              {/* 左侧目标产物图 */}
-              <View style={styles.targetImgBox}>
-                 <Image source={{ uri: item.target_collection?.image_url }} style={styles.targetImg} />
-                 <View style={styles.tagBox}>
-                    <Text style={styles.tagText}>目标产物</Text>
-                 </View>
-              </View>
-
-              {/* 右侧配方信息 */}
-              <View style={styles.infoBox}>
-                 <Text style={styles.title} numberOfLines={1}>{item.name}</Text>
-                 <Text style={styles.targetName}>产出: {item.target_collection?.name}</Text>
-                 
-                 <View style={styles.statusRow}>
-                    <Text style={styles.statusText}>
-                       全岛剩余名额: <Text style={{color: '#00E5FF', fontWeight: '900'}}>{remain}</Text>
-                    </Text>
-                 </View>
-
-                 <View style={styles.btnRow}>
-                    <TouchableOpacity 
-                       style={styles.actionBtn}
-                       onPress={() => router.push({ pathname: '/synthesis-detail', params: { id: item.id } })}
-                    >
-                       <Text style={styles.actionBtnText}>查看配方与材料 〉</Text>
-                    </TouchableOpacity>
-                 </View>
-              </View>
-
-           </View>
-        </ImageBackground>
+        <Image source={{ uri: coverImage }} style={styles.cardImage} />
+        <View style={styles.cardInfo}>
+          <Text style={styles.cardTitle}>{item.name}</Text>
+          <Text style={styles.cardSub}>剩余名额: {item.max_count > 0 ? item.max_count - item.current_count : '无限'} | {new Date(item.end_time).toLocaleDateString()} 结束</Text>
+          <View style={styles.tagRow}>
+             <Image source={{uri: 'https://via.placeholder.com/20'}} style={styles.miniAvatar} />
+             <Text style={styles.communityText}>土豆岛基因工坊</Text>
+          </View>
+        </View>
+        <View style={[styles.statusBadge, isEnded ? styles.badgeEnded : styles.badgeActive]}>
+          <Text style={styles.badgeText}>{isEnded ? '已结束' : '合成中'}</Text>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -87,27 +59,17 @@ export default function SynthesisListScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.navBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
-           <Text style={styles.iconText}>〈</Text>
-        </TouchableOpacity>
-        <Text style={styles.navTitle}>基因进化大厅</Text>
-        <View style={styles.navBtn} />
+        <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}><Text style={styles.iconText}>〈</Text></TouchableOpacity>
+        <Text style={styles.navTitle}>基因合成舱</Text>
+        <Text style={{width: 40}}></Text>
       </View>
-
-      {loading ? (
-        <ActivityIndicator size="large" color="#00E5FF" style={{ marginTop: 50 }} />
-      ) : (
+      
+      {loading ? <ActivityIndicator size="large" color="#0066FF" style={{marginTop: 50}} /> : (
         <FlatList
           data={events}
           renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: 16, paddingBottom: 50 }}
-          ListEmptyComponent={
-            <View style={styles.emptyBox}>
-               <Text style={{fontSize: 40, marginBottom: 10}}>🧬</Text>
-               <Text style={styles.emptyText}>当前暂无开放的变异配方</Text>
-            </View>
-          }
+          keyExtractor={item => item.id}
+          contentContainerStyle={{ padding: 16 }}
         />
       )}
     </SafeAreaView>
@@ -115,31 +77,21 @@ export default function SynthesisListScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B0B0C' }, // 朋克暗黑风背景
-  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 50, backgroundColor: '#0B0B0C' },
+  container: { flex: 1, backgroundColor: '#F5F6F8' },
+  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FFF' },
   navBtn: { width: 40, height: 40, justifyContent: 'center' },
-  iconText: { fontSize: 22, color: '#00E5FF', fontWeight: 'bold' },
-  navTitle: { fontSize: 18, fontWeight: '900', color: '#FFF', letterSpacing: 2 },
-
-  card: { width: '100%', height: 160, borderRadius: 16, overflow: 'hidden', marginBottom: 20, borderWidth: 1, borderColor: '#1F1F22' },
-  cardBg: { width: '100%', height: '100%' },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', flexDirection: 'row', padding: 16 },
-  
-  targetImgBox: { width: 100, height: 100, borderRadius: 12, overflow: 'hidden', borderWidth: 2, borderColor: '#00E5FF', position: 'relative', marginTop: 10 },
-  targetImg: { width: '100%', height: '100%', resizeMode: 'cover' },
-  tagBox: { position: 'absolute', top: 0, left: 0, backgroundColor: '#00E5FF', paddingHorizontal: 6, paddingVertical: 2, borderBottomRightRadius: 8 },
-  tagText: { color: '#000', fontSize: 10, fontWeight: '900' },
-
-  infoBox: { flex: 1, marginLeft: 16, justifyContent: 'center' },
-  title: { fontSize: 18, fontWeight: '900', color: '#FFF', marginBottom: 6 },
-  targetName: { fontSize: 13, color: '#CCC', marginBottom: 12 },
-  statusRow: { marginBottom: 16 },
-  statusText: { fontSize: 12, color: '#888', fontWeight: '600' },
-  
-  btnRow: { alignItems: 'flex-end' },
-  actionBtn: { backgroundColor: '#111', borderWidth: 1, borderColor: '#00E5FF', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-  actionBtnText: { color: '#00E5FF', fontSize: 12, fontWeight: '800' },
-
-  emptyBox: { alignItems: 'center', marginTop: 100 },
-  emptyText: { color: '#666', fontSize: 14, fontWeight: '600' }
+  iconText: { fontSize: 20, color: '#333' },
+  navTitle: { fontSize: 17, fontWeight: '800', color: '#111' },
+  card: { flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 12, padding: 12, marginBottom: 16, shadowColor: '#000', shadowOffset: {width:0, height:2}, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  cardImage: { width: 80, height: 80, borderRadius: 8, backgroundColor: '#EEE', marginRight: 12 },
+  cardInfo: { flex: 1, justifyContent: 'center' },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: '#111', marginBottom: 6 },
+  cardSub: { fontSize: 12, color: '#666', marginBottom: 10 },
+  tagRow: { flexDirection: 'row', alignItems: 'center' },
+  miniAvatar: { width: 16, height: 16, borderRadius: 8, marginRight: 6 },
+  communityText: { fontSize: 12, color: '#888' },
+  statusBadge: { position: 'absolute', right: 12, top: 12, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
+  badgeActive: { backgroundColor: '#0066FF' },
+  badgeEnded: { backgroundColor: '#CCC' },
+  badgeText: { color: '#FFF', fontSize: 10, fontWeight: '800' }
 });
