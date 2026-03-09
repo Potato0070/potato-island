@@ -15,39 +15,30 @@ export default function CollectionScreen() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'listed' | 'all'>('listed');
 
-  useFocusEffect(useCallback(() => {
-    fetchData();
-  }, [id]));
+  useFocusEffect(useCallback(() => { fetchData(); }, [id]));
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      // 获取该系列大盘宏观数据 (包含底层已算好的在售数和底价)
       const { data: colData } = await supabase.from('collections').select('*').eq('id', id).single();
       setCollection(colData);
 
-      // 获取该系列下的所有具体资产卡片
       const { data: nftData } = await supabase.from('nfts')
         .select('*, profiles(nickname)')
         .eq('collection_id', id)
         .neq('status', 'burned')
-        .order('consign_price', { ascending: true, nullsFirst: false }); // 价格从低到高排序
+        .order('consign_price', { ascending: true, nullsFirst: false }); // 价格从低到高排列
       
       setNfts(nftData || []);
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
-  // 根据 Tab 过滤列表
   const displayedNfts = activeTab === 'listed' ? nfts.filter(n => n.status === 'listed') : nfts;
 
   const renderNft = ({ item }: { item: any }) => {
     const isListed = item.status === 'listed';
     return (
-      <TouchableOpacity 
-         style={styles.nftCard} 
-         activeOpacity={0.8} 
-         onPress={() => router.push({ pathname: '/item-detail', params: { id: item.id } })}
-      >
+      <TouchableOpacity style={styles.nftCard} activeOpacity={0.8} onPress={() => router.push({ pathname: '/item-detail', params: { id: item.id } })}>
         <View style={styles.imgBox}>
            <Image source={{ uri: collection?.image_url }} style={styles.nftImg} />
            <View style={[styles.statusBadge, isListed ? {backgroundColor: '#FF3B30'} : {backgroundColor: '#4CD964'}]}>
@@ -73,11 +64,10 @@ export default function CollectionScreen() {
     );
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color="#0066FF" /></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator color="#FFD700" /></View>;
 
   return (
     <View style={styles.container}>
-      {/* 🌟 沉浸式高斯模糊头部 */}
       <ImageBackground source={{ uri: collection?.image_url }} style={styles.headerBg} blurRadius={15}>
          <View style={styles.headerOverlay}>
             <SafeAreaView edges={['top']} style={{width: '100%'}}>
@@ -91,7 +81,6 @@ export default function CollectionScreen() {
                   <Image source={{ uri: collection?.image_url }} style={styles.heroImg} />
                   <Text style={styles.heroTitle}>{collection?.name}</Text>
                   
-                  {/* 数据看板矩阵 */}
                   <View style={styles.statsMatrix}>
                      <View style={styles.statItem}>
                         <Text style={styles.statValue}>¥{collection?.floor_price_cache || 0}</Text>
@@ -113,7 +102,6 @@ export default function CollectionScreen() {
          </View>
       </ImageBackground>
 
-      {/* 🌟 列表展示区 */}
       <View style={styles.listSection}>
          {/* 双击切换 Tabs */}
          <View style={styles.tabsRow}>
@@ -123,11 +111,16 @@ export default function CollectionScreen() {
             <TouchableOpacity style={[styles.tabBtn, activeTab === 'all' && styles.tabBtnActive]} onPress={() => setActiveTab('all')}>
                <Text style={[styles.tabText, activeTab === 'all' && styles.tabTextActive]}>全部图鉴 ({nfts.length})</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.wantBtn} onPress={() => router.push({pathname: '/create-buy-order', params: {colId: collection?.id}})}>
-               <Text style={styles.wantBtnText}>发布求购</Text>
-            </TouchableOpacity>
          </View>
+
+         {/* 🌟 核心优化：一岛同款的“煽动性求购横幅” */}
+         <TouchableOpacity 
+            style={styles.fomoBanner} 
+            activeOpacity={0.8}
+            onPress={() => router.push({pathname: '/create-buy-order', params: {colId: collection?.id}})}
+         >
+            <Text style={styles.fomoText}>寄售价不够合适？点此去发布求购单，抢先拿下心仪藏品 〉</Text>
+         </TouchableOpacity>
 
          <FlatList 
            data={displayedNfts} 
@@ -137,12 +130,7 @@ export default function CollectionScreen() {
            contentContainerStyle={{ padding: 16, paddingBottom: 100 }} 
            columnWrapperStyle={{ justifyContent: 'space-between' }}
            showsVerticalScrollIndicator={false}
-           ListEmptyComponent={
-              <View style={{alignItems: 'center', marginTop: 40}}>
-                 <Text style={{fontSize: 40, marginBottom: 10}}>🪹</Text>
-                 <Text style={{color: '#999'}}>{activeTab === 'listed' ? '当前系列无现货，快去发布求购吧！' : '该系列尚未发行任何卡片'}</Text>
-              </View>
-           }
+           ListEmptyComponent={<Text style={{textAlign: 'center', color: '#999', marginTop: 40}}>暂无数据</Text>}
          />
       </View>
     </View>
@@ -152,7 +140,6 @@ export default function CollectionScreen() {
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F6F8' },
   container: { flex: 1, backgroundColor: '#F5F6F8' },
-  
   headerBg: { width: '100%', minHeight: 320 },
   headerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
   navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44 },
@@ -170,20 +157,20 @@ const styles = StyleSheet.create({
   statDivider: { width: 1, height: 20, backgroundColor: 'rgba(255,255,255,0.2)' },
 
   listSection: { flex: 1, backgroundColor: '#F5F6F8', borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -20, overflow: 'hidden' },
-  tabsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 20, paddingBottom: 10, backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#F0F0F0' },
-  tabBtn: { paddingBottom: 8, marginRight: 20, borderBottomWidth: 2, borderColor: 'transparent' },
+  tabsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 20, paddingBottom: 10, backgroundColor: '#FFF' },
+  tabBtn: { paddingBottom: 8, marginRight: 24, borderBottomWidth: 2, borderColor: 'transparent' },
   tabBtnActive: { borderColor: '#111' },
   tabText: { fontSize: 15, color: '#888', fontWeight: '600' },
   tabTextActive: { color: '#111', fontWeight: '900' },
-  wantBtn: { position: 'absolute', right: 16, top: 16, backgroundColor: '#FFF5E6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: '#FFD700' },
-  wantBtnText: { color: '#D49A36', fontSize: 12, fontWeight: '800' },
+
+  fomoBanner: { backgroundColor: '#FFF5E6', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: '#FFE4B5' },
+  fomoText: { color: '#D49A36', fontSize: 12, fontWeight: '700', textAlign: 'center' },
 
   nftCard: { width: CARD_WIDTH, backgroundColor: '#FFF', borderRadius: 12, marginBottom: 16, padding: 8, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 1 },
   imgBox: { width: '100%', aspectRatio: 1, backgroundColor: '#F5F5F5', borderRadius: 8, overflow: 'hidden', marginBottom: 8 },
   nftImg: { width: '100%', height: '100%', resizeMode: 'cover' },
   statusBadge: { position: 'absolute', top: 6, left: 6, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   statusText: { color: '#FFF', fontSize: 9, fontWeight: '900' },
-  
   nftInfo: { flex: 1 },
   serial: { fontSize: 14, fontWeight: '900', color: '#111', fontFamily: 'monospace', marginBottom: 2 },
   owner: { fontSize: 10, color: '#888', marginBottom: 8 },
