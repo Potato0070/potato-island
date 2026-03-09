@@ -14,7 +14,7 @@ const MENU_GRID = [
   { name: '钱包', icon: '👛', route: '/wallet' },
   { name: '合成', icon: '🧬', route: '/synthesis-list' },
   { name: '权益', icon: '💎', route: '/vip-privilege' },
-  { name: '转赠', icon: '🎁', route: '' },
+  { name: '转赠', icon: '🎁', route: '/transfer' },
   { name: '设置', icon: '⚙️', route: '/change-avatar' },
 ];
 

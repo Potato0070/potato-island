@@ -15,7 +15,7 @@ const MENU_ITEMS = [
   { name: '创世发新', icon: '🚀', route: '/(tabs)/market', bgColor: '#E6FAFF' },
   { name: '黑洞废墟', icon: '🕳️', route: '', bgColor: '#F0F0F0' }, // 替代元宇宙：查看全网销毁量
   { name: '特权兑换', icon: '💳', route: '', bgColor: '#E6FFE6' }, // 替代酒世界：用基础卡兑换转赠卡/批量卡
-  { name: '资产转赠', icon: '🎁', route: '', bgColor: '#FFE6E6' }, 
+  { name: '资产转赠', icon: '🎁', route: '/transfer', bgColor: '#FFE6E6' }, 
 ];
 
 export default function HomeScreen() {
