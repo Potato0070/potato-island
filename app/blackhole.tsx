@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { ActivityIndicator, Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
@@ -8,9 +8,9 @@ const { height } = Dimensions.get('window');
 
 export default function BlackholeScreen() {
   const router = useRouter();
-  const [profile, setProfile] = useState<any>(null);
   const [processing, setProcessing] = useState(false);
   
+  // 选卡逻辑状态
   const [showPicker, setShowPicker] = useState(false);
   const [myNfts, setMyNfts] = useState<any[]>([]);
   const [selectedNft, setSelectedNft] = useState<any>(null);
@@ -20,26 +20,32 @@ export default function BlackholeScreen() {
   const [resultModal, setResultModal] = useState<{title: string, msg: string} | null>(null);
   const [toastMsg, setToastMsg] = useState('');
 
-  useEffect(() => { fetchProfile(); }, []);
-
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 2500);
   };
 
-  const fetchProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase.from('profiles').select('potato_cards, universal_cards').eq('id', user.id).single();
-      setProfile(data);
-    }
-  };
-
   const openPicker = async () => {
     setShowPicker(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data } = await supabase.from('nfts').select('*, collections(name, image_url)').eq('owner_id', user?.id).eq('status', 'idle');
-    setMyNfts(data || []);
+    try {
+       const { data: { user } } = await supabase.auth.getUser();
+       // 去真实仓库里翻出所有闲置的数字藏品
+       const { data } = await supabase.from('nfts')
+         .select('*, collections(name, image_url)')
+         .eq('owner_id', user?.id)
+         .eq('status', 'idle');
+       
+       // 🌟 核心拦截：不允许投入 Potato卡！
+       if (data) {
+          const validNfts = data.filter((nft: any) => {
+             const colName = Array.isArray(nft.collections) ? nft.collections[0]?.name : nft.collections?.name;
+             return colName !== 'Potato卡';
+          });
+          setMyNfts(validNfts);
+       }
+    } catch (err) {
+       console.error(err);
+    }
   };
 
   const handleThrowClick = () => {
@@ -52,20 +58,37 @@ export default function BlackholeScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
+      // 1. 物理燃烧掉你丢进来的垃圾卡
       await supabase.from('nfts').update({ status: 'burned' }).eq('id', selectedNft.id);
 
+      // 2. 获取大盘里的 Potato卡 和 万能土豆卡 的系列 ID，用来给你印真实的新钞票！
+      const { data: cols } = await supabase.from('collections').select('id, name, total_minted').in('name', ['Potato卡', '万能土豆卡']);
+      const potatoCol = cols?.find(c => c.name === 'Potato卡');
+      const universalCol = cols?.find(c => c.name === '万能土豆卡');
+
+      // 3. 99% 与 1% 真实判定
       const roll = Math.floor(Math.random() * 100); 
       let resTitle = '';
       let resMsg = '';
       
-      if (roll === 99) { // 1%
-         await supabase.from('profiles').update({ universal_cards: (profile.universal_cards || 0) + 1 }).eq('id', user?.id);
+      if (roll === 99) { 
+         // 🌟 1% 极品：铸造 1 张真实的【万能土豆卡】NFT 给玩家
+         if (universalCol) {
+            const newSerial = universalCol.total_minted + 1;
+            await supabase.from('nfts').insert([{ collection_id: universalCol.id, owner_id: user?.id, serial_number: newSerial.toString(), status: 'idle' }]);
+            await supabase.from('collections').update({ total_minted: newSerial, circulating_supply: newSerial }).eq('id', universalCol.id);
+         }
          resTitle = '🌟 神迹显现！';
-         resMsg = '废墟中凝结出了一张【万能土豆卡】！';
-      } else { // 99%
-         await supabase.from('profiles').update({ potato_cards: (profile.potato_cards || 0) + 1 }).eq('id', user?.id);
+         resMsg = '废墟中凝结出了一张【万能土豆卡】，已打入您的金库！';
+      } else { 
+         // 🌟 99% 保底：铸造 1 张真实的【Potato卡】NFT 给玩家
+         if (potatoCol) {
+            const newSerial = potatoCol.total_minted + 1;
+            await supabase.from('nfts').insert([{ collection_id: potatoCol.id, owner_id: user?.id, serial_number: newSerial.toString(), status: 'idle' }]);
+            await supabase.from('collections').update({ total_minted: newSerial, circulating_supply: newSerial }).eq('id', potatoCol.id);
+         }
          resTitle = '💥 献祭失败！';
-         resMsg = '藏品已被黑洞粉碎，残渣凝结成了 1 张【Potato卡】。';
+         resMsg = '藏品已被粉碎，残渣凝结成了 1 张【Potato卡】，已放入金库。';
       }
 
       setConfirmModal(false);
@@ -73,8 +96,13 @@ export default function BlackholeScreen() {
     } catch (err: any) { 
        setConfirmModal(false);
        showToast(`销毁失败: ${err.message}`); 
-    } finally { setProcessing(false); }
+    } finally { 
+       setProcessing(false); 
+    }
   };
+
+  const getColName = (nft: any) => Array.isArray(nft.collections) ? nft.collections[0]?.name : nft.collections?.name;
+  const getColImage = (nft: any) => Array.isArray(nft.collections) ? nft.collections[0]?.image_url : nft.collections?.image_url;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -103,8 +131,8 @@ export default function BlackholeScreen() {
          <TouchableOpacity style={styles.selectNftBox} onPress={openPicker} activeOpacity={0.8}>
             {selectedNft ? (
               <View style={{alignItems: 'center'}}>
-                 <Image source={{uri: selectedNft.collections?.image_url}} style={styles.selectedImg} />
-                 <Text style={styles.selectedName}>{selectedNft.collections?.name}</Text>
+                 <Image source={{uri: getColImage(selectedNft)}} style={styles.selectedImg} />
+                 <Text style={styles.selectedName}>{getColName(selectedNft)}</Text>
                  <Text style={styles.selectedSerial}>#{String(selectedNft.serial_number).padStart(6, '0')}</Text>
               </View>
             ) : (
@@ -125,19 +153,23 @@ export default function BlackholeScreen() {
         <View style={styles.bottomSheetOverlay}>
           <View style={styles.bottomSheet}>
              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>选择祭品</Text>
+                <Text style={styles.sheetTitle}>选择祭品 (已过滤 Potato卡)</Text>
                 <TouchableOpacity onPress={() => setShowPicker(false)}><Text style={{color: '#999', fontSize: 16}}>取消</Text></TouchableOpacity>
              </View>
              <ScrollView style={{padding: 16}}>
-                {myNfts.map(nft => (
-                   <TouchableOpacity key={nft.id} style={[styles.nftPickRow, selectedNft?.id === nft.id && styles.nftPickRowActive]} onPress={() => { setSelectedNft(nft); setShowPicker(false); }}>
-                      <Image source={{uri: nft.collections?.image_url}} style={styles.pickImg} />
-                      <View style={{flex: 1}}>
-                         <Text style={{fontSize: 14, fontWeight: '800', color: '#FFF'}}>{nft.collections?.name}</Text>
-                         <Text style={{fontSize: 11, color: '#888'}}>编号: #{nft.serial_number}</Text>
-                      </View>
-                   </TouchableOpacity>
-                ))}
+                {myNfts.length === 0 ? (
+                   <Text style={{color: '#888', textAlign: 'center', marginTop: 40}}>金库中暂无可以献祭的藏品</Text>
+                ) : (
+                   myNfts.map(nft => (
+                      <TouchableOpacity key={nft.id} style={[styles.nftPickRow, selectedNft?.id === nft.id && styles.nftPickRowActive]} onPress={() => { setSelectedNft(nft); setShowPicker(false); }}>
+                         <Image source={{uri: getColImage(nft)}} style={styles.pickImg} />
+                         <View style={{flex: 1}}>
+                            <Text style={{fontSize: 14, fontWeight: '800', color: '#FFF'}}>{getColName(nft)}</Text>
+                            <Text style={{fontSize: 11, color: '#888'}}>编号: #{nft.serial_number}</Text>
+                         </View>
+                      </TouchableOpacity>
+                   ))
+                )}
              </ScrollView>
           </View>
         </View>
@@ -148,7 +180,7 @@ export default function BlackholeScreen() {
          <View style={styles.modalOverlay}>
             <View style={[styles.confirmBox, {backgroundColor: '#222', borderColor: '#444', borderWidth: 1}]}>
                <Text style={[styles.confirmTitle, {color: '#FFF'}]}>🕳️ 确认投入黑洞</Text>
-               <Text style={styles.confirmDesc}>您确定要将【<Text style={{color:'#FFF', fontWeight:'900'}}>{selectedNft?.collections?.name}</Text>】投入黑洞吗？警告：藏品将被永久销毁！</Text>
+               <Text style={styles.confirmDesc}>您确定要将【<Text style={{color:'#FFF', fontWeight:'900'}}>{getColName(selectedNft)}</Text>】投入黑洞吗？警告：藏品将被永久销毁！</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={[styles.cancelBtn, {backgroundColor: '#444'}]} onPress={() => setConfirmModal(false)}><Text style={[styles.cancelBtnText, {color: '#CCC'}]}>我害怕了</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.confirmBtn} onPress={executeThrow} disabled={processing}>
@@ -165,7 +197,7 @@ export default function BlackholeScreen() {
             <View style={[styles.confirmBox, {backgroundColor: '#222', borderColor: '#FF3B30', borderWidth: 2}]}>
                <Text style={[styles.confirmTitle, {color: '#FF3B30', fontSize: 20}]}>{resultModal?.title}</Text>
                <Text style={[styles.confirmDesc, {fontSize: 16, color: '#FFF', fontWeight: '800'}]}>{resultModal?.msg}</Text>
-               <TouchableOpacity style={[styles.confirmBtn, {width: '100%'}]} onPress={() => { setResultModal(null); setSelectedNft(null); fetchProfile(); }}>
+               <TouchableOpacity style={[styles.confirmBtn, {width: '100%'}]} onPress={() => { setResultModal(null); setSelectedNft(null); }}>
                   <Text style={styles.confirmBtnText}>确认</Text>
                </TouchableOpacity>
             </View>
@@ -214,7 +246,7 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
   confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
   confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 16 },
-  confirmDesc: { fontSize: 14, color: '#CCC', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
   confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#F5F5F5', alignItems: 'center' },
   cancelBtnText: { color: '#666', fontSize: 15, fontWeight: '800' },

@@ -15,17 +15,39 @@ export default function CreateBuyOrderScreen() {
   const [publishing, setPublishing] = useState(false);
   const [minPriceLimit, setMinPriceLimit] = useState(0);
 
-  // 定制化高级弹窗状态
+  // 🌟 存储真实的卡片 ID
+  const [potatoIds, setPotatoIds] = useState<string[]>([]);
+
+  // 🌟 定制化高级弹窗与提示状态
   const [confirmModal, setConfirmModal] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
   useEffect(() => {
+    // 1. 拉取求购大盘的宏观限制数据
     supabase.from('collections').select('*').eq('id', colId).single().then(({data}) => {
       setCollection(data);
       const isOnSale = data?.on_sale_count > 0;
       const basePrice = isOnSale ? (data?.floor_price_cache || 0) : (data?.max_consign_price || 0);
       setMinPriceLimit(basePrice * 0.7);
       setLoading(false);
+    });
+
+    // 2. 🌟 核心：去金库里查真实的“闲置 Potato卡”
+    supabase.auth.getUser().then(async ({data: {user}}) => {
+       if (user) {
+          const { data: myNfts } = await supabase.from('nfts')
+            .select('id, collections(name)')
+            .eq('owner_id', user.id)
+            .eq('status', 'idle');
+            
+          if (myNfts) {
+             const pCards = myNfts.filter((nft: any) => {
+                const colName = Array.isArray(nft.collections) ? nft.collections[0]?.name : nft.collections?.name;
+                return colName === 'Potato卡';
+             });
+             setPotatoIds(pCards.map(nft => nft.id));
+          }
+       }
     });
   }, [colId]);
 
@@ -38,8 +60,11 @@ export default function CreateBuyOrderScreen() {
     const p = parseFloat(price);
     const q = parseInt(quantity);
     if (isNaN(p) || p <= 0) return showToast('请输入有效求购价格');
-    if (isNaN(q) || q <= 0) return showToast('求购数量不能少于1');
+    if (isNaN(q) || q <= 0) return showToast('求购数量不能少于 1');
     if (p < minPriceLimit) return showToast(`出价过低！不可低于底线：¥${minPriceLimit.toFixed(2)}`);
+    
+    // 🌟 拦截检查：金库里有没有真实的 Potato卡
+    if (potatoIds.length < 1) return showToast('金库现货不足！需持有至少 1 张真实的 Potato卡');
 
     setConfirmModal(true);
   };
@@ -48,26 +73,36 @@ export default function CreateBuyOrderScreen() {
     setPublishing(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const { data: profile } = await supabase.from('profiles').select('potato_coin_balance, potato_cards').eq('id', user?.id).single();
+      const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user?.id).single();
       const totalCost = parseFloat(price) * parseInt(quantity);
       
-      if (!profile || profile.potato_coin_balance < totalCost) throw new Error('土豆币余额不足！');
-      if (profile.potato_cards < 1) throw new Error('缺少发布凭证：需持有至少 1 张 Potato卡！');
+      if (!profile || profile.potato_coin_balance < totalCost) throw new Error('土豆币钱包余额不足！');
       
+      // 1. 冻结资金 (扣除土豆币)
       await supabase.from('profiles').update({ 
-         potato_coin_balance: profile.potato_coin_balance - totalCost,
-         potato_cards: profile.potato_cards - 1 
+         potato_coin_balance: profile.potato_coin_balance - totalCost 
       }).eq('id', user?.id);
 
-      const { error } = await supabase.from('buy_orders').insert([{ collection_id: colId, buyer_id: user?.id, price: parseFloat(price), quantity: parseInt(quantity) }]);
+      // 2. 🌟 物理销毁 1 张真实的 Potato卡 NFT
+      await supabase.from('nfts').update({ status: 'burned' }).eq('id', potatoIds[0]);
+
+      // 3. 写入求购大厅订单表
+      const { error } = await supabase.from('buy_orders').insert([{ 
+         collection_id: colId, 
+         buyer_id: user?.id, 
+         price: parseFloat(price), 
+         quantity: parseInt(quantity) 
+      }]);
       if (error) throw error;
       
       setConfirmModal(false);
-      showToast('✅ 发布成功！资金已冻结');
+      showToast('✅ 发布成功！资金已冻结并进入大盘排队');
+      
+      // 延迟返回，让用户看清成功提示
       setTimeout(() => router.back(), 1500);
     } catch (err: any) { 
        setConfirmModal(false);
-       showToast(`失败: ${err.message}`); 
+       showToast(`发布失败: ${err.message}`); 
     } finally { 
        setPublishing(false); 
     }
@@ -111,8 +146,9 @@ export default function CreateBuyOrderScreen() {
 
         <View style={styles.ruleBox}>
            <Text style={styles.ruleTitle}>求购说明</Text>
-           <Text style={styles.ruleText}>1. 发起求购需消耗 1 张 Potato卡，不予退回。</Text>
+           <Text style={styles.ruleText}>1. 发起求购需从金库真实销毁 1 张 Potato卡，不予退回。</Text>
            <Text style={styles.ruleText}>2. 【未退市】最低价为地板价的70%；【已退市】最低价为最高限价的70%。</Text>
+           <Text style={styles.ruleText}>3. 全额冻结资金，若撤单仅退回资金，不退回材料卡。</Text>
         </View>
       </ScrollView>
 
@@ -126,7 +162,7 @@ export default function CreateBuyOrderScreen() {
          </TouchableOpacity>
       </View>
 
-      {/* 🌟 高级定制确认弹窗 */}
+      {/* 🌟 高级定制确认悬浮窗 */}
       <Modal visible={confirmModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
@@ -145,7 +181,6 @@ export default function CreateBuyOrderScreen() {
   );
 }
 
-// 样式（同 exchange 的高阶样式，完美适配）
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F6F8' },
   container: { flex: 1, backgroundColor: '#F5F6F8' },
@@ -153,23 +188,29 @@ const styles = StyleSheet.create({
   navBtn: { width: 40, justifyContent: 'center' },
   iconText: { fontSize: 20, color: '#111' },
   navTitle: { fontSize: 17, fontWeight: '900', color: '#111' },
+  
   toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
   toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  
   targetHeader: { flexDirection: 'row', backgroundColor: '#FFF', padding: 16, borderRadius: 16, marginBottom: 20 },
   targetImg: { width: 70, height: 70, borderRadius: 8, backgroundColor: '#EEE', marginRight: 12 },
   targetInfo: { flex: 1, justifyContent: 'center' },
   targetName: { fontSize: 16, fontWeight: '900', color: '#111', marginBottom: 6 },
   targetSubHighlight: { fontSize: 11, color: '#FF3B30', fontWeight: '700' },
+  
   inputGroup: { backgroundColor: '#FFF', borderRadius: 16, paddingHorizontal: 16, marginBottom: 20 },
   inputRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderColor: '#F0F0F0' },
   inputLabel: { fontSize: 15, fontWeight: '700', color: '#333' },
   inputField: { flex: 1, fontSize: 16, color: '#FF3B30', fontWeight: '900' },
+  
   stepper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 8 },
   stepperBtn: { paddingHorizontal: 12, paddingVertical: 6, fontSize: 18, color: '#333' },
   stepperInput: { width: 40, fontSize: 15, fontWeight: '900', color: '#111' },
+  
   ruleBox: { backgroundColor: '#F0F6FF', padding: 16, borderRadius: 12 },
   ruleTitle: { fontSize: 14, fontWeight: '900', color: '#0047AB', marginBottom: 10 },
   ruleText: { fontSize: 12, color: '#4169E1', lineHeight: 20, marginBottom: 6 },
+  
   bottomBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 30, borderTopWidth: 1, borderColor: '#F0F0F0' },
   payInfo: { flex: 1 },
   payBtn: { backgroundColor: '#FF5722', paddingHorizontal: 30, paddingVertical: 14, borderRadius: 24 },
