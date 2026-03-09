@@ -13,7 +13,7 @@ const MENU_GRID = [
   { name: '求购', icon: '🛒', route: '/create-buy-order' }, // 这里的路由可以后续优化为求购列表
   { name: '钱包', icon: '👛', route: '/wallet' },
   { name: '合成', icon: '🧬', route: '/synthesis-list' },
-  { name: '权益', icon: '💎', route: '' },
+  { name: '权益', icon: '💎', route: '/vip-privilege' },
   { name: '转赠', icon: '🎁', route: '' },
   { name: '设置', icon: '⚙️', route: '/change-avatar' },
 ];

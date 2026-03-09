@@ -9,7 +9,7 @@ const { width } = Dimensions.get('window');
 // 🌟 一岛化：重构高频金刚区 (替换掉元宇宙等无用功能)
 const MENU_ITEMS = [
   { name: '基因合成', icon: '🧬', route: '/synthesis-list', bgColor: '#F0F6FF' }, 
-  { name: '领主权益', icon: '👑', route: '/(tabs)/profile', bgColor: '#FFF5E6' },
+  { name: '领主权益', icon: '👑', route: '/vip-privilege', bgColor: '#FFF5E6' },
   { name: '每日朝圣', icon: '📅', route: '', bgColor: '#F5F0FF' }, // 预留签到
   { name: '命运抽签', icon: '🎰', route: '', bgColor: '#FFF0F5' }, // 预留盲盒抽签
   { name: '创世发新', icon: '🚀', route: '/(tabs)/market', bgColor: '#E6FAFF' },
