@@ -1,8 +1,10 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
+
+const { width } = Dimensions.get('window');
 
 export default function WalletScreen() {
   const router = useRouter();
@@ -10,89 +12,117 @@ export default function WalletScreen() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useFocusEffect(useCallback(() => { fetchWallet(); }, []));
+  useFocusEffect(useCallback(() => {
+    fetchWalletData();
+  }, []));
 
-  const fetchWallet = async () => {
+  const fetchWalletData = async () => {
     try {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // 1. 获取最新余额
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
       if (profile) setBalance(profile.potato_coin_balance.toFixed(2));
 
-      // 抓取资金流水 (买卖记录)
+      // 2. 智能聚合资金流水 (把买入算作支出 -, 卖出算作收入 +)
       const { data: transferData } = await supabase.from('transfer_logs')
         .select('*, collections(name)')
         .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`)
-        .order('transfer_time', { ascending: false })
-        .limit(20);
-      
-      setLogs(transferData || []);
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+        .order('transfer_time', { ascending: false });
+
+      if (transferData) {
+        const formattedLogs = transferData.map(log => {
+           const isIncome = log.seller_id === user.id;
+           return {
+              id: log.id,
+              title: isIncome ? `出售藏品收益 (${log.collections?.name || '未知'})` : `购买藏品支出 (${log.collections?.name || '未知'})`,
+              amount: isIncome ? `+ ¥${log.price}` : `- ¥${log.price}`,
+              isIncome: isIncome,
+              time: new Date(log.transfer_time).toLocaleString(),
+              type: log.transfer_type
+           };
+        });
+        setLogs(formattedLogs);
+      }
+    } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
-  const renderLog = ({ item }: { item: any }) => {
-    const isBuyer = item.buyer_id === item.seller_id ? false : true; // 简化判断，实际需对比 user.id
-    const amountStr = isBuyer ? `- ¥${item.price}` : `+ ¥${item.price}`;
-    const amountColor = isBuyer ? '#FF3B30' : '#4CD964';
-    const typeStr = item.transfer_type || (isBuyer ? '购买藏品' : '寄售收入');
-
-    return (
-      <View style={styles.logCard}>
-        <View style={styles.logLeft}>
-          <Text style={styles.logTitle}>{typeStr} - {item.collections?.name || '神秘物资'}</Text>
-          <Text style={styles.logTime}>{new Date(item.transfer_time).toLocaleString()}</Text>
-        </View>
-        <Text style={[styles.logAmount, { color: amountColor }]}>{amountStr}</Text>
-      </View>
-    );
-  };
+  const renderLogItem = ({ item }: { item: any }) => (
+    <View style={styles.logRow}>
+       <View style={styles.logLeft}>
+          <Text style={styles.logTitle}>{item.title}</Text>
+          <Text style={styles.logTime}>{item.time} | {item.type}</Text>
+       </View>
+       <Text style={[styles.logAmount, item.isIncome ? {color: '#4CD964'} : {color: '#111'}]}>
+          {item.amount}
+       </Text>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.navBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}><Text style={styles.iconText}>〈 返回</Text></TouchableOpacity>
-        <Text style={styles.navTitle}>皇家账本</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}><Text style={styles.iconText}>〈 </Text></TouchableOpacity>
+        <Text style={styles.navTitle}>我的钱包</Text>
         <View style={styles.navBtn} />
       </View>
 
-      <View style={styles.balanceCard}>
-        <Text style={styles.balanceLabel}>当前土豆币余额 (¥)</Text>
-        <Text style={styles.balanceValue}>{balance}</Text>
-        <TouchableOpacity style={styles.rechargeBtn} onPress={() => alert('请联系岛主进行神之恩赐充值')}>
-           <Text style={styles.rechargeText}>获取土豆币</Text>
-        </TouchableOpacity>
+      <View style={styles.walletCard}>
+         <Text style={styles.cardLabel}>土豆币可用余额 (¥)</Text>
+         <Text style={styles.cardBalance}>{balance}</Text>
+         <View style={styles.actionRow}>
+            <TouchableOpacity style={styles.actionBtn} onPress={() => alert('充值通道暂未开放')}>
+               <Text style={styles.actionBtnText}>充值</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, styles.actionBtnOutline]} onPress={() => alert('提现通道暂未开放')}>
+               <Text style={styles.actionBtnOutlineText}>提现</Text>
+            </TouchableOpacity>
+         </View>
       </View>
 
-      <View style={styles.listContainer}>
-        <Text style={styles.sectionTitle}>近期流水明细</Text>
-        {loading ? <ActivityIndicator color="#D49A36" /> : (
-          <FlatList data={logs} renderItem={renderLog} keyExtractor={item => item.id} showsVerticalScrollIndicator={false}
-            ListEmptyComponent={<Text style={{textAlign: 'center', color: '#999', marginTop: 20}}>暂无资金流水记录</Text>}
-          />
-        )}
+      <View style={styles.logSection}>
+         <Text style={styles.sectionTitle}>近期账单明细</Text>
+         {loading ? (
+            <ActivityIndicator color="#0066FF" style={{marginTop: 50}} />
+         ) : (
+            <FlatList
+              data={logs}
+              renderItem={renderLogItem}
+              keyExtractor={item => item.id}
+              contentContainerStyle={{paddingBottom: 50}}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={<Text style={{textAlign: 'center', color: '#999', marginTop: 30}}>暂无资金流水记录</Text>}
+            />
+         )}
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9F6F0' },
+  container: { flex: 1, backgroundColor: '#F9F9F9' },
   navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FFF' },
-  navBtn: { width: 60, justifyContent: 'center' },
-  iconText: { fontSize: 16, color: '#4A2E1B', fontWeight: '700' },
-  navTitle: { fontSize: 18, fontWeight: '900', color: '#4A2E1B' },
-  balanceCard: { margin: 16, padding: 24, backgroundColor: '#4A2E1B', borderRadius: 16, alignItems: 'center', shadowColor: '#D49A36', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: {width:0,height:4} },
-  balanceLabel: { color: '#E5C07B', fontSize: 14, marginBottom: 8 },
-  balanceValue: { color: '#FFF', fontSize: 40, fontWeight: '900', marginBottom: 20 },
-  rechargeBtn: { backgroundColor: '#D49A36', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 },
-  rechargeText: { color: '#FFF', fontWeight: '800' },
-  listContainer: { flex: 1, backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: '900', color: '#4A2E1B', marginBottom: 16 },
-  logCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderColor: '#F0F0F0' },
-  logLeft: { flex: 1 },
-  logTitle: { fontSize: 14, fontWeight: '700', color: '#333', marginBottom: 4 },
-  logTime: { fontSize: 12, color: '#999' },
-  logAmount: { fontSize: 16, fontWeight: '900' }
+  navBtn: { width: 40, justifyContent: 'center' },
+  iconText: { fontSize: 20, color: '#111' },
+  navTitle: { fontSize: 17, fontWeight: '900', color: '#111' },
+
+  walletCard: { backgroundColor: '#111', margin: 16, borderRadius: 20, padding: 24, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: {width: 0, height: 5}, elevation: 5 },
+  cardLabel: { color: '#CCC', fontSize: 13, marginBottom: 8 },
+  cardBalance: { color: '#FFD700', fontSize: 40, fontWeight: '900', marginBottom: 24, fontFamily: 'monospace' },
+  actionRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  actionBtn: { flex: 0.48, backgroundColor: '#FFD700', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  actionBtnText: { color: '#111', fontSize: 16, fontWeight: '900' },
+  actionBtnOutline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#555' },
+  actionBtnOutlineText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
+
+  logSection: { flex: 1, backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
+  sectionTitle: { fontSize: 16, fontWeight: '900', color: '#111', marginBottom: 16 },
+  
+  logRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderColor: '#F0F0F0' },
+  logLeft: { flex: 1, marginRight: 16 },
+  logTitle: { fontSize: 14, fontWeight: '800', color: '#333', marginBottom: 6 },
+  logTime: { fontSize: 11, color: '#999' },
+  logAmount: { fontSize: 18, fontWeight: '900', fontFamily: 'monospace' }
 });

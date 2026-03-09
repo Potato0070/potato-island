@@ -1,95 +1,120 @@
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../supabase';
 
 export default function CommunityScreen() {
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [likingId, setLikingId] = useState<string | null>(null);
 
-  useFocusEffect(
-    useCallback(() => { fetchAnnouncements(); }, [])
-  );
+  useFocusEffect(useCallback(() => {
+    fetchAnnouncements();
+  }, []));
 
   const fetchAnnouncements = async () => {
     try {
       setLoading(true);
+      // 拉取系统公告，按置顶和时间排序
       const { data, error } = await supabase
         .from('announcements')
         .select('*')
-        .order('is_featured', { ascending: false }) // 精华置顶
+        .order('is_featured', { ascending: false })
         .order('created_at', { ascending: false });
+        
       if (error) throw error;
       setAnnouncements(data || []);
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
-  const handleLike = async (id: string) => {
-    setLikingId(id);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('请先登录');
-      
-      // 🚀 触发原子级点赞燃烧合约
-      const { error } = await supabase.rpc('like_announcement_and_burn', { p_user_id: user.id, p_announcement_id: id });
-      if (error) {
-        if (error.message.includes('已点赞')) Alert.alert('提示', '您已为该旨意贡献过信仰，不可重复点赞！');
-        else throw error;
-      } else {
-        Alert.alert('信仰传达', '点赞成功！全网流通 Potato 卡 -1 🔥');
-        fetchAnnouncements(); // 刷新点赞数
-      }
-    } catch (err: any) { Alert.alert('错误', err.message); } finally { setLikingId(null); }
-  };
+  const renderPost = ({ item }: { item: any }) => {
+    const isCleaner = item.author_name === '土豆清道夫'; // 识别自动销毁播报
 
-  const renderItem = ({ item }: { item: any }) => (
-    <View style={styles.card}>
-      {item.is_featured && <View style={styles.featuredBadge}><Text style={styles.featuredText}>🔥 超级精华</Text></View>}
-      
-      <View style={styles.cardHeader}>
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.date}>{new Date(item.created_at).toLocaleDateString()}</Text>
+    return (
+      <View style={[styles.card, isCleaner && styles.cardCleaner]}>
+        <View style={styles.cardHeader}>
+           <View style={{flexDirection: 'row', alignItems: 'center'}}>
+              <View style={[styles.avatarBox, isCleaner ? {backgroundColor: '#FF3B30'} : {backgroundColor: '#111'}]}>
+                 <Text style={{fontSize: 16}}>{isCleaner ? '🚨' : '👑'}</Text>
+              </View>
+              <View>
+                 <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                    <Text style={[styles.authorName, isCleaner && {color: '#FF3B30'}]}>{item.author_name || '王国大喇叭'}</Text>
+                    {item.is_featured && <View style={styles.featuredTag}><Text style={styles.featuredTagText}>置顶</Text></View>}
+                 </View>
+                 <Text style={styles.timeText}>{new Date(item.created_at).toLocaleString()}</Text>
+              </View>
+           </View>
+        </View>
+
+        <Text style={styles.postTitle}>{item.title}</Text>
+        <Text style={styles.postContent}>{item.content}</Text>
+        
+        {item.image_url && (
+           <Image source={{ uri: item.image_url }} style={styles.postImg} />
+        )}
+
+        <View style={styles.cardFooter}>
+           <TouchableOpacity style={styles.actionBtn}>
+              <Text style={styles.actionIcon}>👍</Text>
+              <Text style={styles.actionText}>{item.likes_count || 0}</Text>
+           </TouchableOpacity>
+           <TouchableOpacity style={styles.actionBtn}>
+              <Text style={styles.actionIcon}>💬</Text>
+              <Text style={styles.actionText}>评论</Text>
+           </TouchableOpacity>
+           <TouchableOpacity style={styles.actionBtn}>
+              <Text style={styles.actionIcon}>↗️</Text>
+              <Text style={styles.actionText}>分享</Text>
+           </TouchableOpacity>
+        </View>
       </View>
-      
-      {item.image_url && <Image source={{ uri: item.image_url }} style={styles.cardImage} />}
-      
-      <Text style={styles.content}>{item.content}</Text>
-      
-      <View style={styles.cardFooter}>
-         <TouchableOpacity style={styles.likeBtn} onPress={() => handleLike(item.id)} disabled={likingId === item.id}>
-            {likingId === item.id ? <ActivityIndicator size="small" color="#FF3B30" /> : <Text style={styles.likeIcon}>🤍</Text>}
-            <Text style={styles.likeCount}>燃烧点赞 ({item.likes_count || 0})</Text>
-         </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}><Text style={styles.headerTitle}>王国旨意</Text></View>
-      {loading ? <ActivityIndicator size="large" color="#D49A36" style={{marginTop: 50}} /> : (
-        <FlatList data={announcements} renderItem={renderItem} keyExtractor={item => item.id} contentContainerStyle={{ padding: 16, paddingBottom: 100 }} />
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>王国旨意</Text>
+      </View>
+
+      {loading ? (
+        <ActivityIndicator size="large" color="#0066FF" style={{marginTop: 50}} />
+      ) : (
+        <FlatList
+          data={announcements}
+          renderItem={renderPost}
+          keyExtractor={item => item.id}
+          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={<Text style={{textAlign: 'center', color: '#999', marginTop: 40}}>暂无任何王国旨意发布</Text>}
+        />
       )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9F6F0' },
+  container: { flex: 1, backgroundColor: '#F5F6F8' },
   header: { padding: 16, backgroundColor: '#FFF', alignItems: 'center', borderBottomWidth: 1, borderColor: '#F0F0F0' },
-  headerTitle: { fontSize: 18, fontWeight: '900', color: '#4A2E1B' },
-  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOffset: {width:0, height:4}, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3, overflow: 'hidden' },
-  featuredBadge: { position: 'absolute', top: 0, right: 0, backgroundColor: '#FF3B30', paddingHorizontal: 12, paddingVertical: 4, borderBottomLeftRadius: 12 },
-  featuredText: { color: '#FFF', fontSize: 12, fontWeight: '900' },
-  cardHeader: { marginBottom: 12, marginTop: 8 },
-  title: { fontSize: 18, fontWeight: '900', color: '#4A2E1B', marginBottom: 6 },
-  date: { fontSize: 12, color: '#999' },
-  cardImage: { width: '100%', height: 160, borderRadius: 12, marginBottom: 16, resizeMode: 'cover' },
-  content: { fontSize: 14, color: '#666', lineHeight: 22, marginBottom: 16 },
-  cardFooter: { borderTopWidth: 1, borderColor: '#F0F0F0', paddingTop: 16, flexDirection: 'row', justifyContent: 'flex-end' },
-  likeBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF5F5', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
-  likeIcon: { fontSize: 16, marginRight: 6 },
-  likeCount: { fontSize: 13, color: '#FF3B30', fontWeight: '800' }
+  headerTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
+
+  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
+  cardCleaner: { borderWidth: 1, borderColor: '#FFB3B0', backgroundColor: '#FFF5F5' },
+  
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  avatarBox: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  authorName: { fontSize: 15, fontWeight: '900', color: '#111', marginRight: 8 },
+  featuredTag: { backgroundColor: '#FFD700', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  featuredTagText: { fontSize: 10, fontWeight: '900', color: '#111' },
+  timeText: { fontSize: 11, color: '#999', marginTop: 2 },
+
+  postTitle: { fontSize: 16, fontWeight: '900', color: '#111', marginBottom: 8 },
+  postContent: { fontSize: 14, color: '#444', lineHeight: 22, marginBottom: 12 },
+  postImg: { width: '100%', height: 180, borderRadius: 12, marginBottom: 16, backgroundColor: '#F0F0F0' },
+
+  cardFooter: { flexDirection: 'row', borderTopWidth: 1, borderColor: '#F5F5F5', paddingTop: 12 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', marginRight: 24 },
+  actionIcon: { fontSize: 16, marginRight: 6 },
+  actionText: { fontSize: 13, color: '#666', fontWeight: '600' }
 });
