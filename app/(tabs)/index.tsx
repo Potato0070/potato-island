@@ -10,11 +10,11 @@ const { width } = Dimensions.get('window');
 const MENU_ITEMS = [
   { name: '基因合成', icon: '🧬', route: '/synthesis-list', bgColor: '#F0F6FF' }, 
   { name: '领主权益', icon: '👑', route: '/vip-privilege', bgColor: '#FFF5E6' },
-  { name: '每日朝圣', icon: '📅', route: '', bgColor: '#F5F0FF' }, // 预留签到
+  { name: '每日朝圣', icon: '📅', route: '/daily-sign', bgColor: '#F5F0FF' }, // 预留签到
   { name: '命运抽签', icon: '🎰', route: '', bgColor: '#FFF0F5' }, // 预留盲盒抽签
   { name: '创世发新', icon: '🚀', route: '/(tabs)/market', bgColor: '#E6FAFF' },
   { name: '黑洞废墟', icon: '🕳️', route: '', bgColor: '#F0F0F0' }, // 替代元宇宙：查看全网销毁量
-  { name: '特权兑换', icon: '💳', route: '', bgColor: '#E6FFE6' }, // 替代酒世界：用基础卡兑换转赠卡/批量卡
+  { name: '特权兑换', icon: '💳', route: '/exchange', bgColor: '#E6FFE6' }, // 替代酒世界：用基础卡兑换转赠卡/批量卡
   { name: '资产转赠', icon: '🎁', route: '/transfer', bgColor: '#FFE6E6' }, 
 ];
 
