@@ -56,7 +56,7 @@ export default function MarketScreen() {
     const isDelisted = item.on_sale_count === 0 || item.on_sale_count == null;
 
     return (
-      <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => router.push({ pathname: '/detail', params: { id: item.id } })}>
+      <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => router.push({ pathname: '/collection', params: { id: item.id } })}>
         <View style={styles.imageContainer}>
           <Image source={{ uri: item.image_url || 'https://via.placeholder.com/150' }} style={styles.image} />
           {isDelisted && (

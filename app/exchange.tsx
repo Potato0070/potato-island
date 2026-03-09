@@ -19,9 +19,24 @@ export default function ExchangeScreen() {
     }
   };
 
+  // 🌟 核心修复：绝对安全的余额校验与二次确认拦截
   const handleExchange = (type: 'transfer' | 'batch', cost: number) => {
-    if (profile?.potato_cards < cost) return Alert.alert('余额不足', `您需要 ${cost} 张 Potato卡 才能兑换该特权！`);
+    // 1. 防御性拦截：确保数据加载完成
+    if (!profile) {
+       Alert.alert('提示', '数据加载中，请稍后再试');
+       return; 
+    }
     
+    // 2. 强转为数字，如果没有数据则默认为 0，彻底封死 undefined 漏洞
+    const currentCards = Number(profile.potato_cards) || 0;
+    
+    // 3. 拦截余额不足，并在执行后立刻 return 阻断后续代码
+    if (currentCards < cost) {
+       Alert.alert('余额不足', `您需要 ${cost} 张 Potato卡 才能兑换该特权！(当前仅持有 ${currentCards} 张)`);
+       return;
+    }
+    
+    // 4. 严苛的二次确认弹窗
     Alert.alert(
        '🔥 确认献祭', 
        `将永久燃烧 ${cost} 张 Potato卡 兑换此特权，是否继续？`,
@@ -36,16 +51,26 @@ export default function ExchangeScreen() {
     setProcessing(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      
+      // 组装要更新的数据字典
       const updates: any = { potato_cards: profile.potato_cards - cost };
       if (type === 'transfer') updates.transfer_cards = profile.transfer_cards + 1;
       if (type === 'batch') updates.batch_cards = profile.batch_cards + 1;
 
+      // 执行数据库更新
       const { error } = await supabase.from('profiles').update(updates).eq('id', user?.id);
       if (error) throw error;
 
+      // 🌟 成功后弹窗提示
       Alert.alert('✅ 兑换成功', '特权卡已发放至您的账户！');
+      
+      // 刷新本地余额数据，UI会自动更新
       fetchProfile();
-    } catch (err: any) { Alert.alert('失败', err.message); } finally { setProcessing(false); }
+    } catch (err: any) { 
+      Alert.alert('失败', err.message); 
+    } finally { 
+      setProcessing(false); 
+    }
   };
 
   return (
@@ -62,7 +87,7 @@ export default function ExchangeScreen() {
             <Text style={styles.headerSub}>当前持有 Potato卡: <Text style={{color:'#FF3B30', fontWeight:'900', fontSize: 16}}>{profile?.potato_cards || 0}</Text> 张</Text>
          </View>
 
-         {/* 转赠卡 */}
+         {/* 🎁 资产转赠卡兑换模块 */}
          <View style={styles.cardBox}>
             <View style={styles.cardHeader}>
                <View style={styles.cardIcon}><Text style={{fontSize: 24}}>🎁</Text></View>
@@ -79,7 +104,7 @@ export default function ExchangeScreen() {
             </View>
          </View>
 
-         {/* 批量卡 */}
+         {/* 📦 批量寄售权益卡兑换模块 */}
          <View style={styles.cardBox}>
             <View style={styles.cardHeader}>
                <View style={styles.cardIcon}><Text style={{fontSize: 24}}>📦</Text></View>
@@ -106,16 +131,20 @@ const styles = StyleSheet.create({
   navBtn: { width: 40, justifyContent: 'center' },
   iconText: { fontSize: 20, color: '#111' },
   navTitle: { fontSize: 17, fontWeight: '900', color: '#111' },
+  
   headerBox: { marginBottom: 24 },
   headerTitle: { fontSize: 22, fontWeight: '900', color: '#111', marginBottom: 8 },
   headerSub: { fontSize: 13, color: '#666' },
+  
   cardBox: { backgroundColor: '#FFF', borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 10, elevation: 2 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   cardIcon: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#F9F9F9', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   cardName: { fontSize: 16, fontWeight: '900', color: '#111', marginBottom: 4 },
   cardDesc: { fontSize: 12, color: '#888', lineHeight: 18 },
+  
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderColor: '#F0F0F0', paddingTop: 16 },
   holdText: { fontSize: 12, color: '#666' },
+  
   exchangeBtn: { backgroundColor: '#FF3B30', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20 },
   exchangeBtnText: { color: '#FFF', fontSize: 13, fontWeight: '900' },
 });

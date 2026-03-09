@@ -27,7 +27,7 @@ export default function CollectionScreen() {
         .select('*, profiles(nickname)')
         .eq('collection_id', id)
         .neq('status', 'burned')
-        .order('consign_price', { ascending: true, nullsFirst: false }); // 价格从低到高排列
+        .order('consign_price', { ascending: true, nullsFirst: false });
       
       setNfts(nftData || []);
     } catch (err) { console.error(err); } finally { setLoading(false); }
@@ -103,7 +103,6 @@ export default function CollectionScreen() {
       </ImageBackground>
 
       <View style={styles.listSection}>
-         {/* 双击切换 Tabs */}
          <View style={styles.tabsRow}>
             <TouchableOpacity style={[styles.tabBtn, activeTab === 'listed' && styles.tabBtnActive]} onPress={() => setActiveTab('listed')}>
                <Text style={[styles.tabText, activeTab === 'listed' && styles.tabTextActive]}>在售现货 ({collection?.on_sale_count || 0})</Text>
@@ -113,12 +112,8 @@ export default function CollectionScreen() {
             </TouchableOpacity>
          </View>
 
-         {/* 🌟 核心优化：一岛同款的“煽动性求购横幅” */}
-         <TouchableOpacity 
-            style={styles.fomoBanner} 
-            activeOpacity={0.8}
-            onPress={() => router.push({pathname: '/create-buy-order', params: {colId: collection?.id}})}
-         >
+         {/* FOMO 求购横幅 */}
+         <TouchableOpacity style={styles.fomoBanner} activeOpacity={0.8} onPress={() => router.push({pathname: '/create-buy-order', params: {colId: collection?.id}})}>
             <Text style={styles.fomoText}>寄售价不够合适？点此去发布求购单，抢先拿下心仪藏品 〉</Text>
          </TouchableOpacity>
 
@@ -146,7 +141,6 @@ const styles = StyleSheet.create({
   navBtn: { width: 40, justifyContent: 'center' },
   iconText: { fontSize: 20 },
   navTitle: { fontSize: 17, fontWeight: '900', color: '#FFF' },
-
   heroContent: { alignItems: 'center', paddingVertical: 20 },
   heroImg: { width: 100, height: 100, borderRadius: 16, borderWidth: 2, borderColor: '#FFF', marginBottom: 12 },
   heroTitle: { fontSize: 22, fontWeight: '900', color: '#FFF', marginBottom: 20 },
@@ -155,17 +149,14 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 18, fontWeight: '900', color: '#FFD700', marginBottom: 4 },
   statLabel: { fontSize: 11, color: '#CCC' },
   statDivider: { width: 1, height: 20, backgroundColor: 'rgba(255,255,255,0.2)' },
-
   listSection: { flex: 1, backgroundColor: '#F5F6F8', borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -20, overflow: 'hidden' },
   tabsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 20, paddingBottom: 10, backgroundColor: '#FFF' },
   tabBtn: { paddingBottom: 8, marginRight: 24, borderBottomWidth: 2, borderColor: 'transparent' },
   tabBtnActive: { borderColor: '#111' },
   tabText: { fontSize: 15, color: '#888', fontWeight: '600' },
   tabTextActive: { color: '#111', fontWeight: '900' },
-
   fomoBanner: { backgroundColor: '#FFF5E6', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: '#FFE4B5' },
   fomoText: { color: '#D49A36', fontSize: 12, fontWeight: '700', textAlign: 'center' },
-
   nftCard: { width: CARD_WIDTH, backgroundColor: '#FFF', borderRadius: 12, marginBottom: 16, padding: 8, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 1 },
   imgBox: { width: '100%', aspectRatio: 1, backgroundColor: '#F5F5F5', borderRadius: 8, overflow: 'hidden', marginBottom: 8 },
   nftImg: { width: '100%', height: '100%', resizeMode: 'cover' },
