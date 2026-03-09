@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -12,11 +12,22 @@ export default function MyOrdersScreen() {
   const [listData, setListData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 定制撤单弹窗
+  // 🌟 定制高级弹窗状态
   const [cancelModal, setCancelModal] = useState<{visible: boolean, orderId: string, amount: number} | null>(null);
+  
+  // 🌟 新增：加价竞拍弹窗状态
+  const [addPriceModal, setAddPriceModal] = useState<{visible: boolean, order: any} | null>(null);
+  const [newPrice, setNewPrice] = useState('');
+  
   const [processing, setProcessing] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
 
   useFocusEffect(useCallback(() => { fetchDataByTab(activeTab); }, [activeTab]));
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 2500);
+  };
 
   const fetchDataByTab = async (tab: string) => {
     try {
@@ -29,7 +40,6 @@ export default function MyOrdersScreen() {
         setListData(data || []);
       } 
       else if (tab === '求购中') {
-        // 🌟 新增：拉取求购大厅的数据
         const { data } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').order('created_at', { ascending: false });
         setListData(data || []);
       }
@@ -49,24 +59,48 @@ export default function MyOrdersScreen() {
     setProcessing(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
-      // 1. 废弃订单
       await supabase.from('buy_orders').update({ status: 'cancelled' }).eq('id', cancelModal.orderId);
       
-      // 2. 解冻资金 (退回土豆币，材料卡不退)
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user?.id).single();
-      await supabase.from('profiles').update({ potato_coin_balance: profile.potato_coin_balance + cancelModal.amount }).eq('id', user?.id);
+      await supabase.from('profiles').update({ potato_coin_balance: (profile?.potato_coin_balance || 0) + cancelModal.amount }).eq('id', user?.id);
 
       setCancelModal(null);
-      fetchDataByTab('求购中'); // 刷新列表
-    } catch (err) { console.error(err); } finally { setProcessing(false); }
+      showToast('✅ 撤销成功，资金已退回钱包');
+      fetchDataByTab('求购中');
+    } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setProcessing(false); }
+  };
+
+  // 🌟 核心逻辑：加价竞拍，补缴差价
+  const handleIncreasePrice = async () => {
+    if (!addPriceModal) return;
+    const order = addPriceModal.order;
+    const p = parseFloat(newPrice);
+    
+    if (isNaN(p) || p <= order.price) return showToast(`加价必须高于当前出价 ¥${order.price}`);
+    
+    setProcessing(true);
+    try {
+      const diffAmount = (p - order.price) * order.quantity; // 需要补缴的总差价
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user?.id).single();
+      
+      if ((profile?.potato_coin_balance || 0) < diffAmount) throw new Error('钱包余额不足以支付加价差额！');
+
+      // 1. 扣除差价
+      await supabase.from('profiles').update({ potato_coin_balance: (profile?.potato_coin_balance || 0) - diffAmount }).eq('id', user?.id);
+      // 2. 更新订单价格 (并刷新 created_at 以便在同价位中排在前面，如果你有按照时间排序的逻辑的话)
+      await supabase.from('buy_orders').update({ price: p, created_at: new Date().toISOString() }).eq('id', order.id);
+
+      setAddPriceModal(null);
+      setNewPrice('');
+      showToast(`✅ 加价成功！成功抢占高位`);
+      fetchDataByTab('求购中');
+    } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setProcessing(false); }
   };
 
   const renderItem = ({ item }: { item: any }) => {
     const isSelling = activeTab === '寄售中';
     const isBuying = activeTab === '求购中';
-    const isBought = activeTab === '已买入';
-    
     const imgUrl = item.collections?.image_url || 'https://via.placeholder.com/150';
     const name = item.collections?.name || '未知藏品';
     const serial = (isSelling || isBuying) ? (item.serial_number || '排队中') : item.nft_id?.substring(0,6);
@@ -77,9 +111,7 @@ export default function MyOrdersScreen() {
       <View style={styles.card}>
         <View style={styles.cardHeader}>
            <Text style={styles.timeText}>{timeStr}</Text>
-           <Text style={[styles.statusText, isSelling || isBuying ? {color: '#FF3B30'} : {color: '#4CD964'}]}>
-              {activeTab}
-           </Text>
+           <Text style={[styles.statusText, isSelling || isBuying ? {color: '#FF3B30'} : {color: '#4CD964'}]}>{activeTab}</Text>
         </View>
 
         <View style={styles.cardBody}>
@@ -89,15 +121,14 @@ export default function MyOrdersScreen() {
               <Text style={styles.serial}>{isBuying ? `求购数量: ${item.quantity}` : `#${serial}`}</Text>
            </View>
            <View style={styles.priceBox}>
-              <Text style={styles.priceLabel}>{isSelling || isBuying ? '挂单价' : '成交价'}</Text>
+              <Text style={styles.priceLabel}>{isSelling || isBuying ? '当前出价' : '成交价'}</Text>
               <Text style={styles.price}>¥ {price}</Text>
            </View>
         </View>
 
-        {/* 🌟 求购专属操作栏 */}
         {isBuying && (
            <View style={styles.cardFooter}>
-              <TouchableOpacity style={styles.actionBtnOutline} onPress={() => alert('请直接撤单并重新发布以实现加价竞拍')}>
+              <TouchableOpacity style={styles.actionBtnOutline} onPress={() => setAddPriceModal({visible: true, order: item})}>
                  <Text style={styles.actionBtnOutlineText}>加价竞拍</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionBtn} onPress={() => setCancelModal({visible: true, orderId: item.id, amount: item.price * item.quantity})}>
@@ -116,6 +147,8 @@ export default function MyOrdersScreen() {
         <Text style={styles.navTitle}>订单管理</Text>
         <View style={styles.navBtn} />
       </View>
+
+      {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
       <View style={styles.tabsContainer}>
         {TABS.map(tab => (
@@ -137,16 +170,39 @@ export default function MyOrdersScreen() {
         />
       )}
 
-      {/* 🌟 撤销求购确认弹窗 */}
+      {/* 🌟 加价竞拍悬浮窗 */}
+      <Modal visible={!!addPriceModal} transparent animationType="fade">
+         <View style={styles.modalOverlay}>
+            <View style={styles.confirmBox}>
+               <Text style={styles.confirmTitle}>📈 加价竞拍</Text>
+               <Text style={styles.confirmDesc}>当前出价: <Text style={{fontWeight:'900'}}>¥{addPriceModal?.order?.price}</Text> (需求 {addPriceModal?.order?.quantity} 件)</Text>
+               <TextInput 
+                  style={styles.inputField} 
+                  placeholder="请输入新的单件出价" 
+                  keyboardType="decimal-pad" 
+                  value={newPrice} 
+                  onChangeText={setNewPrice} 
+                  textAlign="center"
+               />
+               <Text style={{fontSize: 12, color: '#FF3B30', marginBottom: 20}}>* 加价将从钱包中实时冻结扣除差额资金</Text>
+               <View style={styles.confirmBtnRow}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => {setAddPriceModal(null); setNewPrice('');}}><Text style={styles.cancelBtnText}>取消</Text></TouchableOpacity>
+                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#0066FF'}]} onPress={handleIncreasePrice} disabled={processing}>
+                     {processing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认加价</Text>}
+                  </TouchableOpacity>
+               </View>
+            </View>
+         </View>
+      </Modal>
+
+      {/* 🌟 撤销求购悬浮窗 */}
       <Modal visible={!!cancelModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
                <Text style={styles.confirmTitle}>⚠️ 确认撤回求购</Text>
-               <Text style={styles.confirmDesc}>撤单后，冻结的 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{cancelModal?.amount}</Text> 将立即退回您的钱包。注意：发布求购时消耗的 Potato卡 <Text style={{fontWeight:'900'}}>不会退还</Text>！</Text>
+               <Text style={styles.confirmDesc}>撤单后，冻结的 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{cancelModal?.amount}</Text> 将立即退回钱包。消耗的 Potato卡 <Text style={{fontWeight:'900'}}>不会退还</Text>！</Text>
                <View style={styles.confirmBtnRow}>
-                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setCancelModal(null)}>
-                     <Text style={styles.cancelBtnText}>保持排队</Text>
-                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setCancelModal(null)}><Text style={styles.cancelBtnText}>保持排队</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.confirmBtn} onPress={handleCancelBuyOrder} disabled={processing}>
                      {processing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认撤销</Text>}
                   </TouchableOpacity>
@@ -158,13 +214,15 @@ export default function MyOrdersScreen() {
   );
 }
 
-// 样式（同上，省略多余部分）
+// 样式（保持咱们一贯的高级视觉）
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F6F8' },
   navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FFF' },
   navBtn: { width: 40, justifyContent: 'center' },
   iconText: { fontSize: 20, color: '#111' },
   navTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
+  toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
   tabsContainer: { flexDirection: 'row', backgroundColor: '#FFF', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderColor: '#F0F0F0' },
   tabBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, backgroundColor: '#F5F5F5', marginRight: 8 },
   tabBtnActive: { backgroundColor: '#E6F0FF' },
@@ -190,9 +248,10 @@ const styles = StyleSheet.create({
   emptyBox: { alignItems: 'center', marginTop: 100 },
   
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
+  confirmBox: { width: '85%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
   confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 16 },
-  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 16 },
+  inputField: { width: '100%', backgroundColor: '#F5F5F5', padding: 16, borderRadius: 12, fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 12 },
   confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#F5F5F5', alignItems: 'center' },
   cancelBtnText: { color: '#666', fontSize: 15, fontWeight: '800' },

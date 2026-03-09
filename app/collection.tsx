@@ -1,6 +1,6 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Dimensions, FlatList, Image, ImageBackground, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, FlatList, Image, ImageBackground, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -13,11 +13,23 @@ export default function CollectionScreen() {
   
   const [collection, setCollection] = useState<any>(null);
   const [nfts, setNfts] = useState<any[]>([]);
-  const [bids, setBids] = useState<any[]>([]); // 🌟 新增：竞价榜数据
+  const [bids, setBids] = useState<any[]>([]); 
+  const [myIdleNfts, setMyIdleNfts] = useState<any[]>([]); // 🌟 存储我的闲置现货
+  
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'listed' | 'all' | 'bids'>('listed'); // 🌟 支持三种 Tab
+  const [activeTab, setActiveTab] = useState<'listed' | 'all' | 'bids'>('listed'); 
+
+  // 🌟 高级弹窗与撮合状态
+  const [matchModal, setMatchModal] = useState<{visible: boolean, bid: any} | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
 
   useFocusEffect(useCallback(() => { fetchData(); }, [id]));
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 2500);
+  };
 
   const fetchData = async () => {
     try {
@@ -26,7 +38,7 @@ export default function CollectionScreen() {
       const { data: colData } = await supabase.from('collections').select('*').eq('id', id).single();
       setCollection(colData);
 
-      // 2. 获取该系列下的所有具体资产卡片 (排除已燃烧的)
+      // 2. 获取所有卡片 (现货/图鉴)
       const { data: nftData } = await supabase.from('nfts')
         .select('*, profiles(nickname)')
         .eq('collection_id', id)
@@ -34,7 +46,7 @@ export default function CollectionScreen() {
         .order('consign_price', { ascending: true, nullsFirst: false });
       setNfts(nftData || []);
 
-      // 3. 🌟 获取竞价求购榜数据 (买盘深度，按出价从高到低排列)
+      // 3. 获取竞价求购榜数据 (买盘深度，按出价从高到低)
       const { data: bidData } = await supabase.from('buy_orders')
         .select('*, profiles:buyer_id(nickname)')
         .eq('collection_id', id)
@@ -42,13 +54,60 @@ export default function CollectionScreen() {
         .order('price', { ascending: false });
       setBids(bidData || []);
 
+      // 4. 获取当前用户在该系列下的闲置现货 (用于"出给TA"判定)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+         const { data: myNftsData } = await supabase.from('nfts')
+           .select('*')
+           .eq('collection_id', id)
+           .eq('owner_id', user.id)
+           .eq('status', 'idle');
+         setMyIdleNfts(myNftsData || []);
+      }
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
-  // 现货列表数据过滤
+  // 🌟 核心杀招：执行大盘撮合 (卖给TA)
+  const executeMatchBid = async () => {
+    if (!matchModal || myIdleNfts.length === 0) return;
+    setProcessing(true);
+    const bid = matchModal.bid;
+    const nftToSell = myIdleNfts[0]; // 拿金库里的一张闲置现货砸给买家
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // 1. NFT 移交所有权给买家
+      await supabase.from('nfts').update({ owner_id: bid.buyer_id, status: 'idle' }).eq('id', nftToSell.id);
+
+      // 2. 卖家收到货款 (买家的钱之前发求购时已经冻结，所以这里直接给卖家钱包加钱即可)
+      const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user?.id).single();
+      await supabase.from('profiles').update({ potato_coin_balance: (profile?.potato_coin_balance || 0) + bid.price }).eq('id', user?.id);
+
+      // 3. 扣减买家的求购单需求量
+      const newQuantity = bid.quantity - 1;
+      if (newQuantity <= 0) {
+         await supabase.from('buy_orders').update({ status: 'won', quantity: 0 }).eq('id', bid.id);
+      } else {
+         await supabase.from('buy_orders').update({ quantity: newQuantity }).eq('id', bid.id);
+      }
+
+      // 4. 记录流转账本
+      await supabase.from('transfer_logs').insert([{
+         nft_id: nftToSell.id, collection_id: bid.collection_id, seller_id: user?.id, buyer_id: bid.buyer_id, price: bid.price, transfer_type: 'bid_match'
+      }]);
+
+      setMatchModal(null);
+      showToast('✅ 撮合成功！已将藏品卖给最高出价者！');
+      fetchData(); // 刷新所有榜单和资产
+    } catch (err: any) { 
+       setMatchModal(null);
+       showToast(`交易失败: ${err.message}`); 
+    } finally { setProcessing(false); }
+  };
+
   const displayedNfts = activeTab === 'listed' ? nfts.filter(n => n.status === 'listed') : nfts;
 
-  // 渲染单件藏品 (现货/图鉴)
   const renderNft = ({ item }: { item: any }) => {
     const isListed = item.status === 'listed';
     return (
@@ -78,9 +137,11 @@ export default function CollectionScreen() {
     );
   };
 
-  // 🌟 渲染竞价榜单卡片
   const renderBidItem = ({ item, index }: { item: any, index: number }) => {
     const isTop3 = index < 3;
+    // 如果我手里有货，且这个买家不是我自己，我就能看到“卖给TA”的按钮
+    const canSellToHim = myIdleNfts.length > 0 && item.buyer_id !== myIdleNfts[0]?.owner_id;
+
     return (
       <View style={styles.bidCard}>
          <View style={[styles.rankBadge, isTop3 ? {backgroundColor: '#FFD700'} : {backgroundColor: '#F0F0F0'}]}>
@@ -88,11 +149,17 @@ export default function CollectionScreen() {
          </View>
          <View style={{flex: 1}}>
             <Text style={styles.bidderName}>{item.profiles?.nickname || '神秘大户'}</Text>
-            <Text style={styles.bidInfo}>需求数量: {item.quantity} | 冻结资金: ¥{(item.price * item.quantity).toFixed(2)}</Text>
+            <Text style={styles.bidInfo}>需求: {item.quantity} | 冻结: ¥{(item.price * item.quantity).toFixed(2)}</Text>
          </View>
          <View style={{alignItems: 'flex-end'}}>
             <Text style={styles.bidPriceLabel}>单件出价</Text>
             <Text style={styles.bidPriceValue}>¥{item.price}</Text>
+            {/* 🌟 核心杀招：出供给 TA 按钮 */}
+            {canSellToHim && (
+               <TouchableOpacity style={styles.matchBtn} onPress={() => setMatchModal({visible: true, bid: item})}>
+                  <Text style={styles.matchBtnText}>卖给TA</Text>
+               </TouchableOpacity>
+            )}
          </View>
       </View>
     );
@@ -102,7 +169,6 @@ export default function CollectionScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 🌟 沉浸式高斯模糊头部 */}
       <ImageBackground source={{ uri: collection?.image_url }} style={styles.headerBg} blurRadius={15}>
          <View style={styles.headerOverlay}>
             <SafeAreaView edges={['top']} style={{width: '100%'}}>
@@ -116,7 +182,6 @@ export default function CollectionScreen() {
                   <Image source={{ uri: collection?.image_url }} style={styles.heroImg} />
                   <Text style={styles.heroTitle}>{collection?.name}</Text>
                   
-                  {/* 数据看板矩阵 */}
                   <View style={styles.statsMatrix}>
                      <View style={styles.statItem}>
                         <Text style={styles.statValue}>¥{collection?.floor_price_cache || 0}</Text>
@@ -138,7 +203,8 @@ export default function CollectionScreen() {
          </View>
       </ImageBackground>
 
-      {/* 🌟 列表展示区 */}
+      {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
+
       <View style={styles.listSection}>
          {/* 三栏切换 Tabs */}
          <View style={styles.tabsRow}>
@@ -153,7 +219,6 @@ export default function CollectionScreen() {
             </TouchableOpacity>
          </View>
 
-         {/* 🌟 FOMO 求购横幅 */}
          <TouchableOpacity 
             style={styles.fomoBanner} 
             activeOpacity={0.8} 
@@ -162,7 +227,6 @@ export default function CollectionScreen() {
             <Text style={styles.fomoText}>没有心仪现货或嫌贵？点此发布求购单，抢先拿下心仪藏品 〉</Text>
          </TouchableOpacity>
 
-         {/* 根据 Tab 渲染不同列表 */}
          {activeTab === 'bids' ? (
             <FlatList 
                data={bids}
@@ -190,6 +254,22 @@ export default function CollectionScreen() {
             />
          )}
       </View>
+
+      {/* 🌟 撮合交易确认弹窗 */}
+      <Modal visible={!!matchModal} transparent animationType="fade">
+         <View style={styles.modalOverlay}>
+            <View style={styles.confirmBox}>
+               <Text style={styles.confirmTitle}>🤝 确认出让藏品</Text>
+               <Text style={styles.confirmDesc}>您确定要将金库中的一件闲置现货，以 <Text style={{fontWeight:'900', color:'#FF3B30'}}>¥{matchModal?.bid?.price}</Text> 的价格卖给该买家吗？交易将立即完成！</Text>
+               <View style={styles.confirmBtnRow}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setMatchModal(null)}><Text style={styles.cancelBtnText}>再想想</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.confirmBtn} onPress={executeMatchBid} disabled={processing}>
+                     {processing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认卖出</Text>}
+                  </TouchableOpacity>
+               </View>
+            </View>
+         </View>
+      </Modal>
     </View>
   );
 }
@@ -197,14 +277,12 @@ export default function CollectionScreen() {
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F6F8' },
   container: { flex: 1, backgroundColor: '#F5F6F8' },
-  
   headerBg: { width: '100%', minHeight: 320 },
   headerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
   navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44 },
   navBtn: { width: 40, justifyContent: 'center' },
   iconText: { fontSize: 20 },
   navTitle: { fontSize: 17, fontWeight: '900', color: '#FFF' },
-
   heroContent: { alignItems: 'center', paddingVertical: 20 },
   heroImg: { width: 100, height: 100, borderRadius: 16, borderWidth: 2, borderColor: '#FFF', marginBottom: 12 },
   heroTitle: { fontSize: 22, fontWeight: '900', color: '#FFF', marginBottom: 20 },
@@ -220,7 +298,6 @@ const styles = StyleSheet.create({
   tabBtnActive: { borderColor: '#111' },
   tabText: { fontSize: 15, color: '#888', fontWeight: '600' },
   tabTextActive: { color: '#111', fontWeight: '900' },
-  
   fomoBanner: { backgroundColor: '#FFF5E6', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: '#FFE4B5' },
   fomoText: { color: '#D49A36', fontSize: 12, fontWeight: '700', textAlign: 'center' },
 
@@ -236,12 +313,26 @@ const styles = StyleSheet.create({
   priceLabel: { fontSize: 10, color: '#999' },
   priceValue: { fontSize: 14, fontWeight: '900', color: '#FF3B30' },
 
-  // 竞价榜单样式
   bidCard: { flexDirection: 'row', backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 12, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
   rankBadge: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   rankText: { fontSize: 14, fontWeight: '900' },
   bidderName: { fontSize: 14, fontWeight: '900', color: '#111', marginBottom: 4 },
   bidInfo: { fontSize: 11, color: '#888' },
   bidPriceLabel: { fontSize: 10, color: '#999', marginBottom: 2 },
-  bidPriceValue: { fontSize: 18, fontWeight: '900', color: '#FF3B30', fontFamily: 'monospace' }
+  bidPriceValue: { fontSize: 18, fontWeight: '900', color: '#FF3B30', fontFamily: 'monospace' },
+  
+  matchBtn: { backgroundColor: '#FF3B30', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginTop: 4 },
+  matchBtnText: { color: '#FFF', fontSize: 10, fontWeight: '900' },
+  
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
+  toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  confirmBox: { width: '85%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
+  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 16 },
+  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#F5F5F5', alignItems: 'center' },
+  cancelBtnText: { color: '#666', fontSize: 15, fontWeight: '800' },
+  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FF3B30', alignItems: 'center' },
+  confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });
