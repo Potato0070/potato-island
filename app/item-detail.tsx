@@ -6,6 +6,14 @@ import { supabase } from '../supabase';
 
 const { width, height } = Dimensions.get('window');
 
+const TYPE_MAP: Record<string, string> = {
+  'direct_buy': '现货扫单',
+  'bid_match': '求购撮合',
+  'launch_mint': '首发盲盒',
+  'system_airdrop': '系统空投',
+  '好友转赠': '私下转赠'
+};
+
 export default function ItemDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
@@ -53,16 +61,18 @@ export default function ItemDetailScreen() {
       if (nftErr) throw new Error(`藏品查询失败: ${nftErr.message}`);
       setNft(nftData);
 
+      // 🌟 修复点 1：剥离脆弱的连表查询，直接读取纯净数据，防拦截！
       const { data: currHist, error: currErr } = await supabase.from('transfer_logs')
-        .select('*, buyer:buyer_id(nickname)')
+        .select('*') 
         .eq('nft_id', id)
         .order('transfer_time', { ascending: false });
       if (currErr) throw new Error(`当前流水查询失败: ${currErr.message}`);
       setCurrentHistory(currHist || []);
 
+      // 🌟 修复点 2：全盘流水同理
       if (nftData?.collection_id) {
          const { data: allHist, error: allErr } = await supabase.from('transfer_logs')
-           .select('*, buyer:buyer_id(nickname)')
+           .select('*')
            .eq('collection_id', nftData.collection_id)
            .order('transfer_time', { ascending: false })
            .limit(30);
@@ -70,7 +80,6 @@ export default function ItemDetailScreen() {
          setAllHistory(allHist || []);
       }
     } catch(e: any) { 
-      // 🌟 透视眼：页面加载报错直接弹脸
       Alert.alert("详情页加载异常", e.message || JSON.stringify(e));
       console.error(e); 
     } finally { setLoading(false); }
@@ -89,7 +98,6 @@ export default function ItemDetailScreen() {
          setSuccessModal({ title: '✅ 交易成功', msg: '您已成功买下该藏品，资产已打入您的金库！' });
       }, 400);
     } catch (err: any) { 
-      // 🌟 透视眼：购买失败原样抛出
       Alert.alert('交易失败报错', err.message || JSON.stringify(err)); 
     } finally { 
       setBuying(false); 
@@ -120,7 +128,6 @@ export default function ItemDetailScreen() {
            fetchData(); 
         }, 400);
      } catch(e: any) {
-        // 🌟 透视眼：寄售失败报错
         Alert.alert('挂单失败报错', e.message || JSON.stringify(e));
      } finally {
         setListing(false);
@@ -141,14 +148,18 @@ export default function ItemDetailScreen() {
      }
   };
 
-  // 🌟 透视眼：转赠按钮点击测试
   const handleTransfer = () => {
      try {
-        console.log("准备跳转转赠页...");
         router.push({ pathname: '/transfer', params: { nftId: nft.id } });
      } catch (e: any) {
         Alert.alert("路由跳转失败", e.message || JSON.stringify(e));
      }
+  };
+
+  // 🌟 极客匿名掩码生成器 (提取买家ID后4位作为代号)
+  const getAnonymousName = (uid: string) => {
+     if (!uid) return '神秘岛民';
+     return `匿名藏友_${uid.substring(0, 4).toUpperCase()}`;
   };
 
   if (!nft) return <View style={styles.center}><ActivityIndicator color="#FFD700" /></View>;
@@ -193,11 +204,25 @@ export default function ItemDetailScreen() {
            ) : (
              displayHistory.map((log) => (
                 <View key={log.id} style={styles.historyRow}>
-                   <View>
-                      <Text style={styles.historyUser}>{log.buyer?.nickname || '神秘岛民'}</Text>
-                      <Text style={styles.historyTime}>{new Date(log.transfer_time).toLocaleString()}</Text>
+                   <View style={styles.historyLeft}>
+                      {/* 🌟 完全匿名展示，避免暴露隐私 */}
+                      <Text style={styles.historyUser}>{getAnonymousName(log.buyer_id)}</Text>
+                      <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                         <View style={styles.historyTypeTag}>
+                            <Text style={styles.historyTypeText}>{TYPE_MAP[log.transfer_type] || '交易流转'}</Text>
+                         </View>
+                         <Text style={styles.historyTime}>{new Date(log.transfer_time).toLocaleString()}</Text>
+                      </View>
                    </View>
-                   <Text style={styles.historyPrice}>成交 ¥ {log.price}</Text>
+                   <View style={{alignItems: 'flex-end'}}>
+                      <Text style={styles.historyPrice}>¥ {log.price}</Text>
+                      {historyMode === 'all' && (
+                         <Text style={{fontSize: 10, color: '#888', fontFamily: 'monospace', marginTop: 2}}>
+                            {/* 全局流水显示具体的序列号或哈希前缀 */}
+                            #{log.nft_id.substring(0,6).toUpperCase()}
+                         </Text>
+                      )}
+                   </View>
                 </View>
              ))
            )}
@@ -340,14 +365,19 @@ const styles = StyleSheet.create({
   infoLabel: { fontSize: 14, color: '#666' },
   infoValueHigh: { fontSize: 16, color: '#FF3B30', fontWeight: '900', fontFamily: 'monospace' },
   infoHash: { fontSize: 12, color: '#888', fontFamily: 'monospace', width: 150, textAlign: 'right' },
+  
   historySection: { backgroundColor: '#FFF', padding: 20, marginBottom: 20 },
-  historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   historySwitch: { backgroundColor: '#F0F6FF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
   historySwitchText: { fontSize: 12, color: '#0066FF', fontWeight: '800' },
-  historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderColor: '#F5F5F5' },
-  historyUser: { fontSize: 14, fontWeight: '800', color: '#333', marginBottom: 4 },
+  historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderColor: '#F5F5F5' },
+  historyLeft: { flex: 1 },
+  historyUser: { fontSize: 14, fontWeight: '800', color: '#333', marginBottom: 6 },
+  historyTypeTag: { backgroundColor: '#F5F5F5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
+  historyTypeText: { fontSize: 9, color: '#666', fontWeight: '900' },
   historyTime: { fontSize: 11, color: '#999' },
-  historyPrice: { fontSize: 14, fontWeight: '900', color: '#111' },
+  historyPrice: { fontSize: 16, fontWeight: '900', color: '#111', fontFamily: 'monospace' },
+  
   bottomBar: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderColor: '#F0F0F0' },
   buyBtn: { backgroundColor: '#FF5722', paddingHorizontal: 36, paddingVertical: 14, borderRadius: 25 },
   buyText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
