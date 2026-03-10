@@ -1,10 +1,10 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 export default function ItemDetailScreen() {
   const router = useRouter();
@@ -20,9 +20,8 @@ export default function ItemDetailScreen() {
   const [showPayModal, setShowPayModal] = useState(false);
   const [userBalance, setUserBalance] = useState(0);
   
-  // 🌟 核心重构：寄售全流程合并为一个 Modal，彻底解决弹窗冲突！
   const [listModalVisible, setListModalVisible] = useState(false);
-  const [listStep, setListStep] = useState<1 | 2>(1); // 1: 输入价格, 2: 二次确认
+  const [listStep, setListStep] = useState<1 | 2>(1);
   const [listPrice, setListPrice] = useState('');
   
   const [listing, setListing] = useState(false);
@@ -50,27 +49,33 @@ export default function ItemDetailScreen() {
          if (prof) setUserBalance(prof.potato_coin_balance);
       }
 
-      const { data: nftData } = await supabase.from('nfts').select('*, collections(*)').eq('id', id).single();
+      const { data: nftData, error: nftErr } = await supabase.from('nfts').select('*, collections(*)').eq('id', id).single();
+      if (nftErr) throw new Error(`藏品查询失败: ${nftErr.message}`);
       setNft(nftData);
 
-      const { data: currHist } = await supabase.from('transfer_logs')
+      const { data: currHist, error: currErr } = await supabase.from('transfer_logs')
         .select('*, buyer:buyer_id(nickname)')
         .eq('nft_id', id)
         .order('transfer_time', { ascending: false });
+      if (currErr) throw new Error(`当前流水查询失败: ${currErr.message}`);
       setCurrentHistory(currHist || []);
 
       if (nftData?.collection_id) {
-         const { data: allHist } = await supabase.from('transfer_logs')
+         const { data: allHist, error: allErr } = await supabase.from('transfer_logs')
            .select('*, buyer:buyer_id(nickname)')
            .eq('collection_id', nftData.collection_id)
            .order('transfer_time', { ascending: false })
            .limit(30);
+         if (allErr) throw new Error(`全盘流水查询失败: ${allErr.message}`);
          setAllHistory(allHist || []);
       }
-    } catch(e) { console.error(e); } finally { setLoading(false); }
+    } catch(e: any) { 
+      // 🌟 透视眼：页面加载报错直接弹脸
+      Alert.alert("详情页加载异常", e.message || JSON.stringify(e));
+      console.error(e); 
+    } finally { setLoading(false); }
   };
 
-  // 执行购买 (调用 RPC)
   const executeBuy = async () => {
     setBuying(true);
     try {
@@ -84,13 +89,13 @@ export default function ItemDetailScreen() {
          setSuccessModal({ title: '✅ 交易成功', msg: '您已成功买下该藏品，资产已打入您的金库！' });
       }, 400);
     } catch (err: any) { 
-      showToast(`交易失败: ${err.message}`); 
+      // 🌟 透视眼：购买失败原样抛出
+      Alert.alert('交易失败报错', err.message || JSON.stringify(err)); 
     } finally { 
       setBuying(false); 
     }
   };
 
-  // 🌟 寄售：第一步点击“下一步”时，只切换内部 UI 状态，不关闭 Modal！
   const handleListNextStep = () => {
      const p = parseFloat(listPrice);
      if (isNaN(p) || p <= 0) return showToast('请输入有效的寄售价格！');
@@ -99,15 +104,14 @@ export default function ItemDetailScreen() {
      if (maxLimit && p > maxLimit) {
         return showToast(`违规拦截：寄售价格不得高于最高限价 ¥${maxLimit}`);
      }
-
-     setListStep(2); // 无缝切换到二次确认画面
+     setListStep(2);
   };
 
-  // 🌟 寄售：第二步最终确认
   const executeList = async () => {
      setListing(true);
      try {
-        await supabase.from('nfts').update({ status: 'listed', consign_price: parseFloat(listPrice) }).eq('id', nft.id);
+        const { error } = await supabase.from('nfts').update({ status: 'listed', consign_price: parseFloat(listPrice) }).eq('id', nft.id);
+        if (error) throw error;
         setListModalVisible(false);
         setListPrice('');
         
@@ -116,7 +120,8 @@ export default function ItemDetailScreen() {
            fetchData(); 
         }, 400);
      } catch(e: any) {
-        showToast(`挂单失败: ${e.message}`);
+        // 🌟 透视眼：寄售失败报错
+        Alert.alert('挂单失败报错', e.message || JSON.stringify(e));
      } finally {
         setListing(false);
      }
@@ -125,19 +130,25 @@ export default function ItemDetailScreen() {
   const handleCancelList = async () => {
      setListing(true);
      try {
-       await supabase.from('nfts').update({ status: 'idle', consign_price: null }).eq('id', nft.id);
+       const { error } = await supabase.from('nfts').update({ status: 'idle', consign_price: null }).eq('id', nft.id);
+       if (error) throw error;
        setSuccessModal({ title: '📦 撤销成功', msg: '已成功撤销寄售，藏品已退回您的金库锁定！' });
        fetchData();
      } catch (e: any) {
-       showToast(`撤销失败: ${e.message}`);
+       Alert.alert('撤销失败报错', e.message || JSON.stringify(e));
      } finally {
        setListing(false);
      }
   };
 
-  // 🌟 转赠跳转修复：最纯粹的路由跳转
+  // 🌟 透视眼：转赠按钮点击测试
   const handleTransfer = () => {
-     router.push('/transfer'); 
+     try {
+        console.log("准备跳转转赠页...");
+        router.push({ pathname: '/transfer', params: { nftId: nft.id } });
+     } catch (e: any) {
+        Alert.alert("路由跳转失败", e.message || JSON.stringify(e));
+     }
   };
 
   if (!nft) return <View style={styles.center}><ActivityIndicator color="#FFD700" /></View>;
@@ -220,7 +231,6 @@ export default function ItemDetailScreen() {
         </View>
       )}
 
-      {/* 🌟 一体化无缝 Modal (寄售用) */}
       <Modal visible={listModalVisible} transparent animationType="slide">
         {listStep === 1 ? (
            <View style={styles.modalOverlay}>

@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -34,28 +34,35 @@ export default function MyOrdersScreen() {
       if (!user) return;
 
       if (tab === '寄售中') {
-        const { data } = await supabase.from('nfts').select('*, collections(name, image_url)').eq('owner_id', user.id).eq('status', 'listed').order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('nfts').select('*, collections(name, image_url)').eq('owner_id', user.id).eq('status', 'listed').order('created_at', { ascending: false });
+        if(error) throw error;
         setListData(data || []);
       } 
       else if (tab === '求购中') {
-        const { data } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').neq('order_type', 'bid').order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').neq('order_type', 'bid').order('created_at', { ascending: false });
+        if(error) throw error;
         setListData(data || []);
       }
       else if (tab === '竞价中') {
-        const { data } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').eq('order_type', 'bid').order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').eq('order_type', 'bid').order('created_at', { ascending: false });
+        if(error) throw error;
         setListData(data || []);
       }
       else if (tab === '已买入') {
-        // 🌟 核心修复：去除了脆弱的 seller:seller_id(nickname) 查询，防止首发订单因没卖家而整行报错被吞！
-        const { data } = await supabase.from('transfer_logs').select('*, collections(name, image_url)').eq('buyer_id', user.id).order('transfer_time', { ascending: false });
+        const { data, error } = await supabase.from('transfer_logs').select('*, collections(name, image_url)').eq('buyer_id', user.id).order('transfer_time', { ascending: false });
+        if(error) throw error;
         setListData(data || []);
       } 
       else if (tab === '已卖出') {
-        // 🌟 同样去除容易报错的买家表关联
-        const { data } = await supabase.from('transfer_logs').select('*, collections(name, image_url)').eq('seller_id', user.id).order('transfer_time', { ascending: false });
+        const { data, error } = await supabase.from('transfer_logs').select('*, collections(name, image_url)').eq('seller_id', user.id).order('transfer_time', { ascending: false });
+        if(error) throw error;
         setListData(data || []);
       }
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+    } catch (err: any) { 
+       // 🌟 透视眼：抓取所有数据结构报错
+       Alert.alert("订单数据读取报错", err.message || JSON.stringify(err)); 
+       console.error(err); 
+    } finally { setLoading(false); }
   };
 
   const handleCancelBuyOrder = async () => {
@@ -71,7 +78,7 @@ export default function MyOrdersScreen() {
       setCancelModal(null);
       showToast('✅ 撤销成功，资金已退回钱包');
       fetchDataByTab(activeTab); 
-    } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setProcessing(false); }
+    } catch (err: any) { Alert.alert('撤回失败', err.message); } finally { setProcessing(false); }
   };
 
   const handleCancelSale = async () => {
@@ -83,7 +90,7 @@ export default function MyOrdersScreen() {
       showToast('✅ 寄售已取消，藏品已退回金库锁定');
       fetchDataByTab('寄售中'); 
     } catch (err: any) { 
-      showToast(`取消失败: ${err.message}`); 
+      Alert.alert('取消寄售失败', err.message); 
     } finally { 
       setProcessing(false); 
     }
@@ -111,7 +118,7 @@ export default function MyOrdersScreen() {
       setNewPrice('');
       showToast(`✅ 加价成功！成功抢占高位`);
       fetchDataByTab(activeTab);
-    } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setProcessing(false); }
+    } catch (err: any) { Alert.alert('加价失败', err.message); } finally { setProcessing(false); }
   };
 
   const renderItem = ({ item }: { item: any }) => {

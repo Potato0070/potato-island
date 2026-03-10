@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Dimensions, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -34,11 +34,13 @@ export default function WalletScreen() {
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
       if (profile) setBalance((profile.potato_coin_balance || 0).toFixed(2));
 
-      // 🌟 核心修复：纯净查询，去掉关联表里导致 NULL 报错的外键！
-      const { data: transferData } = await supabase.from('transfer_logs')
+      // 🌟 核心修复：纯净查询
+      const { data: transferData, error } = await supabase.from('transfer_logs')
         .select('*, collections(name)')
         .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`)
         .order('transfer_time', { ascending: false });
+
+      if (error) throw error;
 
       if (transferData) {
         const formattedLogs = transferData.map(log => {
@@ -72,7 +74,11 @@ export default function WalletScreen() {
         });
         setLogs(formattedLogs);
       }
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+    } catch (err: any) { 
+       // 🌟 透视眼：抓取所有数据结构报错
+       Alert.alert("钱包数据读取报错", err.message || JSON.stringify(err)); 
+       console.error(err); 
+    } finally { setLoading(false); }
   };
 
   const renderLogItem = ({ item }: { item: any }) => (
