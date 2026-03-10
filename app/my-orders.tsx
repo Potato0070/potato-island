@@ -38,20 +38,20 @@ export default function MyOrdersScreen() {
         setListData(data || []);
       } 
       else if (tab === '求购中') {
-        // 🌟 核心：排除 'bid' 的数据，只显示求购
         const { data } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').neq('order_type', 'bid').order('created_at', { ascending: false });
         setListData(data || []);
       }
       else if (tab === '竞价中') {
-        // 🌟 核心：只显示 'bid' 的数据
         const { data } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').eq('order_type', 'bid').order('created_at', { ascending: false });
         setListData(data || []);
       }
       else if (tab === '已买入') {
+        // 🌟 核心升级：查询所有作为买家（buyer_id）的流水账，包括首发、买入、撮合、收赠
         const { data } = await supabase.from('transfer_logs').select('*, collections(name, image_url), seller:seller_id(nickname)').eq('buyer_id', user.id).order('transfer_time', { ascending: false });
         setListData(data || []);
       } 
       else if (tab === '已卖出') {
+        // 🌟 核心升级：查询所有作为卖家（seller_id）的流水账，包括卖出、撮合、转赠出
         const { data } = await supabase.from('transfer_logs').select('*, collections(name, image_url), buyer:buyer_id(nickname)').eq('seller_id', user.id).order('transfer_time', { ascending: false });
         setListData(data || []);
       }
@@ -117,6 +117,7 @@ export default function MyOrdersScreen() {
   const renderItem = ({ item }: { item: any }) => {
     const isSelling = activeTab === '寄售中';
     const isBuying = activeTab === '求购中' || activeTab === '竞价中'; 
+    const isHistory = activeTab === '已买入' || activeTab === '已卖出';
     
     const colName = Array.isArray(item.collections) ? item.collections[0]?.name : item.collections?.name;
     const colImg = Array.isArray(item.collections) ? item.collections[0]?.image_url : item.collections?.image_url;
@@ -127,22 +128,39 @@ export default function MyOrdersScreen() {
     const price = isSelling ? item.consign_price : item.price;
     const timeStr = isSelling || isBuying ? '有效挂单中...' : new Date(item.transfer_time || item.created_at).toLocaleString();
 
+    // 🌟 核心：解析具体交易类型的炫酷标签
+    let typeTag = activeTab;
+    let typeColor = '#111';
+    if (isHistory) {
+       switch(item.transfer_type) {
+          case 'launch_mint': typeTag = '首发抢购'; typeColor = '#FFD700'; break;
+          case 'direct_buy': typeTag = '大盘现货'; typeColor = '#0066FF'; break;
+          case 'bid_match': typeTag = '求购撮合'; typeColor = '#FF3B30'; break;
+          case '好友转赠': typeTag = '好友转赠'; typeColor = '#4CD964'; break;
+          default: typeTag = '交易流转'; typeColor = '#888';
+       }
+    } else {
+       typeColor = isSelling || isBuying ? '#FF3B30' : '#4CD964';
+    }
+
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
            <Text style={styles.timeText}>{timeStr}</Text>
-           <Text style={[styles.statusText, isSelling || isBuying ? {color: '#FF3B30'} : {color: '#4CD964'}]}>{activeTab}</Text>
+           <View style={{flexDirection: 'row', alignItems: 'center'}}>
+              <Text style={[styles.statusText, {color: typeColor}]}>{typeTag}</Text>
+           </View>
         </View>
 
         <View style={styles.cardBody}>
            <Image source={{ uri: imgUrl }} style={styles.img} />
            <View style={styles.info}>
               <Text style={styles.title} numberOfLines={1}>{name}</Text>
-              <Text style={styles.serial}>{isBuying ? `${activeTab === '竞价中' ? '竞价' : '求购'}数量: ${item.quantity}` : `#${serial}`}</Text>
+              <Text style={styles.serial}>{isBuying ? `${activeTab === '竞价中' ? '竞价' : '求购'}数量: ${item.quantity}` : (isHistory && item.transfer_type === 'launch_mint' ? '首发铸造' : `#${serial}`)}</Text>
            </View>
            <View style={styles.priceBox}>
-              <Text style={styles.priceLabel}>{isSelling || isBuying ? (isSelling ? '一口价' : '当前出价') : '成交价'}</Text>
-              <Text style={styles.price}>¥ {price}</Text>
+              <Text style={styles.priceLabel}>{isSelling || isBuying ? (isSelling ? '一口价' : '当前出价') : (item.transfer_type === '好友转赠' ? '消耗转赠卡' : '成交价')}</Text>
+              <Text style={styles.price}>{item.transfer_type === '好友转赠' ? '1 张' : `¥ ${price || 0}`}</Text>
            </View>
         </View>
 
@@ -280,7 +298,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#FFF', borderRadius: 12, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 5, elevation: 1 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderColor: '#F9F9F9' },
   timeText: { fontSize: 12, color: '#999' },
-  statusText: { fontSize: 12, fontWeight: '800' },
+  statusText: { fontSize: 13, fontWeight: '900' },
   cardBody: { flexDirection: 'row', alignItems: 'center' },
   img: { width: 60, height: 60, borderRadius: 8, backgroundColor: '#F0F0F0', marginRight: 12 },
   info: { flex: 1 },

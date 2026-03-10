@@ -6,13 +6,14 @@ import { supabase } from '../supabase';
 
 const { width } = Dimensions.get('window');
 
-// 🌟 交易类型人性化中文映射
+// 🌟 交易类型人性化中文映射字典
 const TYPE_MAP: Record<string, string> = {
-  'direct_buy': '大盘一口价交易',
-  'bid_match': '求购大厅撮合交易',
-  'launch_mint': '首发盲盒抢购',
-  'system_airdrop': '系统空投奖励',
-  'genesis_exchange': '创世中枢兑换'
+  'direct_buy': '大盘现货',
+  'bid_match': '委托撮合',
+  'launch_mint': '首发盲盒',
+  'system_airdrop': '系统空投',
+  'genesis_exchange': '创世兑换',
+  '好友转赠': '好友转赠'
 };
 
 export default function WalletScreen() {
@@ -35,7 +36,7 @@ export default function WalletScreen() {
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
       if (profile) setBalance((profile.potato_coin_balance || 0).toFixed(2));
 
-      // 2. 智能聚合资金流水
+      // 2. 智能聚合所有资金与资产流转水
       const { data: transferData } = await supabase.from('transfer_logs')
         .select('*, collections(name)')
         .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`)
@@ -44,18 +45,32 @@ export default function WalletScreen() {
       if (transferData) {
         const formattedLogs = transferData.map(log => {
            const isIncome = log.seller_id === user.id;
-           // 🌟 强兼容：应对 collections 返回对象或数组的情况
            const colName = Array.isArray(log.collections) ? log.collections[0]?.name : log.collections?.name;
            const targetName = colName || '神秘藏品';
-           const displayType = TYPE_MAP[log.transfer_type] || '资金流转';
+           const typeStr = TYPE_MAP[log.transfer_type] || '资金流转';
+
+           // 🌟 核心：针对不同类型的交易，组合出极具可读性的文案
+           let titleStr = '';
+           let amountStr = '';
+           let amountColor = '#111';
+
+           if (log.transfer_type === '好友转赠') {
+               titleStr = isIncome ? `赠出藏品 (${targetName})` : `收到赠礼 (${targetName})`;
+               amountStr = isIncome ? '- 1 张转赠卡' : '+ 1 件藏品';
+               amountColor = isIncome ? '#888' : '#4CD964';
+           } else {
+               titleStr = isIncome ? `出售收益 (${targetName})` : `购买支出 (${targetName})`;
+               amountStr = isIncome ? `+ ¥${log.price}` : `- ¥${log.price}`;
+               amountColor = isIncome ? '#4CD964' : '#111';
+           }
 
            return {
               id: log.id,
-              title: isIncome ? `出售收益 (${targetName})` : `购买支出 (${targetName})`,
-              amount: isIncome ? `+ ¥${log.price}` : `- ¥${log.price}`,
-              isIncome: isIncome,
+              title: titleStr,
+              amount: amountStr,
+              amountColor: amountColor,
               time: new Date(log.transfer_time).toLocaleString(),
-              type: displayType
+              type: typeStr
            };
         });
         setLogs(formattedLogs);
@@ -67,9 +82,12 @@ export default function WalletScreen() {
     <View style={styles.logRow}>
        <View style={styles.logLeft}>
           <Text style={styles.logTitle}>{item.title}</Text>
-          <Text style={styles.logTime}>{item.time} | {item.type}</Text>
+          <View style={styles.tagRow}>
+             <View style={styles.typeTag}><Text style={styles.typeTagText}>{item.type}</Text></View>
+             <Text style={styles.logTime}>{item.time}</Text>
+          </View>
        </View>
-       <Text style={[styles.logAmount, item.isIncome ? {color: '#4CD964'} : {color: '#111'}]}>
+       <Text style={[styles.logAmount, {color: item.amountColor}]}>
           {item.amount}
        </Text>
     </View>
@@ -136,7 +154,10 @@ const styles = StyleSheet.create({
   
   logRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderColor: '#F0F0F0' },
   logLeft: { flex: 1, marginRight: 16 },
-  logTitle: { fontSize: 14, fontWeight: '800', color: '#333', marginBottom: 6 },
+  logTitle: { fontSize: 14, fontWeight: '800', color: '#333', marginBottom: 8 },
+  tagRow: { flexDirection: 'row', alignItems: 'center' },
+  typeTag: { backgroundColor: '#F0F6FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
+  typeTagText: { color: '#0066FF', fontSize: 10, fontWeight: '800' },
   logTime: { fontSize: 11, color: '#999' },
   logAmount: { fontSize: 18, fontWeight: '900', fontFamily: 'monospace' }
 });

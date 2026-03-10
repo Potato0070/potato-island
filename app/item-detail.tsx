@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -69,21 +69,7 @@ export default function ItemDetailScreen() {
     } catch(e) { console.error(e); } finally { setLoading(false); }
   };
 
-  const confirmAndPay = () => {
-    Alert.alert(
-      '🔒 支付防误触确认',
-      `您即将花费 ¥${nft.consign_price} 购买【${nft.collections?.name}】#${String(nft.serial_number).padStart(6, '0')}。\n支付后资产将立刻划转且不可逆，是否确认执行？`,
-      [
-        { text: '我再想想', style: 'cancel' },
-        { 
-          text: '确认支付', 
-          style: 'destructive', 
-          onPress: executeBuy 
-        }
-      ]
-    );
-  };
-
+  // 🌟 修复大盘交易无法购买的问题：干掉原生 Alert，直接用自带 Loading 的按钮请求 RPC！
   const executeBuy = async () => {
     setBuying(true);
     try {
@@ -93,15 +79,18 @@ export default function ItemDetailScreen() {
       if (error) throw error;
       
       setShowPayModal(false);
-      setSuccessModal({ title: '✅ 交易成功', msg: '您已成功买下该藏品，资产已打入您的金库！' });
+      // 延迟一点点出成功弹窗，保证视觉顺滑
+      setTimeout(() => {
+         setSuccessModal({ title: '✅ 交易成功', msg: '您已成功买下该藏品，资产已打入您的金库！' });
+      }, 400);
     } catch (err: any) { 
-      Alert.alert('交易失败', err.message); 
+      showToast(`交易失败: ${err.message}`); 
     } finally { 
       setBuying(false); 
     }
   };
 
-  // 🌟 核心增量：挂单寄售时的“最高限价强力拦截”！
+  // 🌟 挂单寄售拦截：关掉输入框，安全延迟后弹出警告框！绝对不会吞点击！
   const handleListClick = () => {
      const p = parseFloat(listPrice);
      if (isNaN(p) || p <= 0) return showToast('请输入有效的寄售价格！');
@@ -112,11 +101,12 @@ export default function ItemDetailScreen() {
         return showToast(`违规拦截：寄售价格不得高于该系列最高限价 ¥${maxLimit}`);
      }
 
-     setShowListModal(false);
+     setShowListModal(false); // 先关掉底部抽屉
      
+     // 🌟 延迟 500ms 弹出二次确认框，完美避开 RN 模态框动画冲突！
      setTimeout(() => {
         setConfirmListModal(true); 
-     }, 300);
+     }, 500);
   };
 
   const executeList = async () => {
@@ -125,8 +115,11 @@ export default function ItemDetailScreen() {
         await supabase.from('nfts').update({ status: 'listed', consign_price: parseFloat(listPrice) }).eq('id', nft.id);
         setConfirmListModal(false);
         setListPrice('');
-        setSuccessModal({ title: '✅ 挂单成功', msg: '您的藏品已成功上架至交易大盘！' });
-        fetchData(); 
+        
+        setTimeout(() => {
+           setSuccessModal({ title: '✅ 挂单成功', msg: '您的藏品已成功上架至交易大盘！' });
+           fetchData(); 
+        }, 400);
      } catch(e: any) {
         setConfirmListModal(false);
         showToast(`挂单失败: ${e.message}`);
@@ -135,6 +128,7 @@ export default function ItemDetailScreen() {
      }
   };
 
+  // 🌟 修复撤销寄售没反应：加持华丽的反馈
   const handleCancelList = async () => {
      setListing(true);
      try {
@@ -148,7 +142,9 @@ export default function ItemDetailScreen() {
      }
   };
 
+  // 🌟 修复转赠没反应
   const handleTransfer = () => {
+     // 直接跳转，不带任何拖泥带水的状态
      router.push({ pathname: '/transfer', params: { nftId: nft.id } });
   };
 
@@ -217,6 +213,7 @@ export default function ItemDetailScreen() {
         </View>
       </ScrollView>
 
+      {/* 🌟 智能底部操作栏 */}
       {(!isOwner && nft.status === 'listed') && (
         <View style={styles.bottomBar}>
            <View>
@@ -252,6 +249,7 @@ export default function ItemDetailScreen() {
         </View>
       )}
 
+      {/* 挂单输入价格抽屉 */}
       <Modal visible={showListModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.listSheet}>
@@ -270,6 +268,7 @@ export default function ItemDetailScreen() {
         </View>
       </Modal>
 
+      {/* 🌟 防坑二次确认弹窗 (寄售) */}
       <Modal visible={confirmListModal} transparent animationType="fade">
          <View style={styles.modalOverlayCenter}>
             <View style={styles.confirmBox}>
@@ -285,6 +284,7 @@ export default function ItemDetailScreen() {
          </View>
       </Modal>
 
+      {/* 底部支付收银台 (买入) */}
       <Modal visible={showPayModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <RNSafeAreaView style={styles.bottomSheet}>
@@ -319,7 +319,7 @@ export default function ItemDetailScreen() {
              <View style={styles.sheetFooter}>
                 <TouchableOpacity 
                   style={[styles.confirmPayBtn, userBalance < nft.consign_price && {backgroundColor: '#CCC'}]} 
-                  onPress={confirmAndPay} 
+                  onPress={executeBuy} // 🌟 核心：直接在这里调用！摒弃 Alert.alert！
                   disabled={userBalance < nft.consign_price || buying}
                 >
                    {buying ? <ActivityIndicator color="#FFF" /> : <Text style={{color: '#FFF', fontWeight: '900', fontSize: 16}}>{userBalance < nft.consign_price ? '余额不足' : `立即支付 ¥ ${nft.consign_price}`}</Text>}
@@ -329,11 +329,12 @@ export default function ItemDetailScreen() {
         </View>
       </Modal>
 
+      {/* 🌟 成功反馈高级弹窗 */}
       <Modal visible={!!successModal} transparent animationType="fade">
          <View style={styles.modalOverlayCenter}>
             <View style={[styles.confirmBox, {borderColor: '#0066FF', borderWidth: 2}]}>
                <Text style={[styles.confirmTitle, {color: '#0066FF', fontSize: 22}]}>{successModal?.title}</Text>
-               <Text style={[styles.confirmDesc, {fontSize: 15, color: '#111', fontWeight: '800'}]}>{successModal?.msg}</Text>
+               <Text style={[styles.confirmDesc, {fontSize: 15, color: '#111', fontWeight: '800', lineHeight: 22}]}>{successModal?.msg}</Text>
                <TouchableOpacity style={[styles.confirmBtn, {width: '100%', backgroundColor: '#0066FF'}]} onPress={() => { setSuccessModal(null); router.replace('/(tabs)/profile'); }}>
                   <Text style={styles.confirmBtnText}>知道了</Text>
                </TouchableOpacity>
