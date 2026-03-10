@@ -83,7 +83,6 @@ export default function AdminPanelScreen() {
   const [newColMaxPrice, setNewColMaxPrice] = useState('');
   const [newColCategoryIds, setNewColCategoryIds] = useState<number[]>([]);
 
-  // 🌟 分区管理专用状态
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editingCatId, setEditingCatId] = useState<number | null>(null);
   const [editingCatName, setEditingCatName] = useState('');
@@ -229,6 +228,7 @@ export default function AdminPanelScreen() {
      setEditCategoryIds(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
   };
 
+  // ================= 🖼️ 创建全新藏品母版 (修复点在这里) =================
   const handleCreateCollection = () => {
       if (!newColName || !newColImage || newColCategoryIds.length === 0) { return showToast('请填写名称、图片并选择至少一个分区'); }
       setConfirmAction({
@@ -237,7 +237,18 @@ export default function AdminPanelScreen() {
           confirmText: '确认铸造',
           isDanger: false,
           action: async () => {
-              const { error } = await supabase.from('collections').insert([{ name: newColName, image_url: newColImage, category_ids: newColCategoryIds, max_consign_price: parseFloat(newColMaxPrice) || null, total_minted: 0, circulating_supply: 0, is_tradeable: false }]);
+              // 🌟 修复：如果没填最高限价，则默认传 0，避免 null 报错
+              const finalPrice = parseFloat(newColMaxPrice) || 0; 
+              
+              const { error } = await supabase.from('collections').insert([{ 
+                  name: newColName, 
+                  image_url: newColImage, 
+                  category_ids: newColCategoryIds, 
+                  max_consign_price: finalPrice, 
+                  total_minted: 0, 
+                  circulating_supply: 0, 
+                  is_tradeable: false 
+              }]);
               if (error) throw error;
               setNewColName(''); setNewColImage(''); setNewColMaxPrice(''); setNewColCategoryIds([]); fetchData();
               setSuccessModal({title: '✅ 缔造成功', msg: `全新藏品母版已铸造！请前往发新或印钞。`});
@@ -440,14 +451,12 @@ export default function AdminPanelScreen() {
       }});
   };
 
-  // ================= 🌟 强大的分区管理引擎 =================
   const handleCreateCategory = () => {
       if(!newCategoryName) return showToast('请输入分类名');
-      setConfirmAction({ title: '🗂️ 新增分区', desc: `确定要新增【${newCategoryName}】大盘分区吗？`, confirmText: '创建', isDanger: false, action: async () => {
-          // 自动计算当前最大的 sort_order，排在最后
+      setConfirmAction({ title: '🗂️ 新增分区', desc: `新增【${newCategoryName}】？`, confirmText: '创建', isDanger: false, action: async () => {
           const maxSort = adminCategories.length > 0 ? Math.max(...adminCategories.map(c => c.sort_order)) : 0;
           await supabase.from('categories').insert([{ name: newCategoryName, sort_order: maxSort + 1 }]);
-          setNewCategoryName(''); fetchData(); showToast('新分区已创建并上架');
+          setNewCategoryName(''); fetchData(); showToast('新分类已创建');
       }});
   };
 
@@ -472,28 +481,18 @@ export default function AdminPanelScreen() {
       const newCats = [...adminCategories];
       const targetIndex = direction === 'up' ? index - 1 : index + 1;
       
-      // 交换它们在前端数组的位置
       [newCats[index], newCats[targetIndex]] = [newCats[targetIndex], newCats[index]];
       
-      // 重新分配 sort_order
-      const updates = newCats.map((cat, idx) => ({
-          id: cat.id,
-          name: cat.name,
-          sort_order: idx + 1 // 从1开始排
-      }));
-
-      // 乐观更新前端
+      const updates = newCats.map((cat, idx) => ({ id: cat.id, name: cat.name, sort_order: idx + 1 }));
       setAdminCategories(updates);
 
-      // 静默写入数据库 (Supabase 的 upsert 极其好用)
       try {
           await supabase.from('categories').upsert(updates);
           showToast('已重新排列');
       } catch(e:any) {
-          showToast('排序同步失败'); fetchData(); // 失败则还原
+          showToast('排序同步失败'); fetchData(); 
       }
   };
-
 
   const handleMintCustom = () => {
       if(!mintColId || !mintAmount) return showToast('请选择藏品并输入数量');
@@ -727,14 +726,13 @@ export default function AdminPanelScreen() {
                 </View>
               )}
 
-              {/* 🌟 究极扩容：神之手 -> 包含分区管理看板 */}
               {activeTab === '神之手' && (
                 <View>
                   <View style={styles.cheatBox}><Text style={styles.sectionTitle}>🖨️ 虚空印钞 (派发给自己)</Text><TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('mint')}><Text style={styles.pickerBtnText}>{mintColName ? `📍 选定: ${mintColName}` : '+ 选择要印制的藏品'}</Text></TouchableOpacity><View style={{flexDirection: 'row', marginTop: 10}}><TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="数量" placeholderTextColor="#666" keyboardType="number-pad" value={mintAmount} onChangeText={setMintAmount} /><TouchableOpacity style={[styles.goldBtn, {width: 100, marginLeft: 10, marginTop: 0}]} onPress={handleMintCustom}><Text style={styles.goldBtnText}>印发</Text></TouchableOpacity></View></View>
                   
                   <View style={styles.cheatBox}><Text style={styles.sectionTitle}>💰 篡改个人资金</Text><View style={{flexDirection: 'row', marginTop: 10}}><TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="覆盖当前余额" placeholderTextColor="#666" keyboardType="decimal-pad" value={newBalance} onChangeText={setNewBalance} /><TouchableOpacity style={[styles.goldBtn, {width: 80, marginLeft: 10, marginTop: 0}]} onPress={handleTamperBalance}><Text style={styles.goldBtnText}>注入</Text></TouchableOpacity></View></View>
                   
-                  {/* 🌟 分区管理超级看板 */}
+                  {/* 🌟 核心：超级分区管理看板 */}
                   <View style={styles.cheatBox}>
                      <Text style={styles.sectionTitle}>🗂️ 大盘分区管理</Text>
                      
@@ -749,7 +747,7 @@ export default function AdminPanelScreen() {
                            {editingCatId === cat.id ? (
                               <View style={{flex: 1, flexDirection: 'row'}}>
                                  <TextInput style={styles.catEditInput} value={editingCatName} onChangeText={setEditingCatName} autoFocus />
-                                 <TouchableOpacity style={styles.catSaveBtn} onPress={() => handleUpdateCategoryName(cat.id)}><Text style={{color:'#FFF', fontWeight:'900'}}>保存</Text></TouchableOpacity>
+                                 <TouchableOpacity style={styles.catSaveBtn} onPress={() => handleUpdateCategoryName(cat.id)}><Text style={{color:'#111', fontWeight:'900'}}>保存</Text></TouchableOpacity>
                                  <TouchableOpacity style={styles.catCancelBtn} onPress={() => setEditingCatId(null)}><Text style={{color:'#888'}}>取消</Text></TouchableOpacity>
                               </View>
                            ) : (
@@ -768,6 +766,7 @@ export default function AdminPanelScreen() {
                         </View>
                      ))}
                   </View>
+
                 </View>
               )}
             </ScrollView>
@@ -886,6 +885,7 @@ const styles = StyleSheet.create({
   pickerBtnText: { color: '#888', fontSize: 14, fontWeight: '600' },
   
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, backgroundColor: '#111', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#333' },
+  divider: { height: 1, backgroundColor: '#333', marginVertical: 10 },
   reqRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   reqCountInput: { width: 60, backgroundColor: '#111', color: '#FFF', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#333', textAlign: 'center', marginLeft: 10 },
   removeBtn: { width: 40, height: 40, backgroundColor: '#FF3B30', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
@@ -899,7 +899,7 @@ const styles = StyleSheet.create({
   // 🌟 分区管理专属样式
   categoryManageRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#333' },
   catEditInput: { flex: 1, color: '#00E5FF', fontSize: 15, fontWeight: '900', borderBottomWidth: 1, borderColor: '#00E5FF', paddingVertical: 4 },
-  catSaveBtn: { backgroundColor: '#00E5FF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, marginLeft: 10 },
+  catSaveBtn: { backgroundColor: '#FFD700', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, marginLeft: 10 },
   catCancelBtn: { paddingHorizontal: 10, paddingVertical: 6, marginLeft: 5 },
   orderBtn: { backgroundColor: '#2C2C2E', width: 30, height: 30, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginLeft: 6 },
   catDelBtn: { backgroundColor: '#FF3B30', width: 30, height: 30, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
