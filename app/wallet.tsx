@@ -6,6 +6,15 @@ import { supabase } from '../supabase';
 
 const { width } = Dimensions.get('window');
 
+// 🌟 交易类型人性化中文映射
+const TYPE_MAP: Record<string, string> = {
+  'direct_buy': '大盘一口价交易',
+  'bid_match': '求购大厅撮合交易',
+  'launch_mint': '首发盲盒抢购',
+  'system_airdrop': '系统空投奖励',
+  'genesis_exchange': '创世中枢兑换'
+};
+
 export default function WalletScreen() {
   const router = useRouter();
   const [balance, setBalance] = useState('0.00');
@@ -24,9 +33,9 @@ export default function WalletScreen() {
 
       // 1. 获取最新余额
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
-      if (profile) setBalance(profile.potato_coin_balance.toFixed(2));
+      if (profile) setBalance((profile.potato_coin_balance || 0).toFixed(2));
 
-      // 2. 智能聚合资金流水 (把买入算作支出 -, 卖出算作收入 +)
+      // 2. 智能聚合资金流水
       const { data: transferData } = await supabase.from('transfer_logs')
         .select('*, collections(name)')
         .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`)
@@ -35,13 +44,18 @@ export default function WalletScreen() {
       if (transferData) {
         const formattedLogs = transferData.map(log => {
            const isIncome = log.seller_id === user.id;
+           // 🌟 强兼容：应对 collections 返回对象或数组的情况
+           const colName = Array.isArray(log.collections) ? log.collections[0]?.name : log.collections?.name;
+           const targetName = colName || '神秘藏品';
+           const displayType = TYPE_MAP[log.transfer_type] || '资金流转';
+
            return {
               id: log.id,
-              title: isIncome ? `出售藏品收益 (${log.collections?.name || '未知'})` : `购买藏品支出 (${log.collections?.name || '未知'})`,
+              title: isIncome ? `出售收益 (${targetName})` : `购买支出 (${targetName})`,
               amount: isIncome ? `+ ¥${log.price}` : `- ¥${log.price}`,
               isIncome: isIncome,
               time: new Date(log.transfer_time).toLocaleString(),
-              type: log.transfer_type
+              type: displayType
            };
         });
         setLogs(formattedLogs);
@@ -85,7 +99,7 @@ export default function WalletScreen() {
       <View style={styles.logSection}>
          <Text style={styles.sectionTitle}>近期账单明细</Text>
          {loading ? (
-            <ActivityIndicator color="#0066FF" style={{marginTop: 50}} />
+            <ActivityIndicator color="#FFD700" style={{marginTop: 50}} />
          ) : (
             <FlatList
               data={logs}

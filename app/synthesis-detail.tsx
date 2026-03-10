@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -19,14 +19,20 @@ export default function SynthesisDetailScreen() {
   const [showPicker, setShowPicker] = useState(false);
   const [activeReqIndex, setActiveReqIndex] = useState<number | null>(null);
   const [myIdleNfts, setMyIdleNfts] = useState<any[]>([]);
-  const [tempSelectedNfts, setTempSelectedNfts] = useState<string[]>([]); // 弹窗内临时选择的状态
-  
-  // 最终确认的材料槽状态
+  const [tempSelectedNfts, setTempSelectedNfts] = useState<string[]>([]);
   const [selectedNfts, setSelectedNfts] = useState<Record<number, string[]>>({});
 
-  useEffect(() => {
-    fetchDetail();
-  }, [id]);
+  // 🌟 高级弹窗状态 (替代原生的 Alert)
+  const [confirmModal, setConfirmModal] = useState(false);
+  const [resultModal, setResultModal] = useState<{title: string, msg: string} | null>(null);
+  const [toastMsg, setToastMsg] = useState('');
+
+  useEffect(() => { fetchDetail(); }, [id]);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 2500);
+  };
 
   const fetchDetail = async () => {
     try {
@@ -45,19 +51,15 @@ export default function SynthesisDetailScreen() {
       if (reqErr) throw reqErr;
       setRequirements(reqs || []);
     } catch (err: any) {
-      Alert.alert('获取配方失败', err.message);
-      router.back();
-    } finally {
-      setLoading(false);
-    }
+      showToast(`获取配方失败: ${err.message}`);
+      setTimeout(() => router.back(), 1500);
+    } finally { setLoading(false); }
   };
 
-  // 打开底部选材面板
   const openMaterialPicker = async (reqIndex: number) => {
     setActiveReqIndex(reqIndex);
     setShowPicker(true);
     setMyIdleNfts([]);
-    // 将已确认的选择同步到临时状态，方便回显
     setTempSelectedNfts(selectedNfts[reqIndex] || []);
     
     const req = requirements[reqIndex];
@@ -77,7 +79,6 @@ export default function SynthesisDetailScreen() {
     } catch (e) { console.error(e); }
   };
 
-  // 弹窗内的单选/取消逻辑
   const toggleTempSelection = (nftId: string) => {
     if (activeReqIndex === null) return;
     const req = requirements[activeReqIndex];
@@ -86,28 +87,35 @@ export default function SynthesisDetailScreen() {
       setTempSelectedNfts(tempSelectedNfts.filter(id => id !== nftId));
     } else {
       if (tempSelectedNfts.length >= req.req_count) {
-         Alert.alert('提示', `最多只需选择 ${req.req_count} 个`);
-         return;
+         return showToast(`最多只需选择 ${req.req_count} 个`);
       }
       setTempSelectedNfts([...tempSelectedNfts, nftId]);
     }
   };
 
-  // 确认注入，把临时状态写入主状态
   const confirmSelection = () => {
     if (activeReqIndex === null) return;
     setSelectedNfts({ ...selectedNfts, [activeReqIndex]: tempSelectedNfts });
     setShowPicker(false);
   };
 
-  const handleExecute = async () => {
-    let allNftsToBurn: string[] = [];
+  // 🌟 点击“确认融合”时的初级拦截
+  const handlePreExecute = () => {
     for (let i = 0; i < requirements.length; i++) {
       const selected = selectedNfts[i] || [];
       if (selected.length < requirements[i].req_count) {
-        return Alert.alert('提示', '请填满所有要求的材料槽！');
+        return showToast('⚠️ 请填满所有要求的材料槽！');
       }
-      allNftsToBurn = [...allNftsToBurn, ...selected];
+    }
+    // 弹出防坑二次确认窗
+    setConfirmModal(true);
+  };
+
+  // 🌟 核心：执行真正的底层融合 (物理烧卡 + 发放新卡)
+  const executeSynthesis = async () => {
+    let allNftsToBurn: string[] = [];
+    for (let i = 0; i < requirements.length; i++) {
+      allNftsToBurn = [...allNftsToBurn, ...(selectedNfts[i] || [])];
     }
 
     setSynthesizing(true);
@@ -120,11 +128,14 @@ export default function SynthesisDetailScreen() {
       });
       if (error) throw error;
       
-      Alert.alert('🧬 融合成功', `材料已消耗！恭喜获得【${eventData.target_collection.name}】！`, [
-        { text: '查看金库', onPress: () => router.replace('/(tabs)/profile') }
-      ]);
+      setConfirmModal(false);
+      setResultModal({
+         title: '🧬 融合成功',
+         msg: `您放入的材料已被永远粉碎，残渣凝结成了极其稀有的【${eventData.target_collection.name}】！已打入您的金库。`
+      });
     } catch (err: any) {
-      Alert.alert('失败', err.message);
+      setConfirmModal(false);
+      showToast(`融合失败: ${err.message}`);
     } finally {
       setSynthesizing(false);
     }
@@ -134,15 +145,15 @@ export default function SynthesisDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* 顶部导航 */}
       <View style={styles.navBar}>
         <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}><Text style={styles.iconText}>〈 </Text></TouchableOpacity>
         <Text style={styles.navTitle}>融合配方</Text>
         <View style={styles.navBtn} />
       </View>
 
+      {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
+
       <ScrollView contentContainerStyle={{padding: 16, alignItems: 'center'}}>
-        {/* 目标产物展示区 (参考视频顶部大图) */}
         <View style={styles.targetStage}>
            <Image source={{ uri: eventData.target_collection?.image_url || 'https://via.placeholder.com/300' }} style={styles.targetImage} />
            <View style={styles.targetInfo}>
@@ -153,7 +164,6 @@ export default function SynthesisDetailScreen() {
 
         <Text style={styles.sectionHeader}>请放入合成材料</Text>
 
-        {/* 动态材料槽列表 */}
         <View style={styles.materialsList}>
           {requirements.map((req, index) => {
             const selectedCount = (selectedNfts[index] || []).length;
@@ -169,8 +179,8 @@ export default function SynthesisDetailScreen() {
                  </View>
                  
                  <TouchableOpacity 
-                   style={[styles.addBtn, isFull ? styles.addBtnFull : null]}
-                   onPress={() => openMaterialPicker(index)}
+                    style={[styles.addBtn, isFull ? styles.addBtnFull : null]}
+                    onPress={() => openMaterialPicker(index)}
                  >
                     <Text style={[styles.addBtnText, isFull ? {color: '#FFF'} : null]}>
                       {isFull ? `已放入 (${selectedCount}/${req.req_count})` : `+ 选择材料 (${selectedCount}/${req.req_count})`}
@@ -182,16 +192,15 @@ export default function SynthesisDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* 底部确认合成按钮 */}
       <View style={styles.bottomBar}>
-         <TouchableOpacity style={styles.cyberBtn} activeOpacity={0.8} onPress={handleExecute} disabled={synthesizing}>
+         <TouchableOpacity style={styles.cyberBtn} activeOpacity={0.8} onPress={handlePreExecute} disabled={synthesizing}>
             {synthesizing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.cyberBtnText}>确认融合</Text>}
          </TouchableOpacity>
       </View>
 
-      {/* 🌟 重磅优化：底部滑出式材料选择面板 (Bottom Sheet) */}
+      {/* 底部材料选择面板 */}
       <Modal visible={showPicker} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <View style={styles.pickerOverlay}>
           <RNSafeAreaView style={styles.bottomSheet}>
              <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>选择材料</Text>
@@ -209,7 +218,7 @@ export default function SynthesisDetailScreen() {
                   <View style={{alignItems: 'center', marginTop: 50}}>
                      <Text style={{color: '#999', marginBottom: 20}}>暂无可用的此藏品</Text>
                      <TouchableOpacity style={styles.goMarketBtn} onPress={() => { setShowPicker(false); router.push('/(tabs)/market'); }}>
-                       <Text style={{color: '#0066FF', fontWeight: '800'}}>去交易集市扫货</Text>
+                       <Text style={{color: '#0066FF', fontWeight: '800'}}>去交易大盘扫货</Text>
                      </TouchableOpacity>
                   </View>
                 ) : (
@@ -226,11 +235,9 @@ export default function SynthesisDetailScreen() {
                           onPress={() => toggleTempSelection(nft.id)}
                           activeOpacity={0.9}
                         >
-                          {/* 左上角圆形复选框 */}
                           <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
                              {isSelected && <Text style={{color:'#FFF', fontSize: 10, fontWeight:'900'}}>✓</Text>}
                           </View>
-                          
                           <Image source={{ uri: thumbUrl }} style={styles.gridImg} />
                           <View style={styles.gridInfo}>
                              <Text style={styles.gridSerial}>#{String(nft.serial_number).padStart(6, '0')}</Text>
@@ -242,7 +249,6 @@ export default function SynthesisDetailScreen() {
                 )}
              </ScrollView>
 
-             {/* 底部确认栏 */}
              {activeReqIndex !== null && myIdleNfts.length > 0 && (
                 <View style={styles.sheetFooter}>
                    <TouchableOpacity 
@@ -259,6 +265,36 @@ export default function SynthesisDetailScreen() {
           </RNSafeAreaView>
         </View>
       </Modal>
+
+      {/* 🌟 融合前防坑二次确认弹窗 */}
+      <Modal visible={confirmModal} transparent animationType="fade">
+         <View style={styles.modalOverlayCenter}>
+            <View style={styles.confirmBox}>
+               <Text style={styles.confirmTitle}>⚠️ 确认启动融合</Text>
+               <Text style={styles.confirmDesc}>即将启动不可逆的基因融合序列。您刚才放入的所有材料卡将被<Text style={{color:'#FF3B30', fontWeight:'900'}}>永久物理销毁</Text>！是否继续执行？</Text>
+               <View style={styles.confirmBtnRow}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmModal(false)}><Text style={styles.cancelBtnText}>我害怕了</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.confirmBtn} onPress={executeSynthesis} disabled={synthesizing}>
+                     {synthesizing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>立即摧毁并融合</Text>}
+                  </TouchableOpacity>
+               </View>
+            </View>
+         </View>
+      </Modal>
+
+      {/* 🌟 融合成功震撼弹窗 */}
+      <Modal visible={!!resultModal} transparent animationType="fade">
+         <View style={styles.modalOverlayCenter}>
+            <View style={[styles.confirmBox, {borderColor: '#0066FF', borderWidth: 2}]}>
+               <Text style={[styles.confirmTitle, {color: '#0066FF', fontSize: 22}]}>{resultModal?.title}</Text>
+               <Text style={[styles.confirmDesc, {fontSize: 15, color: '#111', fontWeight: '800'}]}>{resultModal?.msg}</Text>
+               <TouchableOpacity style={[styles.confirmBtn, {width: '100%', backgroundColor: '#0066FF'}]} onPress={() => { setResultModal(null); router.replace('/(tabs)/profile'); }}>
+                  <Text style={styles.confirmBtnText}>去金库看新货</Text>
+               </TouchableOpacity>
+            </View>
+         </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -271,6 +307,9 @@ const styles = StyleSheet.create({
   iconText: { fontSize: 20, color: '#333' },
   navTitle: { fontSize: 17, fontWeight: '800', color: '#111' },
   
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
+  toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+
   targetStage: { width: '100%', backgroundColor: '#FFF', borderRadius: 16, padding: 16, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
   targetImage: { width: width * 0.5, height: width * 0.5, resizeMode: 'cover', borderRadius: 8, marginBottom: 16 },
   targetInfo: { alignItems: 'center' },
@@ -293,8 +332,7 @@ const styles = StyleSheet.create({
   cyberBtn: { height: 50, backgroundColor: '#0066FF', borderRadius: 25, justifyContent: 'center', alignItems: 'center', shadowColor: '#0066FF', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: {width: 0, height: 4} },
   cyberBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
 
-  // Bottom Sheet 样式
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#FFF', height: height * 0.7, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderColor: '#F0F0F0' },
   sheetTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
@@ -312,5 +350,15 @@ const styles = StyleSheet.create({
   
   sheetFooter: { padding: 20, borderTopWidth: 1, borderColor: '#F0F0F0', backgroundColor: '#FFF' },
   confirmPickBtn: { height: 50, backgroundColor: '#0066FF', borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
-  confirmPickText: { color: '#FFF', fontSize: 16, fontWeight: '900' }
+  confirmPickText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
+
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
+  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 16 },
+  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#F5F5F5', alignItems: 'center' },
+  cancelBtnText: { color: '#666', fontSize: 15, fontWeight: '800' },
+  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FF3B30', alignItems: 'center' },
+  confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });
