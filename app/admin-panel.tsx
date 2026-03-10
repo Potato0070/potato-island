@@ -4,7 +4,8 @@ import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
-type AdminTab = '资产调控' | '快照空投' | '全局参数' | '藏品发新' | '进化配置' | '王国公告' | '神之手';
+// 🌟 扩容了 "新增系列" Tab
+type AdminTab = '资产调控' | '新增系列' | '快照空投' | '全局参数' | '藏品发新' | '进化配置' | '王国公告' | '神之手';
 interface CategoryItem { id: number; name: string; sort_order: number; }
 
 export default function AdminPanelScreen() {
@@ -14,11 +15,9 @@ export default function AdminPanelScreen() {
   const [adminId, setAdminId] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   
-  // 核心数据源
   const [collections, setCollections] = useState<any[]>([]);
   const [adminCategories, setAdminCategories] = useState<CategoryItem[]>([]);
   
-  // 看板数据
   const [launchList, setLaunchList] = useState<any[]>([]);
   const [synthesisList, setSynthesisList] = useState<any[]>([]);
   const [announceList, setAnnounceList] = useState<any[]>([]);
@@ -74,8 +73,14 @@ export default function AdminPanelScreen() {
   const [airdropTargetId, setAirdropTargetId] = useState('');
   const [airdropTargetName, setAirdropTargetName] = useState('');
 
-  // ⚙️ 全局参数配置 (系统数值)
+  // ⚙️ 全局参数配置
   const [configs, setConfigs] = useState<Record<string, string>>({});
+
+  // 🖼️ 新增系列 (创世母版)
+  const [newColName, setNewColName] = useState('');
+  const [newColImage, setNewColImage] = useState('');
+  const [newColMaxPrice, setNewColMaxPrice] = useState('');
+  const [newColCategoryId, setNewColCategoryId] = useState<number | null>(null);
 
   useFocusEffect(useCallback(() => { initAdmin(); }, []));
 
@@ -110,7 +115,6 @@ export default function AdminPanelScreen() {
           const { data: aData } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
           if (aData) setAnnounceList(aData);
 
-          // 获取系统所有参数配置
           const { data: cfgData } = await supabase.from('system_config').select('*');
           if (cfgData) {
              const cMap: Record<string, string> = {};
@@ -122,7 +126,6 @@ export default function AdminPanelScreen() {
       }
   };
 
-  // 🌟 高级选择器分发
   const openPicker = (target: typeof pickerTarget, index?: number) => {
     setPickerTarget(target);
     if (index !== undefined) setActiveReqIndex(index);
@@ -135,7 +138,7 @@ export default function AdminPanelScreen() {
     if (pickerTarget === 'synTarget') { setTargetColId(col.id); setTargetColName(col.name); }
     if (pickerTarget === 'mint') { setMintColId(col.id); setMintColName(col.name); }
     if (pickerTarget === 'airdropTarget') { setAirdropTargetId(col.id); setAirdropTargetName(col.name); }
-    if (pickerTarget === 'configSign') { handleSaveConfig('sign_reward_col_id', col.id); } // 选择签到奖励藏品
+    if (pickerTarget === 'configSign') { handleSaveConfig('sign_reward_col_id', col.id); } 
     if (pickerTarget === 'airdropReq') { 
         if(!airdropReqs.find(r => r.id === col.id)) setAirdropReqs([...airdropReqs, {id: col.id, name: col.name}]); 
     }
@@ -159,12 +162,38 @@ export default function AdminPanelScreen() {
     setShowTimePicker(false);
   };
 
+  // ================= 🖼️ 创建全新藏品母版 =================
+  const handleCreateCollection = async () => {
+      if (!newColName || !newColImage || !newColCategoryId) {
+          return Alert.alert('提示', '请填写名称、图片链接，并选择至少一个归属分区！');
+      }
+      setPublishing(true);
+      try {
+          const { error } = await supabase.from('collections').insert([{
+              name: newColName,
+              image_url: newColImage,
+              category_id: newColCategoryId,
+              max_consign_price: parseFloat(newColMaxPrice) || null,
+              total_minted: 0,
+              circulating_supply: 0,
+              is_tradeable: false // 默认不流通，等发售或空投再由玩家决定
+          }]);
+          if (error) throw error;
+          Alert.alert('✅ 缔造成功', `全新藏品【${newColName}】的母版已成功铸造！\n现在您可以去"发新大厅"发售，或去"神之手"直接印钞了！`);
+          setNewColName(''); setNewColImage(''); setNewColMaxPrice(''); setNewColCategoryId(null);
+          fetchData();
+      } catch (err: any) {
+          Alert.alert('创建失败', err.message);
+      } finally {
+          setPublishing(false);
+      }
+  };
+
   // ================= ⚙️ 动态全局参数保存 =================
   const handleSaveConfig = async (key: string, val: string) => {
       if(!val) return;
       setPublishing(true);
       try {
-         // 先查是否存在
          const { data: exist } = await supabase.from('system_config').select('id').eq('key', key).single();
          if (exist) {
              await supabase.from('system_config').update({ value: val }).eq('key', key);
@@ -185,18 +214,15 @@ export default function AdminPanelScreen() {
               setPublishing(true);
               try {
                   const reqIds = airdropReqs.map(r => r.id);
-                  // 1. 抓取所有匹配的闲置藏品
                   const { data: userNfts } = await supabase.from('nfts').select('owner_id, collection_id').in('collection_id', reqIds).eq('status', 'idle');
                   if (!userNfts || userNfts.length === 0) throw new Error('全网无人持有该组合');
 
-                  // 2. 按用户分组盘点数量
                   const userColCounts: Record<string, Record<string, number>> = {};
                   userNfts.forEach(nft => {
                      if (!userColCounts[nft.owner_id]) userColCounts[nft.owner_id] = {};
                      userColCounts[nft.owner_id][nft.collection_id] = (userColCounts[nft.owner_id][nft.collection_id] || 0) + 1;
                   });
 
-                  // 3. 计算向下取整的组合数
                   const { data: rewardCol } = await supabase.from('collections').select('total_minted').eq('id', airdropTargetId).single();
                   let currentMinted = rewardCol?.total_minted || 0;
                   
@@ -212,12 +238,10 @@ export default function AdminPanelScreen() {
                       }
 
                       if (combos > 0) {
-                          // 发货
                           for(let i=0; i<combos; i++) {
                               currentMinted++;
                               newNfts.push({ collection_id: airdropTargetId, owner_id: userId, serial_number: currentMinted.toString(), status: 'idle' });
                           }
-                          // 发信箱
                           messageInserts.push({
                               user_id: userId,
                               title: '🎁 史诗级快照空投',
@@ -228,18 +252,13 @@ export default function AdminPanelScreen() {
 
                   if (newNfts.length === 0) throw new Error('没有用户满足完整组合条件');
 
-                  // 4. 批量写入数据库
                   await supabase.from('nfts').insert(newNfts);
                   await supabase.from('collections').update({ total_minted: currentMinted, circulating_supply: currentMinted }).eq('id', airdropTargetId);
                   await supabase.from('messages').insert(messageInserts);
 
                   Alert.alert('✅ 空投大获成功', `共计向全岛空投了 ${newNfts.length} 份藏品！`);
                   setAirdropReqs([]); setAirdropTargetId(''); setAirdropTargetName('');
-              } catch (e: any) {
-                  Alert.alert('空投失败', e.message);
-              } finally {
-                  setPublishing(false);
-              }
+              } catch (e: any) { Alert.alert('空投失败', e.message); } finally { setPublishing(false); }
           }}
       ]);
   };
@@ -384,7 +403,7 @@ export default function AdminPanelScreen() {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabRowOuter} contentContainerStyle={styles.tabRow}>
-        {(['资产调控', '全局参数', '快照空投', '藏品发新', '进化配置', '王国公告', '神之手'] as AdminTab[]).map(t => (
+        {(['资产调控', '新增系列', '快照空投', '全局参数', '藏品发新', '进化配置', '王国公告', '神之手'] as AdminTab[]).map(t => (
           <TouchableOpacity key={t} style={[styles.tabBtn, activeTab === t && styles.tabBtnActive]} onPress={() => setActiveTab(t)}>
             <Text style={[styles.tabText, activeTab === t && styles.tabTextActive]}>{t}</Text>
           </TouchableOpacity>
@@ -394,15 +413,50 @@ export default function AdminPanelScreen() {
       {loading ? <ActivityIndicator size="large" color="#FFD700" style={{marginTop: 50}} /> : (
         <View style={{flex: 1}}>
           
-          {/* 💎 资产调控 Tab */}
           {activeTab === '资产调控' && (
             <FlatList data={collections} renderItem={renderAssetCard} keyExtractor={item => item.id} contentContainerStyle={{ padding: 16, paddingBottom: 100 }} style={{flex: 1}} ListEmptyComponent={<Text style={{color: '#888', textAlign: 'center', marginTop: 50}}>暂无藏品数据</Text>} />
           )}
 
-          {/* 其他 Tabs */}
           {activeTab !== '资产调控' && (
             <ScrollView style={{flex: 1}} contentContainerStyle={{padding: 16, paddingBottom: 100}}>
               
+              {/* 🖼️ 新增系列 Tab */}
+              {activeTab === '新增系列' && (
+                 <View>
+                    <View style={styles.cheatBox}>
+                       <Text style={styles.sectionTitle}>🖼️ 铸造全新藏品母版</Text>
+                       <Text style={{color:'#888', fontSize: 12, marginBottom:16}}>在这里创建一个图鉴记录，随后即可去"发新大厅"安排发售，或者在"神之手"里虚空印钞。</Text>
+                       
+                       <TextInput style={styles.inputDark} placeholder="藏品名称 (例: 皇家土豆骑士)" placeholderTextColor="#666" value={newColName} onChangeText={setNewColName} />
+                       
+                       <Text style={{color:'#FFF', fontWeight:'800', marginBottom:8}}>图片链接 (支持网络图片URL)</Text>
+                       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 16}}>
+                          {newColImage ? (
+                              <Image source={{uri: newColImage}} style={{width: 50, height: 50, borderRadius: 8, marginRight: 12, backgroundColor: '#333'}} />
+                          ) : (
+                              <View style={{width: 50, height: 50, borderRadius: 8, backgroundColor: '#333', marginRight: 12, justifyContent: 'center', alignItems: 'center'}}><Text style={{color: '#666'}}>图</Text></View>
+                          )}
+                          <TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="https://..." placeholderTextColor="#666" value={newColImage} onChangeText={setNewColImage} />
+                       </View>
+
+                       <Text style={{color:'#FFF', fontWeight:'800', marginBottom:8}}>归属大盘分区</Text>
+                       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 16}}>
+                          {adminCategories.map(cat => (
+                             <TouchableOpacity key={cat.id} style={[styles.catChip, newColCategoryId === cat.id && styles.catChipActive]} onPress={() => setNewColCategoryId(cat.id)}>
+                                <Text style={[styles.catChipText, newColCategoryId === cat.id && styles.catChipTextActive]}>{cat.name}</Text>
+                             </TouchableOpacity>
+                          ))}
+                       </ScrollView>
+
+                       <TextInput style={styles.inputDark} placeholder="设置大盘最高限价 (可空)" placeholderTextColor="#666" keyboardType="decimal-pad" value={newColMaxPrice} onChangeText={setNewColMaxPrice} />
+
+                       <TouchableOpacity style={[styles.goldBtn, {marginTop: 10}]} onPress={handleCreateCollection} disabled={publishing}>
+                          <Text style={styles.goldBtnText}>{publishing ? '铸造中...' : '✨ 确认铸造图鉴'}</Text>
+                       </TouchableOpacity>
+                    </View>
+                 </View>
+              )}
+
               {/* ⚙️ 全局参数配置 Tab */}
               {activeTab === '全局参数' && (
                 <View>
@@ -646,6 +700,11 @@ const styles = StyleSheet.create({
   reqCountInput: { width: 60, backgroundColor: '#111', color: '#FFF', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#333', textAlign: 'center', marginLeft: 10 },
   removeBtn: { width: 40, height: 40, backgroundColor: '#FF3B30', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
   addReqBtn: { width: '100%', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#FFD700', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginTop: 10 },
+
+  catChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#333', marginRight: 10 },
+  catChipActive: { backgroundColor: '#00E5FF' },
+  catChipText: { color: '#888', fontWeight: '800' },
+  catChipTextActive: { color: '#111', fontWeight: '900' },
 
   modalOverlayFull: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   modalContentFull: { backgroundColor: '#1C1C1E', height: '80%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16 },
