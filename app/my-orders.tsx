@@ -12,13 +12,14 @@ export default function MyOrdersScreen() {
   const [listData, setListData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 🌟 定制高级弹窗状态
+  // 高级弹窗状态
   const [cancelModal, setCancelModal] = useState<{visible: boolean, orderId: string, amount: number} | null>(null);
-  
-  // 🌟 新增：加价竞拍弹窗状态
   const [addPriceModal, setAddPriceModal] = useState<{visible: boolean, order: any} | null>(null);
-  const [newPrice, setNewPrice] = useState('');
   
+  // 🌟 新增：取消寄售弹窗状态
+  const [cancelSaleModal, setCancelSaleModal] = useState<{visible: boolean, nftId: string} | null>(null);
+  
+  const [newPrice, setNewPrice] = useState('');
   const [processing, setProcessing] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
@@ -54,6 +55,7 @@ export default function MyOrdersScreen() {
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
+  // 🌟 核心逻辑：取消求购单 (退钱)
   const handleCancelBuyOrder = async () => {
     if (!cancelModal) return;
     setProcessing(true);
@@ -70,7 +72,25 @@ export default function MyOrdersScreen() {
     } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setProcessing(false); }
   };
 
-  // 🌟 核心逻辑：加价竞拍，补缴差价
+  // 🌟 核心逻辑：取消现货寄售 (状态改回 idle)
+  const handleCancelSale = async () => {
+    if (!cancelSaleModal) return;
+    setProcessing(true);
+    try {
+      // 状态恢复为空闲，同时可以把价格清空（设为null）
+      await supabase.from('nfts').update({ status: 'idle', consign_price: null }).eq('id', cancelSaleModal.nftId);
+
+      setCancelSaleModal(null);
+      showToast('✅ 寄售已取消，藏品已退回金库锁定');
+      fetchDataByTab('寄售中'); // 刷新当前列表
+    } catch (err: any) { 
+      showToast(`取消失败: ${err.message}`); 
+    } finally { 
+      setProcessing(false); 
+    }
+  };
+
+  // 加价竞拍，补缴差价
   const handleIncreasePrice = async () => {
     if (!addPriceModal) return;
     const order = addPriceModal.order;
@@ -80,15 +100,13 @@ export default function MyOrdersScreen() {
     
     setProcessing(true);
     try {
-      const diffAmount = (p - order.price) * order.quantity; // 需要补缴的总差价
+      const diffAmount = (p - order.price) * order.quantity; 
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user?.id).single();
       
       if ((profile?.potato_coin_balance || 0) < diffAmount) throw new Error('钱包余额不足以支付加价差额！');
 
-      // 1. 扣除差价
       await supabase.from('profiles').update({ potato_coin_balance: (profile?.potato_coin_balance || 0) - diffAmount }).eq('id', user?.id);
-      // 2. 更新订单价格 (并刷新 created_at 以便在同价位中排在前面，如果你有按照时间排序的逻辑的话)
       await supabase.from('buy_orders').update({ price: p, created_at: new Date().toISOString() }).eq('id', order.id);
 
       setAddPriceModal(null);
@@ -101,11 +119,16 @@ export default function MyOrdersScreen() {
   const renderItem = ({ item }: { item: any }) => {
     const isSelling = activeTab === '寄售中';
     const isBuying = activeTab === '求购中';
-    const imgUrl = item.collections?.image_url || 'https://via.placeholder.com/150';
-    const name = item.collections?.name || '未知藏品';
+    
+    // 兼容可能为数组的 collections
+    const colName = Array.isArray(item.collections) ? item.collections[0]?.name : item.collections?.name;
+    const colImg = Array.isArray(item.collections) ? item.collections[0]?.image_url : item.collections?.image_url;
+    
+    const imgUrl = colImg || 'https://via.placeholder.com/150';
+    const name = colName || '未知藏品';
     const serial = (isSelling || isBuying) ? (item.serial_number || '排队中') : item.nft_id?.substring(0,6);
     const price = isSelling ? item.consign_price : item.price;
-    const timeStr = isSelling || isBuying ? '有效挂单中...' : new Date(item.transfer_time).toLocaleString();
+    const timeStr = isSelling || isBuying ? '有效挂单中...' : new Date(item.transfer_time || item.created_at).toLocaleString();
 
     return (
       <View style={styles.card}>
@@ -121,11 +144,21 @@ export default function MyOrdersScreen() {
               <Text style={styles.serial}>{isBuying ? `求购数量: ${item.quantity}` : `#${serial}`}</Text>
            </View>
            <View style={styles.priceBox}>
-              <Text style={styles.priceLabel}>{isSelling || isBuying ? '当前出价' : '成交价'}</Text>
+              <Text style={styles.priceLabel}>{isSelling || isBuying ? (isSelling ? '一口价' : '当前出价') : '成交价'}</Text>
               <Text style={styles.price}>¥ {price}</Text>
            </View>
         </View>
 
+        {/* 🌟 寄售中：操作栏 (新增取消寄售) */}
+        {isSelling && (
+           <View style={styles.cardFooter}>
+              <TouchableOpacity style={[styles.actionBtnOutline, {borderColor: '#888'}]} onPress={() => setCancelSaleModal({visible: true, nftId: item.id})}>
+                 <Text style={[styles.actionBtnOutlineText, {color: '#888'}]}>取消寄售</Text>
+              </TouchableOpacity>
+           </View>
+        )}
+
+        {/* 求购中：操作栏 */}
         {isBuying && (
            <View style={styles.cardFooter}>
               <TouchableOpacity style={styles.actionBtnOutline} onPress={() => setAddPriceModal({visible: true, order: item})}>
@@ -170,7 +203,23 @@ export default function MyOrdersScreen() {
         />
       )}
 
-      {/* 🌟 加价竞拍悬浮窗 */}
+      {/* 🌟 确认取消寄售悬浮窗 */}
+      <Modal visible={!!cancelSaleModal} transparent animationType="fade">
+         <View style={styles.modalOverlay}>
+            <View style={styles.confirmBox}>
+               <Text style={styles.confirmTitle}>📦 取消寄售</Text>
+               <Text style={styles.confirmDesc}>确定要将该藏品从大盘中撤下吗？撤下后藏品将重新在您的金库中被锁定。</Text>
+               <View style={styles.confirmBtnRow}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setCancelSaleModal(null)}><Text style={styles.cancelBtnText}>再挂一会</Text></TouchableOpacity>
+                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#333'}]} onPress={handleCancelSale} disabled={processing}>
+                     {processing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认撤回</Text>}
+                  </TouchableOpacity>
+               </View>
+            </View>
+         </View>
+      </Modal>
+
+      {/* 加价竞拍悬浮窗 */}
       <Modal visible={!!addPriceModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
@@ -195,7 +244,7 @@ export default function MyOrdersScreen() {
          </View>
       </Modal>
 
-      {/* 🌟 撤销求购悬浮窗 */}
+      {/* 撤销求购悬浮窗 */}
       <Modal visible={!!cancelModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
@@ -214,7 +263,6 @@ export default function MyOrdersScreen() {
   );
 }
 
-// 样式（保持咱们一贯的高级视觉）
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F6F8' },
   navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FFF' },

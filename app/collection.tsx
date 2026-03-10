@@ -14,12 +14,15 @@ export default function CollectionScreen() {
   const [collection, setCollection] = useState<any>(null);
   const [nfts, setNfts] = useState<any[]>([]);
   const [bids, setBids] = useState<any[]>([]); 
-  const [myIdleNfts, setMyIdleNfts] = useState<any[]>([]); // 🌟 存储我的闲置现货
+  const [myIdleNfts, setMyIdleNfts] = useState<any[]>([]); // 🌟 我的闲置现货
+  const [myUserId, setMyUserId] = useState<string>(''); // 🌟 存储当前用户ID用于过滤
   
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'listed' | 'all' | 'bids'>('listed'); 
+  
+  // 🌟 核心升级：四轨 Tab 状态 ('listed'=现货, 'my_warehouse'=个人仓库, 'buy_orders'=求购大厅, 'bids'=竞价大逃杀)
+  const [activeTab, setActiveTab] = useState<'listed' | 'my_warehouse' | 'buy_orders' | 'bids'>('listed'); 
 
-  // 🌟 高级弹窗与撮合状态
+  // 高级弹窗与撮合状态
   const [matchModal, setMatchModal] = useState<{visible: boolean, bid: any} | null>(null);
   const [processing, setProcessing] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
@@ -34,11 +37,14 @@ export default function CollectionScreen() {
   const fetchData = async () => {
     try {
       setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setMyUserId(user.id);
+
       // 1. 获取系列宏观数据
       const { data: colData } = await supabase.from('collections').select('*').eq('id', id).single();
       setCollection(colData);
 
-      // 2. 获取所有卡片 (现货/图鉴)
+      // 2. 获取该系列所有未燃烧的卡片 (现货+别人锁定的+我自己的)
       const { data: nftData } = await supabase.from('nfts')
         .select('*, profiles(nickname)')
         .eq('collection_id', id)
@@ -46,7 +52,7 @@ export default function CollectionScreen() {
         .order('consign_price', { ascending: true, nullsFirst: false });
       setNfts(nftData || []);
 
-      // 3. 获取竞价求购榜数据 (买盘深度，按出价从高到低)
+      // 3. 获取求购与竞价数据 (买盘深度，出价从高到低)
       const { data: bidData } = await supabase.from('buy_orders')
         .select('*, profiles:buyer_id(nickname)')
         .eq('collection_id', id)
@@ -54,8 +60,7 @@ export default function CollectionScreen() {
         .order('price', { ascending: false });
       setBids(bidData || []);
 
-      // 4. 获取当前用户在该系列下的闲置现货 (用于"出给TA"判定)
-      const { data: { user } } = await supabase.auth.getUser();
+      // 4. 获取当前用户在该系列下的闲置现货 (用于出给TA)
       if (user) {
          const { data: myNftsData } = await supabase.from('nfts')
            .select('*')
@@ -67,24 +72,19 @@ export default function CollectionScreen() {
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
-  // 🌟 核心杀招：执行大盘撮合 (卖给TA)
   const executeMatchBid = async () => {
     if (!matchModal || myIdleNfts.length === 0) return;
     setProcessing(true);
     const bid = matchModal.bid;
-    const nftToSell = myIdleNfts[0]; // 拿金库里的一张闲置现货砸给买家
+    const nftToSell = myIdleNfts[0]; 
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
-      // 1. NFT 移交所有权给买家
       await supabase.from('nfts').update({ owner_id: bid.buyer_id, status: 'idle' }).eq('id', nftToSell.id);
-
-      // 2. 卖家收到货款 (买家的钱之前发求购时已经冻结，所以这里直接给卖家钱包加钱即可)
+      
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user?.id).single();
       await supabase.from('profiles').update({ potato_coin_balance: (profile?.potato_coin_balance || 0) + bid.price }).eq('id', user?.id);
 
-      // 3. 扣减买家的求购单需求量
       const newQuantity = bid.quantity - 1;
       if (newQuantity <= 0) {
          await supabase.from('buy_orders').update({ status: 'won', quantity: 0 }).eq('id', bid.id);
@@ -92,22 +92,24 @@ export default function CollectionScreen() {
          await supabase.from('buy_orders').update({ quantity: newQuantity }).eq('id', bid.id);
       }
 
-      // 4. 记录流转账本
       await supabase.from('transfer_logs').insert([{
          nft_id: nftToSell.id, collection_id: bid.collection_id, seller_id: user?.id, buyer_id: bid.buyer_id, price: bid.price, transfer_type: 'bid_match'
       }]);
 
       setMatchModal(null);
-      showToast('✅ 撮合成功！已将藏品卖给最高出价者！');
-      fetchData(); // 刷新所有榜单和资产
+      showToast('✅ 撮合成功！已将藏品卖出！');
+      fetchData(); 
     } catch (err: any) { 
        setMatchModal(null);
        showToast(`交易失败: ${err.message}`); 
     } finally { setProcessing(false); }
   };
 
-  const displayedNfts = activeTab === 'listed' ? nfts.filter(n => n.status === 'listed') : nfts;
+  // 🌟 数据分类过滤
+  const listedNfts = nfts.filter(n => n.status === 'listed');
+  const myWarehouseNfts = nfts.filter(n => n.owner_id === myUserId);
 
+  // 🌟 渲染：卡片列表 (现货 / 我的仓库)
   const renderNft = ({ item }: { item: any }) => {
     const isListed = item.status === 'listed';
     return (
@@ -120,7 +122,8 @@ export default function CollectionScreen() {
         </View>
         <View style={styles.nftInfo}>
           <Text style={styles.serial}>#{String(item.serial_number).padStart(6, '0')}</Text>
-          <Text style={styles.owner} numberOfLines={1}>持有者: {item.profiles?.nickname || '神秘藏友'}</Text>
+          {/* 🌟 核心拦截：强制匿名化 */}
+          <Text style={styles.owner} numberOfLines={1}>持有者: 土豆岛藏友</Text>
           {isListed ? (
              <View style={styles.priceRow}>
                 <Text style={styles.priceLabel}>一口价</Text>
@@ -129,7 +132,7 @@ export default function CollectionScreen() {
           ) : (
              <View style={styles.priceRow}>
                 <Text style={styles.priceLabel}>状态</Text>
-                <Text style={[styles.priceValue, {color: '#888', fontSize: 12}]}>非卖品</Text>
+                <Text style={[styles.priceValue, {color: '#888', fontSize: 12}]}>暂不出售</Text>
              </View>
           )}
         </View>
@@ -137,10 +140,10 @@ export default function CollectionScreen() {
     );
   };
 
+  // 🌟 渲染：求购与竞价列表
   const renderBidItem = ({ item, index }: { item: any, index: number }) => {
-    const isTop3 = index < 3;
-    // 如果我手里有货，且这个买家不是我自己，我就能看到“卖给TA”的按钮
-    const canSellToHim = myIdleNfts.length > 0 && item.buyer_id !== myIdleNfts[0]?.owner_id;
+    const isTop3 = activeTab === 'bids' && index < 3;
+    const canSellToHim = myIdleNfts.length > 0 && item.buyer_id !== myUserId;
 
     return (
       <View style={styles.bidCard}>
@@ -148,16 +151,16 @@ export default function CollectionScreen() {
             <Text style={[styles.rankText, isTop3 ? {color: '#111'} : {color: '#888'}]}>{index + 1}</Text>
          </View>
          <View style={{flex: 1}}>
-            <Text style={styles.bidderName}>{item.profiles?.nickname || '神秘大户'}</Text>
+            {/* 🌟 同样匿名化求购者 */}
+            <Text style={styles.bidderName}>求购大户</Text>
             <Text style={styles.bidInfo}>需求: {item.quantity} | 冻结: ¥{(item.price * item.quantity).toFixed(2)}</Text>
          </View>
          <View style={{alignItems: 'flex-end'}}>
             <Text style={styles.bidPriceLabel}>单件出价</Text>
             <Text style={styles.bidPriceValue}>¥{item.price}</Text>
-            {/* 🌟 核心杀招：出供给 TA 按钮 */}
             {canSellToHim && (
                <TouchableOpacity style={styles.matchBtn} onPress={() => setMatchModal({visible: true, bid: item})}>
-                  <Text style={styles.matchBtnText}>卖给TA</Text>
+                  <Text style={styles.matchBtnText}>出给TA</Text>
                </TouchableOpacity>
             )}
          </View>
@@ -190,7 +193,7 @@ export default function CollectionScreen() {
                      <View style={styles.statDivider} />
                      <View style={styles.statItem}>
                         <Text style={styles.statValue}>{collection?.on_sale_count || 0}</Text>
-                        <Text style={styles.statLabel}>在售数量</Text>
+                        <Text style={styles.statLabel}>在售现货</Text>
                      </View>
                      <View style={styles.statDivider} />
                      <View style={styles.statItem}>
@@ -206,39 +209,31 @@ export default function CollectionScreen() {
       {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
       <View style={styles.listSection}>
-         {/* 三栏切换 Tabs */}
+         {/* 🌟 核心：四轨切换 Tabs */}
          <View style={styles.tabsRow}>
             <TouchableOpacity style={[styles.tabBtn, activeTab === 'listed' && styles.tabBtnActive]} onPress={() => setActiveTab('listed')}>
-               <Text style={[styles.tabText, activeTab === 'listed' && styles.tabTextActive]}>现货 ({collection?.on_sale_count || 0})</Text>
+               <Text style={[styles.tabText, activeTab === 'listed' && styles.tabTextActive]}>现货</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.tabBtn, activeTab === 'all' && styles.tabBtnActive]} onPress={() => setActiveTab('all')}>
-               <Text style={[styles.tabText, activeTab === 'all' && styles.tabTextActive]}>图鉴 ({nfts.length})</Text>
+            <TouchableOpacity style={[styles.tabBtn, activeTab === 'my_warehouse' && styles.tabBtnActive]} onPress={() => setActiveTab('my_warehouse')}>
+               <Text style={[styles.tabText, activeTab === 'my_warehouse' && styles.tabTextActive]}>个人仓库</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.tabBtn, activeTab === 'buy_orders' && styles.tabBtnActive]} onPress={() => setActiveTab('buy_orders')}>
+               <Text style={[styles.tabText, activeTab === 'buy_orders' && styles.tabTextActive]}>求购大厅</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.tabBtn, activeTab === 'bids' && styles.tabBtnActive]} onPress={() => setActiveTab('bids')}>
-               <Text style={[styles.tabText, activeTab === 'bids' && styles.tabTextActive]}>竞价榜 ({bids.length})</Text>
+               <Text style={[styles.tabText, activeTab === 'bids' && styles.tabTextActive]}>竞价榜单</Text>
             </TouchableOpacity>
          </View>
 
-         <TouchableOpacity 
-            style={styles.fomoBanner} 
-            activeOpacity={0.8} 
-            onPress={() => router.push({pathname: '/create-buy-order', params: {colId: collection?.id}})}
-         >
-            <Text style={styles.fomoText}>没有心仪现货或嫌贵？点此发布求购单，抢先拿下心仪藏品 〉</Text>
+         {/* FOMO 横幅 */}
+         <TouchableOpacity style={styles.fomoBanner} activeOpacity={0.8} onPress={() => router.push({pathname: '/create-buy-order', params: {colId: collection?.id}})}>
+            <Text style={styles.fomoText}>点击此处发布求购/竞价单，抢先拿下心仪藏品 〉</Text>
          </TouchableOpacity>
 
-         {activeTab === 'bids' ? (
+         {/* 🌟 条件渲染列表 */}
+         {activeTab === 'listed' ? (
             <FlatList 
-               data={bids}
-               keyExtractor={item => item.id}
-               contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-               showsVerticalScrollIndicator={false}
-               ListEmptyComponent={<Text style={{textAlign: 'center', color: '#999', marginTop: 40}}>当前系列暂无人出价竞拍</Text>}
-               renderItem={renderBidItem}
-            />
-         ) : (
-            <FlatList 
-               data={displayedNfts} 
+               data={listedNfts} 
                renderItem={renderNft} 
                keyExtractor={item => item.id} 
                numColumns={2}
@@ -248,19 +243,48 @@ export default function CollectionScreen() {
                ListEmptyComponent={
                   <View style={{alignItems: 'center', marginTop: 40}}>
                      <Text style={{fontSize: 40, marginBottom: 10}}>🪹</Text>
-                     <Text style={{color: '#999'}}>{activeTab === 'listed' ? '当前系列无现货，快去发布求购吧！' : '该系列尚未发行任何卡片'}</Text>
+                     <Text style={{color: '#999'}}>当前系列被大户扫空啦，快去发布求购！</Text>
                   </View>
                }
+            />
+         ) : activeTab === 'my_warehouse' ? (
+            <FlatList 
+               data={myWarehouseNfts} 
+               renderItem={renderNft} 
+               keyExtractor={item => item.id} 
+               numColumns={2}
+               contentContainerStyle={{ padding: 16, paddingBottom: 100 }} 
+               columnWrapperStyle={{ justifyContent: 'space-between' }}
+               showsVerticalScrollIndicator={false}
+               ListEmptyComponent={
+                  <View style={{alignItems: 'center', marginTop: 40}}>
+                     <Text style={{fontSize: 40, marginBottom: 10}}>📦</Text>
+                     <Text style={{color: '#999'}}>您尚未拥有该系列的藏品</Text>
+                  </View>
+               }
+            />
+         ) : (
+            <FlatList 
+               data={bids}
+               keyExtractor={item => item.id}
+               contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+               showsVerticalScrollIndicator={false}
+               ListEmptyComponent={
+                  <View style={{alignItems: 'center', marginTop: 40}}>
+                     <Text style={{fontSize: 40, marginBottom: 10}}>📉</Text>
+                     <Text style={{color: '#999'}}>暂无老板出价，点击上方横幅首发求购！</Text>
+                  </View>
+               }
+               renderItem={renderBidItem}
             />
          )}
       </View>
 
-      {/* 🌟 撮合交易确认弹窗 */}
       <Modal visible={!!matchModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
                <Text style={styles.confirmTitle}>🤝 确认出让藏品</Text>
-               <Text style={styles.confirmDesc}>您确定要将金库中的一件闲置现货，以 <Text style={{fontWeight:'900', color:'#FF3B30'}}>¥{matchModal?.bid?.price}</Text> 的价格卖给该买家吗？交易将立即完成！</Text>
+               <Text style={styles.confirmDesc}>您确定要将金库中的一件闲置现货，以 <Text style={{fontWeight:'900', color:'#FF3B30'}}>¥{matchModal?.bid?.price}</Text> 卖给该买家吗？</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setMatchModal(null)}><Text style={styles.cancelBtnText}>再想想</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.confirmBtn} onPress={executeMatchBid} disabled={processing}>
@@ -293,13 +317,14 @@ const styles = StyleSheet.create({
   statDivider: { width: 1, height: 20, backgroundColor: 'rgba(255,255,255,0.2)' },
 
   listSection: { flex: 1, backgroundColor: '#F5F6F8', borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -20, overflow: 'hidden' },
-  tabsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 20, paddingBottom: 10, backgroundColor: '#FFF' },
-  tabBtn: { paddingBottom: 8, marginRight: 24, borderBottomWidth: 2, borderColor: 'transparent' },
+  tabsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 20, paddingBottom: 10, backgroundColor: '#FFF', justifyContent: 'space-between' },
+  tabBtn: { paddingBottom: 8, borderBottomWidth: 2, borderColor: 'transparent', flex: 1, alignItems: 'center' },
   tabBtnActive: { borderColor: '#111' },
-  tabText: { fontSize: 15, color: '#888', fontWeight: '600' },
+  tabText: { fontSize: 13, color: '#888', fontWeight: '600' },
   tabTextActive: { color: '#111', fontWeight: '900' },
+  
   fomoBanner: { backgroundColor: '#FFF5E6', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: '#FFE4B5' },
-  fomoText: { color: '#D49A36', fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  fomoText: { color: '#D49A36', fontSize: 11, fontWeight: '700', textAlign: 'center' },
 
   nftCard: { width: CARD_WIDTH, backgroundColor: '#FFF', borderRadius: 12, marginBottom: 16, padding: 8, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 1 },
   imgBox: { width: '100%', aspectRatio: 1, backgroundColor: '#F5F5F5', borderRadius: 8, overflow: 'hidden', marginBottom: 8 },
