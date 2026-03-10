@@ -21,7 +21,6 @@ export default function AdminPanelScreen() {
   const [announceList, setAnnounceList] = useState<any[]>([]);
   const [stats, setStats] = useState({ users: 0, transfers: 0, nfts: 0 });
 
-  // 🌟 统一个性化反馈矩阵
   const [toastMsg, setToastMsg] = useState('');
   const [successModal, setSuccessModal] = useState<{title: string, msg: string} | null>(null);
   const [confirmAction, setConfirmAction] = useState<{title: string, desc: string, confirmText: string, isDanger: boolean, action: () => Promise<void>} | null>(null);
@@ -120,6 +119,7 @@ export default function AdminPanelScreen() {
           const { data: sData } = await supabase.from('synthesis_events').select('*, collection:target_collection_id(name)').order('created_at', { ascending: false });
           if (sData) setSynthesisList(sData);
 
+          // 🌟 公告抓取
           const { data: aData } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
           if (aData) setAnnounceList(aData);
 
@@ -228,7 +228,6 @@ export default function AdminPanelScreen() {
      setEditCategoryIds(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
   };
 
-  // ================= 🖼️ 创建全新藏品母版 (修复点在这里) =================
   const handleCreateCollection = () => {
       if (!newColName || !newColImage || newColCategoryIds.length === 0) { return showToast('请填写名称、图片并选择至少一个分区'); }
       setConfirmAction({
@@ -237,18 +236,8 @@ export default function AdminPanelScreen() {
           confirmText: '确认铸造',
           isDanger: false,
           action: async () => {
-              // 🌟 修复：如果没填最高限价，则默认传 0，避免 null 报错
               const finalPrice = parseFloat(newColMaxPrice) || 0; 
-              
-              const { error } = await supabase.from('collections').insert([{ 
-                  name: newColName, 
-                  image_url: newColImage, 
-                  category_ids: newColCategoryIds, 
-                  max_consign_price: finalPrice, 
-                  total_minted: 0, 
-                  circulating_supply: 0, 
-                  is_tradeable: false 
-              }]);
+              const { error } = await supabase.from('collections').insert([{ name: newColName, image_url: newColImage, category_ids: newColCategoryIds, max_consign_price: finalPrice, total_minted: 0, circulating_supply: 0, is_tradeable: false }]);
               if (error) throw error;
               setNewColName(''); setNewColImage(''); setNewColMaxPrice(''); setNewColCategoryIds([]); fetchData();
               setSuccessModal({title: '✅ 缔造成功', msg: `全新藏品母版已铸造！请前往发新或印钞。`});
@@ -371,6 +360,7 @@ export default function AdminPanelScreen() {
       } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setPublishing(false); }
   };
 
+  // ================= 📣 公告发布与管理 =================
   const handlePublishAnnouncement = () => {
     if (!announceTitle || !announceContent || !announceImage) return showToast('请填写完整');
     setConfirmAction({
@@ -385,6 +375,21 @@ export default function AdminPanelScreen() {
             showToast('✅ 旨意已下达');
         }
     });
+  };
+
+  // 🌟 新增：动态切换公告置顶状态
+  const toggleAnnounceFeatured = async (id: string, currentStatus: boolean) => {
+      setPublishing(true);
+      try {
+          const { error } = await supabase.from('announcements').update({ is_featured: !currentStatus }).eq('id', id);
+          if (error) throw error;
+          fetchData();
+          showToast(!currentStatus ? '✅ 已设为精华置顶' : '✅ 已取消置顶');
+      } catch (err: any) {
+          showToast(`操作失败: ${err.message}`);
+      } finally {
+          setPublishing(false);
+      }
   };
 
   const handleDeleteAnnouncement = (id: string) => {
@@ -712,6 +717,7 @@ export default function AdminPanelScreen() {
                 </View>
               )}
 
+              {/* 🌟 核心升级：公告管理支持【置顶开关】 */}
               {activeTab === '王国公告' && (
                 <View>
                   <View style={styles.cheatBox}>
@@ -722,25 +728,49 @@ export default function AdminPanelScreen() {
                     <TextInput style={[styles.inputDark, {height: 150, textAlignVertical: 'top'}]} placeholder="输入旨意正文..." placeholderTextColor="#666" multiline value={announceContent} onChangeText={setAnnounceContent} />
                     <TouchableOpacity style={styles.goldBtn} onPress={handlePublishAnnouncement} disabled={publishing}><Text style={styles.goldBtnText}>传达至全岛</Text></TouchableOpacity>
                   </View>
-                  {announceList.map(item => (<View key={item.id} style={styles.manageCard}><View style={{flex: 1}}><Text style={{color: item.author_name === '土豆清道夫' ? '#FF3B30' : '#FFF', fontWeight: '800'}}>{item.title}</Text></View><TouchableOpacity style={styles.delBtn} onPress={() => handleDeleteAnnouncement(item.id)}><Text style={{color:'#FFF'}}>🗑️</Text></TouchableOpacity></View>))}
+                  
+                  <Text style={{color: '#888', fontSize: 12, marginBottom: 10}}>历史旨意大盘 (点击按钮可切换置顶状态)</Text>
+                  {announceList.map(item => (
+                    <View key={item.id} style={styles.manageCard}>
+                      <View style={{flex: 1}}>
+                         <Text style={{color: item.author_name === '土豆清道夫' ? '#FF3B30' : '#FFF', fontWeight: '800'}} numberOfLines={1}>
+                            {item.is_featured ? '🔥 ' : ''}{item.title}
+                         </Text>
+                         <Text style={{color: '#888', fontSize: 11, marginTop: 4}} numberOfLines={1}>
+                            {item.author_name} | {new Date(item.created_at).toLocaleString()}
+                         </Text>
+                      </View>
+                      
+                      {/* 🌟 独立的置顶切换按钮 */}
+                      <TouchableOpacity 
+                         style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: item.is_featured ? '#FFD700' : '#555', marginRight: 10 }}
+                         onPress={() => toggleAnnounceFeatured(item.id, item.is_featured)}
+                         disabled={publishing}
+                      >
+                         <Text style={{ color: item.is_featured ? '#FFD700' : '#CCC', fontSize: 11, fontWeight: '700' }}>
+                            {item.is_featured ? '已置顶' : '设为置顶'}
+                         </Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity style={[styles.delBtn, {marginLeft: 0}]} onPress={() => handleDeleteAnnouncement(item.id)}>
+                         <Text style={{color:'#FFF'}}>🗑️</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
                 </View>
               )}
 
               {activeTab === '神之手' && (
                 <View>
                   <View style={styles.cheatBox}><Text style={styles.sectionTitle}>🖨️ 虚空印钞 (派发给自己)</Text><TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('mint')}><Text style={styles.pickerBtnText}>{mintColName ? `📍 选定: ${mintColName}` : '+ 选择要印制的藏品'}</Text></TouchableOpacity><View style={{flexDirection: 'row', marginTop: 10}}><TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="数量" placeholderTextColor="#666" keyboardType="number-pad" value={mintAmount} onChangeText={setMintAmount} /><TouchableOpacity style={[styles.goldBtn, {width: 100, marginLeft: 10, marginTop: 0}]} onPress={handleMintCustom}><Text style={styles.goldBtnText}>印发</Text></TouchableOpacity></View></View>
-                  
                   <View style={styles.cheatBox}><Text style={styles.sectionTitle}>💰 篡改个人资金</Text><View style={{flexDirection: 'row', marginTop: 10}}><TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="覆盖当前余额" placeholderTextColor="#666" keyboardType="decimal-pad" value={newBalance} onChangeText={setNewBalance} /><TouchableOpacity style={[styles.goldBtn, {width: 80, marginLeft: 10, marginTop: 0}]} onPress={handleTamperBalance}><Text style={styles.goldBtnText}>注入</Text></TouchableOpacity></View></View>
                   
-                  {/* 🌟 核心：超级分区管理看板 */}
                   <View style={styles.cheatBox}>
                      <Text style={styles.sectionTitle}>🗂️ 大盘分区管理</Text>
-                     
                      <View style={{flexDirection: 'row', marginTop: 10, marginBottom: 20}}>
                         <TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="新分类名称..." placeholderTextColor="#666" value={newCategoryName} onChangeText={setNewCategoryName} />
                         <TouchableOpacity style={[styles.goldBtn, {width: 80, marginLeft: 10, marginTop: 0}]} onPress={handleCreateCategory}><Text style={styles.goldBtnText}>新增</Text></TouchableOpacity>
                      </View>
-
                      <Text style={{color: '#888', fontSize: 12, marginBottom: 10}}>当前大盘分区排序 (越靠上越靠前展示)</Text>
                      {adminCategories.map((cat, index) => (
                         <View key={cat.id} style={styles.categoryManageRow}>
@@ -755,7 +785,6 @@ export default function AdminPanelScreen() {
                                  <TouchableOpacity style={{flex: 1}} onPress={() => {setEditingCatId(cat.id); setEditingCatName(cat.name);}}>
                                     <Text style={{color: '#FFF', fontSize: 15, fontWeight: '800'}}>{cat.name} <Text style={{fontSize: 10, color: '#666'}}>✏️</Text></Text>
                                  </TouchableOpacity>
-                                 
                                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
                                     <TouchableOpacity style={[styles.orderBtn, index === 0 && {opacity: 0.2}]} onPress={() => handleMoveCategory(index, 'up')} disabled={index === 0}><Text style={{color:'#FFF'}}>↑</Text></TouchableOpacity>
                                     <TouchableOpacity style={[styles.orderBtn, index === adminCategories.length - 1 && {opacity: 0.2}]} onPress={() => handleMoveCategory(index, 'down')} disabled={index === adminCategories.length - 1}><Text style={{color:'#FFF'}}>↓</Text></TouchableOpacity>
@@ -781,7 +810,6 @@ export default function AdminPanelScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* 🌟 改造后的多选标签模态框 */}
       <Modal visible={showCategoryModal} transparent animationType="fade">
         <View style={styles.modalOverlayFull}>
           <View style={styles.timePickerBox}>
@@ -896,7 +924,6 @@ const styles = StyleSheet.create({
   catChipText: { color: '#888', fontWeight: '800' },
   catChipTextActive: { color: '#111', fontWeight: '900' },
 
-  // 🌟 分区管理专属样式
   categoryManageRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#333' },
   catEditInput: { flex: 1, color: '#00E5FF', fontSize: 15, fontWeight: '900', borderBottomWidth: 1, borderColor: '#00E5FF', paddingVertical: 4 },
   catSaveBtn: { backgroundColor: '#FFD700', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, marginLeft: 10 },

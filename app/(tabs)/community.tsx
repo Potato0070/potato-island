@@ -33,40 +33,55 @@ export default function CommunityScreen() {
       setLoading(true);
       const { data, error } = await supabase
         .from('announcements')
-        .select('*')
-        .order('created_at', { ascending: false }); // 🌟 取消数据库的强制置顶排序，改由前端智能控制
+        .select('*'); 
         
       if (error) throw error;
 
-      // 🌟 核心：前端数据清洗器！重塑身份、头像和置顶规则
+      // 🌟 核心：前端数据清洗器！重塑身份、头像、置顶规则与绝对优先级权重
       let formattedData = (data || []).map(item => {
          let displayAuthor = item.author_name || '王国大喇叭';
          let icon = '👑';
          let bgColor = '#111';
          let isFeatured = item.is_featured;
+         let priorityWeight = 3; // 默认最低优先级：普通国王公告
 
          if (item.author_name === '创世中枢' || item.author_name === '超级中枢') {
-             displayAuthor = '超级播报'; // 🌟 改名
-             icon = '📢'; // 🌟 换喇叭头像
-             bgColor = '#0066FF'; // 专属科技蓝
-             isFeatured = false; // 🌟 强行扒掉置顶特权！
+             displayAuthor = '超级播报'; 
+             icon = '📢'; 
+             bgColor = '#0066FF'; 
+             isFeatured = false; // 强行扒掉数据库可能误标的置顶
+             priorityWeight = 2; // 第二优先级：系统播报
          } else if (item.author_name === '土豆清道夫') {
              icon = '🚨';
              bgColor = '#FF3B30';
-             isFeatured = false;
+             isFeatured = false; // 强行扒掉置顶
+             priorityWeight = 2; // 第二优先级：清道夫播报
          } else if (item.author_name === '土豆国王') {
              icon = '🥔';
              bgColor = '#D49A36';
-             isFeatured = true; // 🌟 只有土豆国王强制置顶
+             // 只有国王可以被置顶，一旦置顶，权重最高
+             if (item.is_featured) {
+                 priorityWeight = 1; // 绝对霸主优先级！
+             }
          }
 
-         return { ...item, display_author: displayAuthor, avatar_icon: icon, avatar_bg: bgColor, is_featured: isFeatured };
+         return { 
+             ...item, 
+             display_author: displayAuthor, 
+             avatar_icon: icon, 
+             avatar_bg: bgColor, 
+             is_featured: isFeatured,
+             priority_weight: priorityWeight // 注入计算好的权重
+         };
       });
 
-      // 🌟 重新按 is_featured 和 时间智能排序
+      // 🌟 史诗级三段式排序算法
       formattedData.sort((a, b) => {
-         if (a.is_featured && !b.is_featured) return -1;
-         if (!a.is_featured && b.is_featured) return 1;
+         // 1. 优先比拼权重（数字越小越靠前：1 > 2 > 3）
+         if (a.priority_weight !== b.priority_weight) {
+             return a.priority_weight - b.priority_weight;
+         }
+         // 2. 如果权重相同（比如同为清道夫和超级播报，或同为普通国王），则按时间倒序（最新的在上面）
          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
 
