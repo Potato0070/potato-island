@@ -6,7 +6,6 @@ import { supabase } from '../supabase';
 
 const { width } = Dimensions.get('window');
 
-// 🌟 交易类型人性化中文映射字典
 const TYPE_MAP: Record<string, string> = {
   'direct_buy': '大盘现货',
   'bid_match': '委托撮合',
@@ -32,11 +31,10 @@ export default function WalletScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 1. 获取最新余额
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
       if (profile) setBalance((profile.potato_coin_balance || 0).toFixed(2));
 
-      // 2. 智能聚合所有资金与资产流转水
+      // 🌟 核心修复：纯净查询，去掉关联表里导致 NULL 报错的外键！
       const { data: transferData } = await supabase.from('transfer_logs')
         .select('*, collections(name)')
         .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`)
@@ -49,7 +47,6 @@ export default function WalletScreen() {
            const targetName = colName || '神秘藏品';
            const typeStr = TYPE_MAP[log.transfer_type] || '资金流转';
 
-           // 🌟 核心：针对不同类型的交易，组合出极具可读性的文案
            let titleStr = '';
            let amountStr = '';
            let amountColor = '#111';

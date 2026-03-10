@@ -46,13 +46,13 @@ export default function MyOrdersScreen() {
         setListData(data || []);
       }
       else if (tab === '已买入') {
-        // 🌟 核心升级：查询所有作为买家（buyer_id）的流水账，包括首发、买入、撮合、收赠
-        const { data } = await supabase.from('transfer_logs').select('*, collections(name, image_url), seller:seller_id(nickname)').eq('buyer_id', user.id).order('transfer_time', { ascending: false });
+        // 🌟 核心修复：去除了脆弱的 seller:seller_id(nickname) 查询，防止首发订单因没卖家而整行报错被吞！
+        const { data } = await supabase.from('transfer_logs').select('*, collections(name, image_url)').eq('buyer_id', user.id).order('transfer_time', { ascending: false });
         setListData(data || []);
       } 
       else if (tab === '已卖出') {
-        // 🌟 核心升级：查询所有作为卖家（seller_id）的流水账，包括卖出、撮合、转赠出
-        const { data } = await supabase.from('transfer_logs').select('*, collections(name, image_url), buyer:buyer_id(nickname)').eq('seller_id', user.id).order('transfer_time', { ascending: false });
+        // 🌟 同样去除容易报错的买家表关联
+        const { data } = await supabase.from('transfer_logs').select('*, collections(name, image_url)').eq('seller_id', user.id).order('transfer_time', { ascending: false });
         setListData(data || []);
       }
     } catch (err) { console.error(err); } finally { setLoading(false); }
@@ -123,19 +123,18 @@ export default function MyOrdersScreen() {
     const colImg = Array.isArray(item.collections) ? item.collections[0]?.image_url : item.collections?.image_url;
     
     const imgUrl = colImg || 'https://via.placeholder.com/150';
-    const name = colName || '未知藏品';
+    const name = colName || '神秘藏品';
     const serial = (isSelling || isBuying) ? (item.serial_number || '排队中') : item.nft_id?.substring(0,6);
     const price = isSelling ? item.consign_price : item.price;
     const timeStr = isSelling || isBuying ? '有效挂单中...' : new Date(item.transfer_time || item.created_at).toLocaleString();
 
-    // 🌟 核心：解析具体交易类型的炫酷标签
     let typeTag = activeTab;
     let typeColor = '#111';
     if (isHistory) {
        switch(item.transfer_type) {
           case 'launch_mint': typeTag = '首发抢购'; typeColor = '#FFD700'; break;
           case 'direct_buy': typeTag = '大盘现货'; typeColor = '#0066FF'; break;
-          case 'bid_match': typeTag = '求购撮合'; typeColor = '#FF3B30'; break;
+          case 'bid_match': typeTag = '委托撮合'; typeColor = '#FF3B30'; break;
           case '好友转赠': typeTag = '好友转赠'; typeColor = '#4CD964'; break;
           default: typeTag = '交易流转'; typeColor = '#888';
        }
@@ -147,9 +146,7 @@ export default function MyOrdersScreen() {
       <View style={styles.card}>
         <View style={styles.cardHeader}>
            <Text style={styles.timeText}>{timeStr}</Text>
-           <View style={{flexDirection: 'row', alignItems: 'center'}}>
-              <Text style={[styles.statusText, {color: typeColor}]}>{typeTag}</Text>
-           </View>
+           <Text style={[styles.statusText, {color: typeColor}]}>{typeTag}</Text>
         </View>
 
         <View style={styles.cardBody}>
@@ -287,14 +284,12 @@ const styles = StyleSheet.create({
   navTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
   toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
   toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
-  
   tabsWrapper: { backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#F0F0F0' },
   tabsContainer: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10 },
   tabBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, backgroundColor: '#F5F5F5', marginRight: 8 },
   tabBtnActive: { backgroundColor: '#E6F0FF' },
   tabText: { fontSize: 13, color: '#666', fontWeight: '600' },
   tabTextActive: { color: '#0066FF', fontWeight: '900' },
-  
   card: { backgroundColor: '#FFF', borderRadius: 12, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 5, elevation: 1 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderColor: '#F9F9F9' },
   timeText: { fontSize: 12, color: '#999' },
@@ -313,7 +308,6 @@ const styles = StyleSheet.create({
   actionBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16, backgroundColor: '#FF3B30' },
   actionBtnText: { color: '#FFF', fontSize: 12, fontWeight: '900' },
   emptyBox: { alignItems: 'center', marginTop: 100 },
-  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
   confirmBox: { width: '85%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
   confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 16 },
