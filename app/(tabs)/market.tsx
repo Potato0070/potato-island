@@ -32,7 +32,15 @@ export default function MarketScreen() {
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
-  let processedData = activeCategory === 'all' ? collections : collections.filter(c => c.category_id === activeCategory);
+  let processedData = activeCategory === 'all' 
+     ? collections 
+     : collections.filter(c => {
+         // 兼容新版的多选数组 category_ids 和 老版的单选 category_id
+         if (c.category_ids && Array.isArray(c.category_ids)) {
+             return c.category_ids.includes(activeCategory);
+         }
+         return c.category_id === activeCategory;
+     });
 
   processedData = processedData.sort((a, b) => {
      if (activeSort === 'price_asc') {

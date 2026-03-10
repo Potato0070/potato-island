@@ -34,6 +34,9 @@ export default function AdminPanelScreen() {
   const [editValue, setEditValue] = useState('');
   const [burnAmount, setBurnAmount] = useState('');
 
+  // 🌟 分区多选状态数组
+  const [editCategoryIds, setEditCategoryIds] = useState<number[]>([]);
+
   // 🌟 全局可视化选择器
   const [showColPicker, setShowColPicker] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<'announce' | 'launch' | 'synTarget' | 'synReq' | 'mint' | 'airdropReq' | 'airdropTarget' | 'configSign' | 'configBlackhole' | null>(null);
@@ -82,7 +85,8 @@ export default function AdminPanelScreen() {
   const [newColName, setNewColName] = useState('');
   const [newColImage, setNewColImage] = useState('');
   const [newColMaxPrice, setNewColMaxPrice] = useState('');
-  const [newColCategoryId, setNewColCategoryId] = useState<number | null>(null);
+  // 🌟 母版多选分区状态
+  const [newColCategoryIds, setNewColCategoryIds] = useState<number[]>([]);
 
   useFocusEffect(useCallback(() => { initAdmin(); }, []));
 
@@ -205,18 +209,28 @@ export default function AdminPanelScreen() {
       });
   };
 
+  // 🌟 多选交互事件
+  const toggleNewColCat = (id: number) => {
+     setNewColCategoryIds(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
+  };
+
+  const toggleEditCat = (id: number) => {
+     setEditCategoryIds(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
+  };
+
   // ================= 🖼️ 创建全新藏品母版 =================
   const handleCreateCollection = () => {
-      if (!newColName || !newColImage || !newColCategoryId) { return showToast('请填写名称、图片并选择分区'); }
+      if (!newColName || !newColImage || newColCategoryIds.length === 0) { return showToast('请填写名称、图片并选择至少一个分区'); }
       setConfirmAction({
           title: '✨ 铸造母版确认',
           desc: `即将把【${newColName}】永久刻入全岛图鉴，不可轻易撤销。`,
           confirmText: '确认铸造',
           isDanger: false,
           action: async () => {
-              const { error } = await supabase.from('collections').insert([{ name: newColName, image_url: newColImage, category_id: newColCategoryId, max_consign_price: parseFloat(newColMaxPrice) || null, total_minted: 0, circulating_supply: 0, is_tradeable: false }]);
+              // 🌟 这里改为存入 category_ids 数组
+              const { error } = await supabase.from('collections').insert([{ name: newColName, image_url: newColImage, category_ids: newColCategoryIds, max_consign_price: parseFloat(newColMaxPrice) || null, total_minted: 0, circulating_supply: 0, is_tradeable: false }]);
               if (error) throw error;
-              setNewColName(''); setNewColImage(''); setNewColMaxPrice(''); setNewColCategoryId(null); fetchData();
+              setNewColName(''); setNewColImage(''); setNewColMaxPrice(''); setNewColCategoryIds([]); fetchData();
               setSuccessModal({title: '✅ 缔造成功', msg: `全新藏品母版已铸造！请前往发新或印钞。`});
           }
       });
@@ -292,7 +306,7 @@ export default function AdminPanelScreen() {
           title: '⚖️ 流通状态调控',
           desc: `确定要将【${item.name}】的状态修改为 ${item.is_tradeable ? '已冻结(禁止买卖)' : '允许流通'} 吗？`,
           confirmText: '确认更改',
-          isDanger: item.is_tradeable, // 如果是冻结操作，标红
+          isDanger: item.is_tradeable, 
           action: async () => {
               const newVal = !item.is_tradeable;
               const { error } = await supabase.from('collections').update({ is_tradeable: newVal }).eq('id', item.id);
@@ -314,12 +328,14 @@ export default function AdminPanelScreen() {
     } catch(e:any){ showToast(`操作失败: ${e.message}`); } finally { setPublishing(false); }
   };
 
-  const executeChangeCategory = async (catId: number) => {
+  // 🌟 修改分区彻底替换为多选数组逻辑
+  const executeChangeCategory = async () => {
+      if (editCategoryIds.length === 0) return showToast('至少保留一个分区！');
       setPublishing(true);
       try{
-         const { error } = await supabase.from('collections').update({ category_id: catId }).eq('id', selectedCol.id);
+         const { error } = await supabase.from('collections').update({ category_ids: editCategoryIds }).eq('id', selectedCol.id);
          if (error) throw error;
-         setShowCategoryModal(false); fetchData(); showToast('分区转移成功');
+         setShowCategoryModal(false); fetchData(); showToast('多分区分配成功');
       }catch(e:any){showToast(e.message);}finally{setPublishing(false);}
   };
 
@@ -339,7 +355,6 @@ export default function AdminPanelScreen() {
       } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setPublishing(false); }
   };
 
-  // ================= 其他模块操作 =================
   const handlePublishAnnouncement = () => {
     if (!announceTitle || !announceContent || !announceImage) return showToast('请填写完整');
     setConfirmAction({
@@ -457,7 +472,12 @@ export default function AdminPanelScreen() {
 
   // ================= UI 渲染 =================
   const renderAssetCard = ({ item }: { item: any }) => {
-    const catName = adminCategories.find(c => c.id === item.category_id)?.name || '未分类';
+    // 🌟 兼容展示：支持老的单选与新的多选数组
+    const catNames = adminCategories
+      .filter(c => item.category_ids?.includes(c.id) || item.category_id === c.id)
+      .map(c => c.name)
+      .join(', ') || '未分类';
+
     return (
       <View style={styles.card}>
         <Image source={{ uri: item.image_url || `https://via.placeholder.com/150` }} style={styles.cardImg} />
@@ -469,10 +489,15 @@ export default function AdminPanelScreen() {
                 <Switch value={!!item.is_tradeable} onValueChange={() => toggleTradeable(item)} trackColor={{ false: '#333', true: '#FFD700' }} thumbColor="#FFF" style={{transform: [{scale: 0.8}]}} />
              </View>
           </View>
-          <Text style={{color: '#888', fontSize: 11, marginTop: 4}}>大盘存量: {item.circulating_supply} | 类别: {catName}</Text>
+          <Text style={{color: '#888', fontSize: 11, marginTop: 4}}>大盘存量: {item.circulating_supply} | 标签: {catNames}</Text>
           <View style={{flexDirection: 'row', marginTop: 12, justifyContent: 'space-between'}}>
-             <TouchableOpacity style={[styles.miniBtn, {backgroundColor: '#2C2C2E', borderColor: '#555'}]} onPress={() => { setSelectedCol(item); setShowCategoryModal(true); }}>
-                <Text style={{color: '#CCC', fontSize: 11, fontWeight: '700'}}>🗂️ 分区</Text>
+             <TouchableOpacity style={[styles.miniBtn, {backgroundColor: '#2C2C2E', borderColor: '#555'}]} onPress={() => { 
+                 setSelectedCol(item); 
+                 // 🌟 点击编辑时，载入已有的数组或单个ID
+                 setEditCategoryIds(item.category_ids || (item.category_id ? [item.category_id] : []));
+                 setShowCategoryModal(true); 
+             }}>
+                <Text style={{color: '#CCC', fontSize: 11, fontWeight: '700'}}>🗂️ 标签</Text>
              </TouchableOpacity>
              <TouchableOpacity style={[styles.miniBtn, {backgroundColor: '#2C2C2E', borderColor: '#00E5FF'}]} onPress={() => { setSelectedCol(item); setEditValue(item.max_consign_price?.toString()); setShowPriceModal(true); }}>
                 <Text style={{color: '#00E5FF', fontSize: 11, fontWeight: '700'}}>¥{item.max_consign_price?.toFixed(0)} 限价</Text>
@@ -494,7 +519,6 @@ export default function AdminPanelScreen() {
         <View style={styles.navBtn} />
       </View>
 
-      {/* 轻量级黑框 Toast */}
       {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabRowOuter} contentContainerStyle={styles.tabRow}>
@@ -508,23 +532,13 @@ export default function AdminPanelScreen() {
       {loading ? <ActivityIndicator size="large" color="#FFD700" style={{marginTop: 50}} /> : (
         <View style={{flex: 1}}>
           
-          {/* 📊 数据罗盘 Tab */}
           {activeTab === '数据罗盘' && (
              <ScrollView style={{flex: 1}} contentContainerStyle={{padding: 16}}>
                 <Text style={styles.sectionTitle}>🌐 全岛宏观数据</Text>
                 <View style={{flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 10}}>
-                   <View style={styles.statCard}>
-                      <Text style={styles.statLabel}>总注册岛民</Text>
-                      <Text style={styles.statNumber}>{stats.users}</Text>
-                   </View>
-                   <View style={styles.statCard}>
-                      <Text style={styles.statLabel}>总交易/流转笔数</Text>
-                      <Text style={styles.statNumber}>{stats.transfers}</Text>
-                   </View>
-                   <View style={[styles.statCard, {width: '100%', marginTop: 16, backgroundColor: '#FFD700'}]}>
-                      <Text style={[styles.statLabel, {color: '#111'}]}>全岛已铸造藏品总数</Text>
-                      <Text style={[styles.statNumber, {color: '#111', fontSize: 32}]}>{stats.nfts}</Text>
-                   </View>
+                   <View style={styles.statCard}><Text style={styles.statLabel}>总注册岛民</Text><Text style={styles.statNumber}>{stats.users}</Text></View>
+                   <View style={styles.statCard}><Text style={styles.statLabel}>总交易/流转笔数</Text><Text style={styles.statNumber}>{stats.transfers}</Text></View>
+                   <View style={[styles.statCard, {width: '100%', marginTop: 16, backgroundColor: '#FFD700'}]}><Text style={[styles.statLabel, {color: '#111'}]}>全岛已铸造藏品总数</Text><Text style={[styles.statNumber, {color: '#111', fontSize: 32}]}>{stats.nfts}</Text></View>
                 </View>
              </ScrollView>
           )}
@@ -536,7 +550,6 @@ export default function AdminPanelScreen() {
           {activeTab !== '资产调控' && activeTab !== '数据罗盘' && (
             <ScrollView style={{flex: 1}} contentContainerStyle={{padding: 16, paddingBottom: 100}}>
               
-              {/* 🎯 岛民制裁 Tab */}
               {activeTab === '岛民制裁' && (
                  <View>
                     <View style={styles.cheatBox}>
@@ -558,7 +571,6 @@ export default function AdminPanelScreen() {
                  </View>
               )}
 
-              {/* ⚙️ 全局参数配置 Tab */}
               {activeTab === '全局参数' && (
                 <View>
                    <View style={styles.cheatBox}>
@@ -596,7 +608,7 @@ export default function AdminPanelScreen() {
                 </View>
               )}
 
-              {/* 🖼️ 新增系列 Tab */}
+              {/* 🌟 新增系列 (带多选标签功能) */}
               {activeTab === '新增系列' && (
                  <View>
                     <View style={styles.cheatBox}>
@@ -607,17 +619,25 @@ export default function AdminPanelScreen() {
                           {newColImage ? (<Image source={{uri: newColImage}} style={{width: 50, height: 50, borderRadius: 8, marginRight: 12, backgroundColor: '#333'}} />) : (<View style={{width: 50, height: 50, borderRadius: 8, backgroundColor: '#333', marginRight: 12, justifyContent: 'center', alignItems: 'center'}}><Text style={{color: '#666'}}>图</Text></View>)}
                           <TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="https://..." placeholderTextColor="#666" value={newColImage} onChangeText={setNewColImage} />
                        </View>
-                       <Text style={{color:'#FFF', fontWeight:'800', marginBottom:8}}>归属大盘分区</Text>
+
+                       <Text style={{color:'#FFF', fontWeight:'800', marginBottom:8}}>为藏品打上多个分区标签</Text>
                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 16}}>
-                          {adminCategories.map(cat => (<TouchableOpacity key={cat.id} style={[styles.catChip, newColCategoryId === cat.id && styles.catChipActive]} onPress={() => setNewColCategoryId(cat.id)}><Text style={[styles.catChipText, newColCategoryId === cat.id && styles.catChipTextActive]}>{cat.name}</Text></TouchableOpacity>))}
+                          {adminCategories.map(cat => {
+                             const isActive = newColCategoryIds.includes(cat.id);
+                             return (
+                                <TouchableOpacity key={cat.id} style={[styles.catChip, isActive && styles.catChipActive]} onPress={() => toggleNewColCat(cat.id)}>
+                                   <Text style={[styles.catChipText, isActive && styles.catChipTextActive]}>{cat.name}</Text>
+                                </TouchableOpacity>
+                             )
+                          })}
                        </ScrollView>
+
                        <TextInput style={styles.inputDark} placeholder="设置最高限价 (可空)" placeholderTextColor="#666" keyboardType="decimal-pad" value={newColMaxPrice} onChangeText={setNewColMaxPrice} />
-                       <TouchableOpacity style={[styles.goldBtn, {marginTop: 10}]} onPress={handleCreateCollection} disabled={publishing}><Text style={styles.goldBtnText}>{publishing ? '铸造中...' : '✨ 确认铸造图鉴'}</Text></TouchableOpacity>
+                       <TouchableOpacity style={[styles.goldBtn, {marginTop: 10}]} onPress={handleCreateCollection} disabled={publishing}><Text style={styles.goldBtnText}>✨ 确认铸造图鉴</Text></TouchableOpacity>
                     </View>
                  </View>
               )}
 
-              {/* 🎁 快照空投 Tab */}
               {activeTab === '快照空投' && (
                 <View>
                    <View style={styles.cheatBox}>
@@ -627,12 +647,11 @@ export default function AdminPanelScreen() {
                       <TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('airdropReq')}><Text style={styles.pickerBtnText}>+ 添加要求持有的藏品</Text></TouchableOpacity>
                       <Text style={{color:'#FFF', fontWeight:'800', marginBottom:10, marginTop:10}}>2. 设定空投奖励目标</Text>
                       <TouchableOpacity style={[styles.pickerBtn, {borderColor:'#FFD700'}]} onPress={() => openPicker('airdropTarget')}><Text style={[styles.pickerBtnText, {color: airdropTargetName ? '#FFD700' : '#888'}]}>{airdropTargetName ? `🎁 空投物: ${airdropTargetName}` : '+ 选择要派发的空投藏品'}</Text></TouchableOpacity>
-                      <TouchableOpacity style={[styles.goldBtn, {marginTop: 20}]} onPress={executeAirdrop} disabled={publishing}><Text style={styles.goldBtnText}>{publishing ? '准备指令...' : '⚡ 立即执行全岛空投'}</Text></TouchableOpacity>
+                      <TouchableOpacity style={[styles.goldBtn, {marginTop: 20}]} onPress={executeAirdrop} disabled={publishing}><Text style={styles.goldBtnText}>⚡ 立即执行全岛空投</Text></TouchableOpacity>
                    </View>
                 </View>
               )}
 
-              {/* 🚀 发新大厅 Tab */}
               {activeTab === '藏品发新' && (
                 <View>
                   <View style={styles.cheatBox}>
@@ -646,7 +665,6 @@ export default function AdminPanelScreen() {
                 </View>
               )}
 
-              {/* 🧬 进化配置 Tab */}
               {activeTab === '进化配置' && (
                 <View>
                   <View style={styles.cheatBox}>
@@ -661,7 +679,6 @@ export default function AdminPanelScreen() {
                 </View>
               )}
 
-              {/* 📣 王国公告 Tab */}
               {activeTab === '王国公告' && (
                 <View>
                   <View style={styles.cheatBox}>
@@ -676,7 +693,6 @@ export default function AdminPanelScreen() {
                 </View>
               )}
 
-              {/* 👑 神之手 Tab */}
               {activeTab === '神之手' && (
                 <View>
                   <View style={styles.cheatBox}><Text style={styles.sectionTitle}>🖨️ 虚空印钞 (派发给自己)</Text><TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('mint')}><Text style={styles.pickerBtnText}>{mintColName ? `📍 选定: ${mintColName}` : '+ 选择要印制的藏品'}</Text></TouchableOpacity><View style={{flexDirection: 'row', marginTop: 10}}><TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="数量" placeholderTextColor="#666" keyboardType="number-pad" value={mintAmount} onChangeText={setMintAmount} /><TouchableOpacity style={[styles.goldBtn, {width: 100, marginLeft: 10, marginTop: 0}]} onPress={handleMintCustom}><Text style={styles.goldBtnText}>印发</Text></TouchableOpacity></View></View>
@@ -696,16 +712,25 @@ export default function AdminPanelScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* 🌟 改造后的多选标签模态框 */}
       <Modal visible={showCategoryModal} transparent animationType="fade">
         <View style={styles.modalOverlayFull}>
           <View style={styles.timePickerBox}>
-             <Text style={styles.modalTitle}>转移至新分区</Text>
-             {adminCategories.map(cat => (
-                 <TouchableOpacity key={cat.id} style={[styles.inputDark, {padding: 12, alignItems: 'center'}]} onPress={() => executeChangeCategory(cat.id)} disabled={publishing}>
-                     <Text style={{color: '#FFF', fontWeight: '800'}}>{cat.name}</Text>
-                 </TouchableOpacity>
-             ))}
-             <TouchableOpacity style={[styles.mCancelBtn, {marginTop: 10}]} onPress={() => setShowCategoryModal(false)}><Text style={{color: '#CCC'}}>取消</Text></TouchableOpacity>
+             <Text style={styles.modalTitle}>修改大盘分区 (可多选)</Text>
+             <ScrollView style={{maxHeight: 300, marginBottom: 10}}>
+                {adminCategories.map(cat => {
+                    const isActive = editCategoryIds.includes(cat.id);
+                    return (
+                        <TouchableOpacity key={cat.id} style={[styles.inputDark, {padding: 12, alignItems: 'center', marginBottom: 8, borderColor: isActive ? '#00E5FF' : '#333', borderWidth: isActive ? 2 : 1}]} onPress={() => toggleEditCat(cat.id)} disabled={publishing}>
+                            <Text style={{color: isActive ? '#00E5FF' : '#FFF', fontWeight: '800'}}>{cat.name}</Text>
+                        </TouchableOpacity>
+                    )
+                })}
+             </ScrollView>
+             <View style={{flexDirection: 'row'}}>
+                <TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowCategoryModal(false)}><Text style={{color: '#CCC'}}>取消</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.goldBtn, {flex: 1, marginTop: 0, backgroundColor: '#00E5FF'}]} onPress={executeChangeCategory} disabled={publishing}><Text style={{color: '#111', fontWeight: '900'}}>确认打标</Text></TouchableOpacity>
+             </View>
           </View>
         </View>
       </Modal>
@@ -723,13 +748,8 @@ export default function AdminPanelScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={showTimePicker} transparent animationType="fade">
-        <View style={styles.modalOverlayFull}><View style={styles.timePickerBox}><Text style={styles.modalTitle}>设定时间</Text><Text style={styles.timeSectionLabel}>日期</Text><View style={styles.timeBtnRow}>{['今天', '明天', '后天'].map((label, i) => (<TouchableOpacity key={label} style={[styles.timeBtn, selectedDateOffset === i && styles.timeBtnActive]} onPress={() => setSelectedDateOffset(i)}><Text style={[styles.timeBtnText, selectedDateOffset === i && styles.timeBtnTextActive]}>{label}</Text></TouchableOpacity>))}</View><Text style={styles.timeSectionLabel}>小时</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{maxHeight: 50}}>{['00','08','10','12','14','18','20','21','22'].map(h => (<TouchableOpacity key={h} style={[styles.timeBtn, selectedHour === h && styles.timeBtnActive]} onPress={() => setSelectedHour(h)}><Text style={[styles.timeBtnText, selectedHour === h && styles.timeBtnTextActive]}>{h}:00</Text></TouchableOpacity>))}</ScrollView><Text style={styles.timeSectionLabel}>分钟</Text><View style={styles.timeBtnRow}>{['00','15','30','45'].map(m => (<TouchableOpacity key={m} style={[styles.timeBtn, selectedMinute === m && styles.timeBtnActive]} onPress={() => setSelectedMinute(m)}><Text style={[styles.timeBtnText, selectedMinute === m && styles.timeBtnTextActive]}>{m}分</Text></TouchableOpacity>))}</View><View style={{flexDirection: 'row', marginTop: 30}}><TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowTimePicker(false)}><Text style={{color: '#CCC'}}>取消</Text></TouchableOpacity><TouchableOpacity style={[styles.goldBtn, {flex: 1, marginTop: 0}]} onPress={confirmTimeSelection}><Text style={styles.goldBtnText}>确认</Text></TouchableOpacity></View></View></View>
-      </Modal>
-
-      <Modal visible={showColPicker} transparent animationType="slide">
-        <View style={styles.modalOverlayFull}><View style={styles.modalContentFull}><View style={styles.pickerHeader}><Text style={styles.modalTitle}>选择藏品</Text><TouchableOpacity onPress={() => setShowColPicker(false)}><Text style={{color:'#999', fontSize: 16}}>关闭</Text></TouchableOpacity></View><FlatList data={collections} keyExtractor={item => item.id} numColumns={3} renderItem={({item}) => (<TouchableOpacity style={styles.miniCard} onPress={() => handleSelectFromPicker(item)}><Image source={{uri: item.image_url}} style={styles.miniImg} /><Text style={styles.miniName} numberOfLines={1}>{item.name}</Text></TouchableOpacity>)}/></View></View>
-      </Modal>
+      <Modal visible={showTimePicker} transparent animationType="fade"><View style={styles.modalOverlayFull}><View style={styles.timePickerBox}><Text style={styles.modalTitle}>设定时间</Text><Text style={styles.timeSectionLabel}>日期</Text><View style={styles.timeBtnRow}>{['今天', '明天', '后天'].map((label, i) => (<TouchableOpacity key={label} style={[styles.timeBtn, selectedDateOffset === i && styles.timeBtnActive]} onPress={() => setSelectedDateOffset(i)}><Text style={[styles.timeBtnText, selectedDateOffset === i && styles.timeBtnTextActive]}>{label}</Text></TouchableOpacity>))}</View><Text style={styles.timeSectionLabel}>小时</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{maxHeight: 50}}>{['00','08','10','12','14','18','20','21','22'].map(h => (<TouchableOpacity key={h} style={[styles.timeBtn, selectedHour === h && styles.timeBtnActive]} onPress={() => setSelectedHour(h)}><Text style={[styles.timeBtnText, selectedHour === h && styles.timeBtnTextActive]}>{h}:00</Text></TouchableOpacity>))}</ScrollView><Text style={styles.timeSectionLabel}>分钟</Text><View style={styles.timeBtnRow}>{['00','15','30','45'].map(m => (<TouchableOpacity key={m} style={[styles.timeBtn, selectedMinute === m && styles.timeBtnActive]} onPress={() => setSelectedMinute(m)}><Text style={[styles.timeBtnText, selectedMinute === m && styles.timeBtnTextActive]}>{m}分</Text></TouchableOpacity>))}</View><View style={{flexDirection: 'row', marginTop: 30}}><TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowTimePicker(false)}><Text style={{color: '#CCC'}}>取消</Text></TouchableOpacity><TouchableOpacity style={[styles.goldBtn, {flex: 1, marginTop: 0}]} onPress={confirmTimeSelection}><Text style={styles.goldBtnText}>确认</Text></TouchableOpacity></View></View></View></Modal>
+      <Modal visible={showColPicker} transparent animationType="slide"><View style={styles.modalOverlayFull}><View style={styles.modalContentFull}><View style={styles.pickerHeader}><Text style={styles.modalTitle}>选择藏品</Text><TouchableOpacity onPress={() => setShowColPicker(false)}><Text style={{color:'#999', fontSize: 16}}>关闭</Text></TouchableOpacity></View><FlatList data={collections} keyExtractor={item => item.id} numColumns={3} renderItem={({item}) => (<TouchableOpacity style={styles.miniCard} onPress={() => handleSelectFromPicker(item)}><Image source={{uri: item.image_url}} style={styles.miniImg} /><Text style={styles.miniName} numberOfLines={1}>{item.name}</Text></TouchableOpacity>)}/></View></View></Modal>
 
       {/* ================= 🛡️ 终极防误触【二次确认】模态框 ================= */}
       <Modal visible={!!confirmAction} transparent animationType="fade">
@@ -806,7 +826,7 @@ const styles = StyleSheet.create({
   removeBtn: { width: 40, height: 40, backgroundColor: '#FF3B30', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
   addReqBtn: { width: '100%', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#FFD700', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginTop: 10 },
 
-  catChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#333', marginRight: 10 },
+  catChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#333', marginRight: 10, marginBottom: 10 },
   catChipActive: { backgroundColor: '#00E5FF' },
   catChipText: { color: '#888', fontWeight: '800' },
   catChipTextActive: { color: '#111', fontWeight: '900' },
