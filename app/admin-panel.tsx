@@ -37,6 +37,10 @@ export default function AdminPanelScreen() {
   // 🌟 分区多选状态数组
   const [editCategoryIds, setEditCategoryIds] = useState<number[]>([]);
 
+  // 🔍 资产调控：搜索与筛选状态
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategory, setFilterCategory] = useState<number | 'all'>('all');
+
   // 🌟 全局可视化选择器
   const [showColPicker, setShowColPicker] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<'announce' | 'launch' | 'synTarget' | 'synReq' | 'mint' | 'airdropReq' | 'airdropTarget' | 'configSign' | 'configBlackhole' | null>(null);
@@ -138,6 +142,20 @@ export default function AdminPanelScreen() {
       } catch (e) { console.error("Fetch Data Error: ", e); }
   };
 
+  // 🔍 计算搜索与筛选后的藏品列表
+  const filteredCollections = collections.filter(c => {
+      const matchName = c.name.toLowerCase().includes(searchQuery.toLowerCase());
+      let matchCategory = true;
+      if (filterCategory !== 'all') {
+          if (c.category_ids && Array.isArray(c.category_ids)) {
+              matchCategory = c.category_ids.includes(filterCategory);
+          } else {
+              matchCategory = c.category_id === filterCategory;
+          }
+      }
+      return matchName && matchCategory;
+  });
+
   const openPicker = (target: typeof pickerTarget, index?: number) => {
     setPickerTarget(target);
     if (index !== undefined) setActiveReqIndex(index);
@@ -227,7 +245,6 @@ export default function AdminPanelScreen() {
           confirmText: '确认铸造',
           isDanger: false,
           action: async () => {
-              // 🌟 这里改为存入 category_ids 数组
               const { error } = await supabase.from('collections').insert([{ name: newColName, image_url: newColImage, category_ids: newColCategoryIds, max_consign_price: parseFloat(newColMaxPrice) || null, total_minted: 0, circulating_supply: 0, is_tradeable: false }]);
               if (error) throw error;
               setNewColName(''); setNewColImage(''); setNewColMaxPrice(''); setNewColCategoryIds([]); fetchData();
@@ -328,7 +345,6 @@ export default function AdminPanelScreen() {
     } catch(e:any){ showToast(`操作失败: ${e.message}`); } finally { setPublishing(false); }
   };
 
-  // 🌟 修改分区彻底替换为多选数组逻辑
   const executeChangeCategory = async () => {
       if (editCategoryIds.length === 0) return showToast('至少保留一个分区！');
       setPublishing(true);
@@ -456,7 +472,6 @@ export default function AdminPanelScreen() {
       }});
   };
 
-  // 🌟 统一执行函数：接管所有 Action 的 Loading 状态
   const executeUnifiedAction = async () => {
       if (!confirmAction) return;
       setPublishing(true);
@@ -470,9 +485,7 @@ export default function AdminPanelScreen() {
       }
   };
 
-  // ================= UI 渲染 =================
   const renderAssetCard = ({ item }: { item: any }) => {
-    // 🌟 兼容展示：支持老的单选与新的多选数组
     const catNames = adminCategories
       .filter(c => item.category_ids?.includes(c.id) || item.category_id === c.id)
       .map(c => c.name)
@@ -493,7 +506,6 @@ export default function AdminPanelScreen() {
           <View style={{flexDirection: 'row', marginTop: 12, justifyContent: 'space-between'}}>
              <TouchableOpacity style={[styles.miniBtn, {backgroundColor: '#2C2C2E', borderColor: '#555'}]} onPress={() => { 
                  setSelectedCol(item); 
-                 // 🌟 点击编辑时，载入已有的数组或单个ID
                  setEditCategoryIds(item.category_ids || (item.category_id ? [item.category_id] : []));
                  setShowCategoryModal(true); 
              }}>
@@ -544,7 +556,44 @@ export default function AdminPanelScreen() {
           )}
 
           {activeTab === '资产调控' && (
-            <FlatList data={collections} renderItem={renderAssetCard} keyExtractor={item => item.id} contentContainerStyle={{ padding: 16, paddingBottom: 100 }} style={{flex: 1}} ListEmptyComponent={<Text style={{color: '#888', textAlign: 'center', marginTop: 50}}>暂无藏品数据</Text>} />
+            <View style={{flex: 1}}>
+               {/* 🔍 搜索与筛选工具栏 */}
+               <View style={styles.filterToolbar}>
+                  <TextInput
+                     style={styles.searchInput}
+                     placeholder="🔍 搜索藏品名称..."
+                     placeholderTextColor="#666"
+                     value={searchQuery}
+                     onChangeText={setSearchQuery}
+                  />
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterCatScroll}>
+                     <TouchableOpacity 
+                        style={[styles.filterCatChip, filterCategory === 'all' && styles.filterCatChipActive]}
+                        onPress={() => setFilterCategory('all')}
+                     >
+                        <Text style={[styles.filterCatChipText, filterCategory === 'all' && styles.filterCatChipTextActive]}>全部</Text>
+                     </TouchableOpacity>
+                     {adminCategories.map(cat => (
+                        <TouchableOpacity 
+                           key={cat.id}
+                           style={[styles.filterCatChip, filterCategory === cat.id && styles.filterCatChipActive]}
+                           onPress={() => setFilterCategory(cat.id)}
+                        >
+                           <Text style={[styles.filterCatChipText, filterCategory === cat.id && styles.filterCatChipTextActive]}>{cat.name}</Text>
+                        </TouchableOpacity>
+                     ))}
+                  </ScrollView>
+               </View>
+
+               <FlatList 
+                  data={filteredCollections} 
+                  renderItem={renderAssetCard} 
+                  keyExtractor={item => item.id} 
+                  contentContainerStyle={{ padding: 16, paddingBottom: 100 }} 
+                  style={{flex: 1}} 
+                  ListEmptyComponent={<Text style={{color: '#888', textAlign: 'center', marginTop: 50}}>没有找到符合条件的藏品</Text>} 
+               />
+            </View>
           )}
 
           {activeTab !== '资产调控' && activeTab !== '数据罗盘' && (
@@ -797,6 +846,15 @@ const styles = StyleSheet.create({
   tabText: { color: '#888', fontWeight: '700', fontSize: 13 },
   tabTextActive: { color: '#111', fontWeight: '900' },
   
+  // 🔍 新增：过滤与搜索工具栏样式
+  filterToolbar: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, backgroundColor: '#111' },
+  searchInput: { backgroundColor: '#1C1C1E', color: '#FFF', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, fontSize: 14, borderWidth: 1, borderColor: '#333', marginBottom: 12 },
+  filterCatScroll: { maxHeight: 40 },
+  filterCatChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: '#222', marginRight: 10, borderWidth: 1, borderColor: '#333', justifyContent: 'center' },
+  filterCatChipActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
+  filterCatChipText: { color: '#888', fontSize: 12, fontWeight: '800' },
+  filterCatChipTextActive: { color: '#111', fontWeight: '900' },
+
   toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(255,215,0,0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100, shadowColor: '#FFD700', shadowOpacity: 0.5, shadowRadius: 10 },
   toastText: { color: '#111', fontSize: 14, fontWeight: '900' },
 
