@@ -21,12 +21,11 @@ export default function AdminPanelScreen() {
   const [announceList, setAnnounceList] = useState<any[]>([]);
   const [stats, setStats] = useState({ users: 0, transfers: 0, nfts: 0 });
 
-  // 🌟 统一个性化反馈矩阵 (Toast + 二次确认 + 成功反馈)
+  // 🌟 统一个性化反馈矩阵
   const [toastMsg, setToastMsg] = useState('');
   const [successModal, setSuccessModal] = useState<{title: string, msg: string} | null>(null);
   const [confirmAction, setConfirmAction] = useState<{title: string, desc: string, confirmText: string, isDanger: boolean, action: () => Promise<void>} | null>(null);
 
-  // 💎 资产调控专属模态框
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showBurnModal, setShowBurnModal] = useState(false);
@@ -34,25 +33,19 @@ export default function AdminPanelScreen() {
   const [editValue, setEditValue] = useState('');
   const [burnAmount, setBurnAmount] = useState('');
 
-  // 🌟 分区多选状态数组
   const [editCategoryIds, setEditCategoryIds] = useState<number[]>([]);
-
-  // 🔍 资产调控：搜索与筛选状态
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<number | 'all'>('all');
 
-  // 🌟 全局可视化选择器
   const [showColPicker, setShowColPicker] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<'announce' | 'launch' | 'synTarget' | 'synReq' | 'mint' | 'airdropReq' | 'airdropTarget' | 'configSign' | 'configBlackhole' | null>(null);
   const [activeReqIndex, setActiveReqIndex] = useState<number | null>(null);
 
-  // ⏱️ 时间选择器
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedDateOffset, setSelectedDateOffset] = useState(0); 
   const [selectedHour, setSelectedHour] = useState('20');
   const [selectedMinute, setSelectedMinute] = useState('00');
 
-  // 📜 表单状态们
   const [announceTitle, setAnnounceTitle] = useState('');
   const [announceContent, setAnnounceContent] = useState('');
   const [announceImage, setAnnounceImage] = useState('');
@@ -71,7 +64,6 @@ export default function AdminPanelScreen() {
   const [requirements, setRequirements] = useState<{id: string, name: string, count: string}[]>([{ id: '', name: '', count: '1' }]);
 
   const [newBalance, setNewBalance] = useState('');
-  const [newCategoryName, setNewCategoryName] = useState('');
   const [mintColId, setMintColId] = useState('');
   const [mintColName, setMintColName] = useState('');
   const [mintAmount, setMintAmount] = useState('1');
@@ -89,8 +81,12 @@ export default function AdminPanelScreen() {
   const [newColName, setNewColName] = useState('');
   const [newColImage, setNewColImage] = useState('');
   const [newColMaxPrice, setNewColMaxPrice] = useState('');
-  // 🌟 母版多选分区状态
   const [newColCategoryIds, setNewColCategoryIds] = useState<number[]>([]);
+
+  // 🌟 分区管理专用状态
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingCatId, setEditingCatId] = useState<number | null>(null);
+  const [editingCatName, setEditingCatName] = useState('');
 
   useFocusEffect(useCallback(() => { initAdmin(); }, []));
 
@@ -142,7 +138,6 @@ export default function AdminPanelScreen() {
       } catch (e) { console.error("Fetch Data Error: ", e); }
   };
 
-  // 🔍 计算搜索与筛选后的藏品列表
   const filteredCollections = collections.filter(c => {
       const matchName = c.name.toLowerCase().includes(searchQuery.toLowerCase());
       let matchCategory = true;
@@ -193,7 +188,6 @@ export default function AdminPanelScreen() {
     setShowTimePicker(false);
   };
 
-  // ================= 🎯 岛民制裁 =================
   const handleGrantUserCoins = () => {
       if (!targetUserId || !targetUserCoin) return showToast('请输入完整信息');
       setConfirmAction({
@@ -227,7 +221,6 @@ export default function AdminPanelScreen() {
       });
   };
 
-  // 🌟 多选交互事件
   const toggleNewColCat = (id: number) => {
      setNewColCategoryIds(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
   };
@@ -236,7 +229,6 @@ export default function AdminPanelScreen() {
      setEditCategoryIds(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
   };
 
-  // ================= 🖼️ 创建全新藏品母版 =================
   const handleCreateCollection = () => {
       if (!newColName || !newColImage || newColCategoryIds.length === 0) { return showToast('请填写名称、图片并选择至少一个分区'); }
       setConfirmAction({
@@ -253,7 +245,6 @@ export default function AdminPanelScreen() {
       });
   };
 
-  // ================= ⚙️ 动态全局参数保存 =================
   const handleSaveConfig = async (key: string, val: string) => {
       if(!val) return;
       try {
@@ -264,7 +255,6 @@ export default function AdminPanelScreen() {
       } catch (e: any) { showToast(`保存失败: ${e.message}`); } 
   };
 
-  // ================= 🎁 全网快照空投 =================
   const executeAirdrop = () => {
       if (airdropReqs.length === 0 || !airdropTargetId) return showToast('请选择快照要求和空投目标');
       setConfirmAction({
@@ -317,7 +307,6 @@ export default function AdminPanelScreen() {
       });
   };
 
-  // ================= 💎 核心资产调控功能 =================
   const toggleTradeable = (item: any) => {
       setConfirmAction({
           title: '⚖️ 流通状态调控',
@@ -451,13 +440,60 @@ export default function AdminPanelScreen() {
       }});
   };
 
+  // ================= 🌟 强大的分区管理引擎 =================
   const handleCreateCategory = () => {
       if(!newCategoryName) return showToast('请输入分类名');
-      setConfirmAction({ title: '🗂️ 新增分区', desc: `新增【${newCategoryName}】？`, confirmText: '创建', isDanger: false, action: async () => {
-          await supabase.from('categories').insert([{ name: newCategoryName, sort_order: 99 }]);
-          setNewCategoryName(''); fetchData(); showToast('新分类已创建');
+      setConfirmAction({ title: '🗂️ 新增分区', desc: `确定要新增【${newCategoryName}】大盘分区吗？`, confirmText: '创建', isDanger: false, action: async () => {
+          // 自动计算当前最大的 sort_order，排在最后
+          const maxSort = adminCategories.length > 0 ? Math.max(...adminCategories.map(c => c.sort_order)) : 0;
+          await supabase.from('categories').insert([{ name: newCategoryName, sort_order: maxSort + 1 }]);
+          setNewCategoryName(''); fetchData(); showToast('新分区已创建并上架');
       }});
   };
+
+  const handleUpdateCategoryName = async (catId: number) => {
+      if(!editingCatName) return;
+      try {
+         await supabase.from('categories').update({ name: editingCatName }).eq('id', catId);
+         setEditingCatId(null); setEditingCatName(''); fetchData(); showToast('更名成功');
+      } catch(e:any) { showToast(e.message); }
+  };
+
+  const handleDeleteCategory = (catId: number, catName: string) => {
+      setConfirmAction({ title: '🚨 删除分区', desc: `确定要永久删除【${catName}】分区吗？\n该分区下的藏品将变成“未分类”状态！`, confirmText: '彻底删除', isDanger: true, action: async () => {
+          await supabase.from('categories').delete().eq('id', catId);
+          fetchData(); showToast('分区已被抹除');
+      }});
+  };
+
+  const handleMoveCategory = async (index: number, direction: 'up' | 'down') => {
+      if ((direction === 'up' && index === 0) || (direction === 'down' && index === adminCategories.length - 1)) return;
+      
+      const newCats = [...adminCategories];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      
+      // 交换它们在前端数组的位置
+      [newCats[index], newCats[targetIndex]] = [newCats[targetIndex], newCats[index]];
+      
+      // 重新分配 sort_order
+      const updates = newCats.map((cat, idx) => ({
+          id: cat.id,
+          name: cat.name,
+          sort_order: idx + 1 // 从1开始排
+      }));
+
+      // 乐观更新前端
+      setAdminCategories(updates);
+
+      // 静默写入数据库 (Supabase 的 upsert 极其好用)
+      try {
+          await supabase.from('categories').upsert(updates);
+          showToast('已重新排列');
+      } catch(e:any) {
+          showToast('排序同步失败'); fetchData(); // 失败则还原
+      }
+  };
+
 
   const handleMintCustom = () => {
       if(!mintColId || !mintAmount) return showToast('请选择藏品并输入数量');
@@ -557,42 +593,16 @@ export default function AdminPanelScreen() {
 
           {activeTab === '资产调控' && (
             <View style={{flex: 1}}>
-               {/* 🔍 搜索与筛选工具栏 */}
                <View style={styles.filterToolbar}>
-                  <TextInput
-                     style={styles.searchInput}
-                     placeholder="🔍 搜索藏品名称..."
-                     placeholderTextColor="#666"
-                     value={searchQuery}
-                     onChangeText={setSearchQuery}
-                  />
+                  <TextInput style={styles.searchInput} placeholder="🔍 搜索藏品名称..." placeholderTextColor="#666" value={searchQuery} onChangeText={setSearchQuery} />
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterCatScroll}>
-                     <TouchableOpacity 
-                        style={[styles.filterCatChip, filterCategory === 'all' && styles.filterCatChipActive]}
-                        onPress={() => setFilterCategory('all')}
-                     >
-                        <Text style={[styles.filterCatChipText, filterCategory === 'all' && styles.filterCatChipTextActive]}>全部</Text>
-                     </TouchableOpacity>
+                     <TouchableOpacity style={[styles.filterCatChip, filterCategory === 'all' && styles.filterCatChipActive]} onPress={() => setFilterCategory('all')}><Text style={[styles.filterCatChipText, filterCategory === 'all' && styles.filterCatChipTextActive]}>全部</Text></TouchableOpacity>
                      {adminCategories.map(cat => (
-                        <TouchableOpacity 
-                           key={cat.id}
-                           style={[styles.filterCatChip, filterCategory === cat.id && styles.filterCatChipActive]}
-                           onPress={() => setFilterCategory(cat.id)}
-                        >
-                           <Text style={[styles.filterCatChipText, filterCategory === cat.id && styles.filterCatChipTextActive]}>{cat.name}</Text>
-                        </TouchableOpacity>
+                        <TouchableOpacity key={cat.id} style={[styles.filterCatChip, filterCategory === cat.id && styles.filterCatChipActive]} onPress={() => setFilterCategory(cat.id)}><Text style={[styles.filterCatChipText, filterCategory === cat.id && styles.filterCatChipTextActive]}>{cat.name}</Text></TouchableOpacity>
                      ))}
                   </ScrollView>
                </View>
-
-               <FlatList 
-                  data={filteredCollections} 
-                  renderItem={renderAssetCard} 
-                  keyExtractor={item => item.id} 
-                  contentContainerStyle={{ padding: 16, paddingBottom: 100 }} 
-                  style={{flex: 1}} 
-                  ListEmptyComponent={<Text style={{color: '#888', textAlign: 'center', marginTop: 50}}>没有找到符合条件的藏品</Text>} 
-               />
+               <FlatList data={filteredCollections} renderItem={renderAssetCard} keyExtractor={item => item.id} contentContainerStyle={{ padding: 16, paddingBottom: 100 }} style={{flex: 1}} ListEmptyComponent={<Text style={{color: '#888', textAlign: 'center', marginTop: 50}}>没有找到符合条件的藏品</Text>} />
             </View>
           )}
 
@@ -609,7 +619,6 @@ export default function AdminPanelScreen() {
                           <TouchableOpacity style={[styles.goldBtnSmall, {marginLeft: 10}]} onPress={handleGrantUserCoins} disabled={publishing}><Text style={{fontWeight:'900'}}>打款</Text></TouchableOpacity>
                        </View>
                     </View>
-
                     <View style={styles.cheatBox}>
                        <Text style={styles.sectionTitle}>📩 发送专属王国信件</Text>
                        <TextInput style={styles.inputDark} placeholder="目标用户的 UID" placeholderTextColor="#666" value={targetUserId} onChangeText={setTargetUserId} />
@@ -624,63 +633,39 @@ export default function AdminPanelScreen() {
                 <View>
                    <View style={styles.cheatBox}>
                       <Text style={styles.sectionTitle}>🕳️ 黑洞坍缩概率与奖池</Text>
-                      <Text style={{color:'#888', fontSize: 12, marginBottom:10}}>配置玩家向黑洞献祭时，触发奇迹的概率与大奖藏品。</Text>
-                      <View style={styles.reqRow}>
-                         <Text style={{color:'#FFF', flex:1}}>奇迹触发概率 (0~1)</Text>
-                         <TextInput style={[styles.reqCountInput, {width: 80}]} placeholder="0.01" placeholderTextColor="#666" value={configs['blackhole_success_rate']||''} onChangeText={(v)=>setConfigs({...configs, blackhole_success_rate: v})} />
-                         <TouchableOpacity style={styles.goldBtnSmall} onPress={()=>handleSaveConfig('blackhole_success_rate', configs['blackhole_success_rate'])}><Text style={{fontWeight:'900'}}>保存</Text></TouchableOpacity>
-                      </View>
-                      <TouchableOpacity style={[styles.pickerBtn, {marginTop: 10, borderColor: '#9932CC'}]} onPress={() => openPicker('configBlackhole')}>
-                         <Text style={[styles.pickerBtnText, {color: configs['blackhole_jackpot_col_id'] ? '#9932CC' : '#666'}]}>{configs['blackhole_jackpot_col_id'] ? `🌌 黑洞大奖已绑: ${configs['blackhole_jackpot_col_id'].substring(0,8)}...` : '+ 绑定黑洞大奖藏品'}</Text>
-                      </TouchableOpacity>
+                      <View style={styles.reqRow}><Text style={{color:'#FFF', flex:1}}>奇迹触发概率 (0~1)</Text><TextInput style={[styles.reqCountInput, {width: 80}]} placeholder="0.01" placeholderTextColor="#666" value={configs['blackhole_success_rate']||''} onChangeText={(v)=>setConfigs({...configs, blackhole_success_rate: v})} /><TouchableOpacity style={styles.goldBtnSmall} onPress={()=>handleSaveConfig('blackhole_success_rate', configs['blackhole_success_rate'])}><Text style={{fontWeight:'900'}}>保存</Text></TouchableOpacity></View>
+                      <TouchableOpacity style={[styles.pickerBtn, {marginTop: 10, borderColor: '#9932CC'}]} onPress={() => openPicker('configBlackhole')}><Text style={[styles.pickerBtnText, {color: configs['blackhole_jackpot_col_id'] ? '#9932CC' : '#666'}]}>{configs['blackhole_jackpot_col_id'] ? `🌌 黑洞大奖已绑: ${configs['blackhole_jackpot_col_id'].substring(0,8)}...` : '+ 绑定黑洞大奖藏品'}</Text></TouchableOpacity>
                    </View>
-
                    <View style={styles.cheatBox}>
                       <Text style={styles.sectionTitle}>📅 签到奖励配置</Text>
-                      <TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('configSign')}>
-                         <Text style={styles.pickerBtnText}>{configs['sign_reward_col_id'] ? `✅ 已配置藏品ID: ${configs['sign_reward_col_id'].substring(0,8)}...` : '+ 选择签到奖励藏品'}</Text>
-                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('configSign')}><Text style={styles.pickerBtnText}>{configs['sign_reward_col_id'] ? `✅ 已配置藏品ID: ${configs['sign_reward_col_id'].substring(0,8)}...` : '+ 选择签到奖励藏品'}</Text></TouchableOpacity>
                    </View>
-
                    <View style={styles.cheatBox}>
                       <Text style={styles.sectionTitle}>🔄 特权兑换消耗</Text>
                       <View style={styles.reqRow}><Text style={{color:'#FFF', flex:1}}>转赠卡需要 Potato</Text><TextInput style={styles.reqCountInput} value={configs['exchange_transfer_cost']||''} onChangeText={(v)=>setConfigs({...configs, exchange_transfer_cost: v})} /><TouchableOpacity style={styles.goldBtnSmall} onPress={()=>handleSaveConfig('exchange_transfer_cost', configs['exchange_transfer_cost'])}><Text style={{fontWeight:'900'}}>存</Text></TouchableOpacity></View>
                       <View style={styles.reqRow}><Text style={{color:'#FFF', flex:1}}>万能卡需要 Potato</Text><TextInput style={styles.reqCountInput} value={configs['exchange_universal_cost']||''} onChangeText={(v)=>setConfigs({...configs, exchange_universal_cost: v})} /><TouchableOpacity style={styles.goldBtnSmall} onPress={()=>handleSaveConfig('exchange_universal_cost', configs['exchange_universal_cost'])}><Text style={{fontWeight:'900'}}>存</Text></TouchableOpacity></View>
                    </View>
-
                    <View style={styles.cheatBox}>
                       <Text style={styles.sectionTitle}>👑 VIP 升级消耗 (万能卡)</Text>
-                      {[2,3,4,5].map(level => (
-                          <View key={level} style={styles.reqRow}><Text style={{color:'#FFF', flex:1}}>升至 VIP {level}</Text><TextInput style={styles.reqCountInput} value={configs[`vip${level}_cost`]||''} onChangeText={(v)=>setConfigs({...configs, [`vip${level}_cost`]: v})} /><TouchableOpacity style={styles.goldBtnSmall} onPress={()=>handleSaveConfig(`vip${level}_cost`, configs[`vip${level}_cost`])}><Text style={{fontWeight:'900'}}>存</Text></TouchableOpacity></View>
-                      ))}
+                      {[2,3,4,5].map(level => (<View key={level} style={styles.reqRow}><Text style={{color:'#FFF', flex:1}}>升至 VIP {level}</Text><TextInput style={styles.reqCountInput} value={configs[`vip${level}_cost`]||''} onChangeText={(v)=>setConfigs({...configs, [`vip${level}_cost`]: v})} /><TouchableOpacity style={styles.goldBtnSmall} onPress={()=>handleSaveConfig(`vip${level}_cost`, configs[`vip${level}_cost`])}><Text style={{fontWeight:'900'}}>存</Text></TouchableOpacity></View>))}
                    </View>
                 </View>
               )}
 
-              {/* 🌟 新增系列 (带多选标签功能) */}
               {activeTab === '新增系列' && (
                  <View>
                     <View style={styles.cheatBox}>
                        <Text style={styles.sectionTitle}>🖼️ 铸造全新藏品母版</Text>
                        <TextInput style={styles.inputDark} placeholder="藏品名称 (例: 皇家土豆骑士)" placeholderTextColor="#666" value={newColName} onChangeText={setNewColName} />
                        <Text style={{color:'#FFF', fontWeight:'800', marginBottom:8}}>图片链接 (网络URL)</Text>
-                       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 16}}>
-                          {newColImage ? (<Image source={{uri: newColImage}} style={{width: 50, height: 50, borderRadius: 8, marginRight: 12, backgroundColor: '#333'}} />) : (<View style={{width: 50, height: 50, borderRadius: 8, backgroundColor: '#333', marginRight: 12, justifyContent: 'center', alignItems: 'center'}}><Text style={{color: '#666'}}>图</Text></View>)}
-                          <TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="https://..." placeholderTextColor="#666" value={newColImage} onChangeText={setNewColImage} />
-                       </View>
-
+                       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 16}}>{newColImage ? (<Image source={{uri: newColImage}} style={{width: 50, height: 50, borderRadius: 8, marginRight: 12, backgroundColor: '#333'}} />) : (<View style={{width: 50, height: 50, borderRadius: 8, backgroundColor: '#333', marginRight: 12, justifyContent: 'center', alignItems: 'center'}}><Text style={{color: '#666'}}>图</Text></View>)}<TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="https://..." placeholderTextColor="#666" value={newColImage} onChangeText={setNewColImage} /></View>
                        <Text style={{color:'#FFF', fontWeight:'800', marginBottom:8}}>为藏品打上多个分区标签</Text>
                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 16}}>
                           {adminCategories.map(cat => {
                              const isActive = newColCategoryIds.includes(cat.id);
-                             return (
-                                <TouchableOpacity key={cat.id} style={[styles.catChip, isActive && styles.catChipActive]} onPress={() => toggleNewColCat(cat.id)}>
-                                   <Text style={[styles.catChipText, isActive && styles.catChipTextActive]}>{cat.name}</Text>
-                                </TouchableOpacity>
-                             )
+                             return (<TouchableOpacity key={cat.id} style={[styles.catChip, isActive && styles.catChipActive]} onPress={() => toggleNewColCat(cat.id)}><Text style={[styles.catChipText, isActive && styles.catChipTextActive]}>{cat.name}</Text></TouchableOpacity>)
                           })}
                        </ScrollView>
-
                        <TextInput style={styles.inputDark} placeholder="设置最高限价 (可空)" placeholderTextColor="#666" keyboardType="decimal-pad" value={newColMaxPrice} onChangeText={setNewColMaxPrice} />
                        <TouchableOpacity style={[styles.goldBtn, {marginTop: 10}]} onPress={handleCreateCollection} disabled={publishing}><Text style={styles.goldBtnText}>✨ 确认铸造图鉴</Text></TouchableOpacity>
                     </View>
@@ -742,11 +727,47 @@ export default function AdminPanelScreen() {
                 </View>
               )}
 
+              {/* 🌟 究极扩容：神之手 -> 包含分区管理看板 */}
               {activeTab === '神之手' && (
                 <View>
                   <View style={styles.cheatBox}><Text style={styles.sectionTitle}>🖨️ 虚空印钞 (派发给自己)</Text><TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('mint')}><Text style={styles.pickerBtnText}>{mintColName ? `📍 选定: ${mintColName}` : '+ 选择要印制的藏品'}</Text></TouchableOpacity><View style={{flexDirection: 'row', marginTop: 10}}><TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="数量" placeholderTextColor="#666" keyboardType="number-pad" value={mintAmount} onChangeText={setMintAmount} /><TouchableOpacity style={[styles.goldBtn, {width: 100, marginLeft: 10, marginTop: 0}]} onPress={handleMintCustom}><Text style={styles.goldBtnText}>印发</Text></TouchableOpacity></View></View>
+                  
                   <View style={styles.cheatBox}><Text style={styles.sectionTitle}>💰 篡改个人资金</Text><View style={{flexDirection: 'row', marginTop: 10}}><TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="覆盖当前余额" placeholderTextColor="#666" keyboardType="decimal-pad" value={newBalance} onChangeText={setNewBalance} /><TouchableOpacity style={[styles.goldBtn, {width: 80, marginLeft: 10, marginTop: 0}]} onPress={handleTamperBalance}><Text style={styles.goldBtnText}>注入</Text></TouchableOpacity></View></View>
-                  <View style={styles.cheatBox}><Text style={styles.sectionTitle}>🗂️ 增加大盘分区分类</Text><View style={{flexDirection: 'row', marginTop: 10}}><TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="新分类名称" placeholderTextColor="#666" value={newCategoryName} onChangeText={setNewCategoryName} /><TouchableOpacity style={[styles.goldBtn, {width: 80, marginLeft: 10, marginTop: 0}]} onPress={handleCreateCategory}><Text style={styles.goldBtnText}>创建</Text></TouchableOpacity></View></View>
+                  
+                  {/* 🌟 分区管理超级看板 */}
+                  <View style={styles.cheatBox}>
+                     <Text style={styles.sectionTitle}>🗂️ 大盘分区管理</Text>
+                     
+                     <View style={{flexDirection: 'row', marginTop: 10, marginBottom: 20}}>
+                        <TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="新分类名称..." placeholderTextColor="#666" value={newCategoryName} onChangeText={setNewCategoryName} />
+                        <TouchableOpacity style={[styles.goldBtn, {width: 80, marginLeft: 10, marginTop: 0}]} onPress={handleCreateCategory}><Text style={styles.goldBtnText}>新增</Text></TouchableOpacity>
+                     </View>
+
+                     <Text style={{color: '#888', fontSize: 12, marginBottom: 10}}>当前大盘分区排序 (越靠上越靠前展示)</Text>
+                     {adminCategories.map((cat, index) => (
+                        <View key={cat.id} style={styles.categoryManageRow}>
+                           {editingCatId === cat.id ? (
+                              <View style={{flex: 1, flexDirection: 'row'}}>
+                                 <TextInput style={styles.catEditInput} value={editingCatName} onChangeText={setEditingCatName} autoFocus />
+                                 <TouchableOpacity style={styles.catSaveBtn} onPress={() => handleUpdateCategoryName(cat.id)}><Text style={{color:'#FFF', fontWeight:'900'}}>保存</Text></TouchableOpacity>
+                                 <TouchableOpacity style={styles.catCancelBtn} onPress={() => setEditingCatId(null)}><Text style={{color:'#888'}}>取消</Text></TouchableOpacity>
+                              </View>
+                           ) : (
+                              <>
+                                 <TouchableOpacity style={{flex: 1}} onPress={() => {setEditingCatId(cat.id); setEditingCatName(cat.name);}}>
+                                    <Text style={{color: '#FFF', fontSize: 15, fontWeight: '800'}}>{cat.name} <Text style={{fontSize: 10, color: '#666'}}>✏️</Text></Text>
+                                 </TouchableOpacity>
+                                 
+                                 <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                                    <TouchableOpacity style={[styles.orderBtn, index === 0 && {opacity: 0.2}]} onPress={() => handleMoveCategory(index, 'up')} disabled={index === 0}><Text style={{color:'#FFF'}}>↑</Text></TouchableOpacity>
+                                    <TouchableOpacity style={[styles.orderBtn, index === adminCategories.length - 1 && {opacity: 0.2}]} onPress={() => handleMoveCategory(index, 'down')} disabled={index === adminCategories.length - 1}><Text style={{color:'#FFF'}}>↓</Text></TouchableOpacity>
+                                    <TouchableOpacity style={styles.catDelBtn} onPress={() => handleDeleteCategory(cat.id, cat.name)}><Text style={{color:'#FFF'}}>🗑️</Text></TouchableOpacity>
+                                 </View>
+                              </>
+                           )}
+                        </View>
+                     ))}
+                  </View>
                 </View>
               )}
             </ScrollView>
@@ -784,19 +805,7 @@ export default function AdminPanelScreen() {
         </View>
       </Modal>
 
-      <Modal visible={showBurnModal} transparent animationType="fade">
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayFull}>
-          <View style={[styles.timePickerBox, {marginBottom: 100, borderColor: '#FF3B30', borderWidth: 2}]}>
-            <Text style={[styles.modalTitle, {color: '#FF3B30'}]}>🚨 宏观销毁：打入废墟</Text>
-            <TextInput style={[styles.inputDark, {fontSize: 20, textAlign: 'center', color: '#FF3B30', fontWeight: '900', borderColor: '#FF3B30'}]} placeholder="输入销毁数量" placeholderTextColor="#666" keyboardType="number-pad" value={burnAmount} onChangeText={setBurnAmount} autoFocus />
-            <View style={{flexDirection: 'row', marginTop: 10}}>
-              <TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowBurnModal(false)}><Text style={{color: '#CCC'}}>取消</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.goldBtn, {flex: 1, marginTop: 0, backgroundColor: '#FF3B30'}]} onPress={executeBurnToRuins} disabled={publishing}><Text style={{color: '#FFF', fontWeight: '900'}}>🔥 确认销毁</Text></TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
+      <Modal visible={showBurnModal} transparent animationType="fade"><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayFull}><View style={[styles.timePickerBox, {marginBottom: 100, borderColor: '#FF3B30', borderWidth: 2}]}><Text style={[styles.modalTitle, {color: '#FF3B30'}]}>🚨 宏观销毁：打入废墟</Text><TextInput style={[styles.inputDark, {fontSize: 20, textAlign: 'center', color: '#FF3B30', fontWeight: '900', borderColor: '#FF3B30'}]} placeholder="输入销毁数量" placeholderTextColor="#666" keyboardType="number-pad" value={burnAmount} onChangeText={setBurnAmount} autoFocus /><View style={{flexDirection: 'row', marginTop: 10}}><TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowBurnModal(false)}><Text style={{color: '#CCC'}}>取消</Text></TouchableOpacity><TouchableOpacity style={[styles.goldBtn, {flex: 1, marginTop: 0, backgroundColor: '#FF3B30'}]} onPress={executeBurnToRuins} disabled={publishing}><Text style={{color: '#FFF', fontWeight: '900'}}>🔥 确认销毁</Text></TouchableOpacity></View></View></KeyboardAvoidingView></Modal>
       <Modal visible={showTimePicker} transparent animationType="fade"><View style={styles.modalOverlayFull}><View style={styles.timePickerBox}><Text style={styles.modalTitle}>设定时间</Text><Text style={styles.timeSectionLabel}>日期</Text><View style={styles.timeBtnRow}>{['今天', '明天', '后天'].map((label, i) => (<TouchableOpacity key={label} style={[styles.timeBtn, selectedDateOffset === i && styles.timeBtnActive]} onPress={() => setSelectedDateOffset(i)}><Text style={[styles.timeBtnText, selectedDateOffset === i && styles.timeBtnTextActive]}>{label}</Text></TouchableOpacity>))}</View><Text style={styles.timeSectionLabel}>小时</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{maxHeight: 50}}>{['00','08','10','12','14','18','20','21','22'].map(h => (<TouchableOpacity key={h} style={[styles.timeBtn, selectedHour === h && styles.timeBtnActive]} onPress={() => setSelectedHour(h)}><Text style={[styles.timeBtnText, selectedHour === h && styles.timeBtnTextActive]}>{h}:00</Text></TouchableOpacity>))}</ScrollView><Text style={styles.timeSectionLabel}>分钟</Text><View style={styles.timeBtnRow}>{['00','15','30','45'].map(m => (<TouchableOpacity key={m} style={[styles.timeBtn, selectedMinute === m && styles.timeBtnActive]} onPress={() => setSelectedMinute(m)}><Text style={[styles.timeBtnText, selectedMinute === m && styles.timeBtnTextActive]}>{m}分</Text></TouchableOpacity>))}</View><View style={{flexDirection: 'row', marginTop: 30}}><TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowTimePicker(false)}><Text style={{color: '#CCC'}}>取消</Text></TouchableOpacity><TouchableOpacity style={[styles.goldBtn, {flex: 1, marginTop: 0}]} onPress={confirmTimeSelection}><Text style={styles.goldBtnText}>确认</Text></TouchableOpacity></View></View></View></Modal>
       <Modal visible={showColPicker} transparent animationType="slide"><View style={styles.modalOverlayFull}><View style={styles.modalContentFull}><View style={styles.pickerHeader}><Text style={styles.modalTitle}>选择藏品</Text><TouchableOpacity onPress={() => setShowColPicker(false)}><Text style={{color:'#999', fontSize: 16}}>关闭</Text></TouchableOpacity></View><FlatList data={collections} keyExtractor={item => item.id} numColumns={3} renderItem={({item}) => (<TouchableOpacity style={styles.miniCard} onPress={() => handleSelectFromPicker(item)}><Image source={{uri: item.image_url}} style={styles.miniImg} /><Text style={styles.miniName} numberOfLines={1}>{item.name}</Text></TouchableOpacity>)}/></View></View></Modal>
 
@@ -846,7 +855,6 @@ const styles = StyleSheet.create({
   tabText: { color: '#888', fontWeight: '700', fontSize: 13 },
   tabTextActive: { color: '#111', fontWeight: '900' },
   
-  // 🔍 新增：过滤与搜索工具栏样式
   filterToolbar: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, backgroundColor: '#111' },
   searchInput: { backgroundColor: '#1C1C1E', color: '#FFF', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, fontSize: 14, borderWidth: 1, borderColor: '#333', marginBottom: 12 },
   filterCatScroll: { maxHeight: 40 },
@@ -878,7 +886,6 @@ const styles = StyleSheet.create({
   pickerBtnText: { color: '#888', fontSize: 14, fontWeight: '600' },
   
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, backgroundColor: '#111', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#333' },
-  divider: { height: 1, backgroundColor: '#333', marginVertical: 10 },
   reqRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   reqCountInput: { width: 60, backgroundColor: '#111', color: '#FFF', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#333', textAlign: 'center', marginLeft: 10 },
   removeBtn: { width: 40, height: 40, backgroundColor: '#FF3B30', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
@@ -888,6 +895,14 @@ const styles = StyleSheet.create({
   catChipActive: { backgroundColor: '#00E5FF' },
   catChipText: { color: '#888', fontWeight: '800' },
   catChipTextActive: { color: '#111', fontWeight: '900' },
+
+  // 🌟 分区管理专属样式
+  categoryManageRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#333' },
+  catEditInput: { flex: 1, color: '#00E5FF', fontSize: 15, fontWeight: '900', borderBottomWidth: 1, borderColor: '#00E5FF', paddingVertical: 4 },
+  catSaveBtn: { backgroundColor: '#00E5FF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, marginLeft: 10 },
+  catCancelBtn: { paddingHorizontal: 10, paddingVertical: 6, marginLeft: 5 },
+  orderBtn: { backgroundColor: '#2C2C2E', width: 30, height: 30, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginLeft: 6 },
+  catDelBtn: { backgroundColor: '#FF3B30', width: 30, height: 30, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
 
   modalOverlayFull: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   modalContentFull: { backgroundColor: '#1C1C1E', height: '80%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16 },

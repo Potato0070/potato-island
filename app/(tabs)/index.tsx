@@ -6,7 +6,6 @@ import { supabase } from '../../supabase';
 
 const { width } = Dimensions.get('window');
 
-// 🌟 一岛化：重构高频金刚区
 const MENU_ITEMS = [
   { name: '基因合成', icon: '🧬', route: '/synthesis-list', bgColor: '#F0F6FF' }, 
   { name: '领主权益', icon: '👑', route: '/vip-privilege', bgColor: '#FFF5E6' },
@@ -24,13 +23,13 @@ export default function HomeScreen() {
   const [hotCollections, setHotCollections] = useState<any[]>([]);
   const [latestAnnounce, setLatestAnnounce] = useState<any>(null);
   
-  // 创世发新状态
   const [launchEvent, setLaunchEvent] = useState<any>(null);
   const [timeLeftStr, setTimeLeftStr] = useState('计算中...');
   const [isUrgent, setIsUrgent] = useState(false);
 
   const fetchHomeData = async () => {
     try {
+      // 🌟 热门藏品：同样按大盘的逻辑拉取
       const { data: hotData } = await supabase.from('collections').select('*').eq('is_tradeable', true).order('floor_price_cache', { ascending: false }).limit(4);
       if (hotData) setHotCollections(hotData);
 
@@ -129,7 +128,10 @@ export default function HomeScreen() {
           <Text style={styles.sectionTitle}>热门藏品</Text>
           <View style={styles.hotList}>
             {hotCollections.map(col => {
+              // 🌟 核心修复：同步大盘的计价与展示逻辑！
               const isDelisted = col.on_sale_count === 0 || col.on_sale_count == null;
+              const displayPrice = isDelisted ? (col.max_consign_price || 0) : (col.floor_price_cache || 0);
+
               return (
                 <TouchableOpacity key={col.id} style={styles.hotCard} activeOpacity={0.8} onPress={() => router.push({ pathname: '/collection', params: { id: col.id } })}>
                   <View style={styles.hotImageContainer}>
@@ -150,7 +152,11 @@ export default function HomeScreen() {
                       <Text style={styles.supplyText}>流通 {col.circulating_supply}</Text>
                     </View>
                     <View style={styles.hotBottom}>
-                      <Text style={[styles.hotPrice, isDelisted && {color: '#888'}]}>¥{col.floor_price_cache?.toFixed(0) || '0'}</Text>
+                      <View>
+                         {/* 🌟 补充价格标签 */}
+                         <Text style={{fontSize: 10, color: '#999', marginBottom: 2}}>{isDelisted ? '求购参考价' : '地板价'}</Text>
+                         <Text style={[styles.hotPrice, isDelisted && {color: '#888'}]}>¥{displayPrice.toFixed(2)}</Text>
+                      </View>
                       <Text style={styles.likeIcon}>🤍</Text>
                     </View>
                   </View>
