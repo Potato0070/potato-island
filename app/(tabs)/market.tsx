@@ -51,7 +51,7 @@ export default function MarketScreen() {
   const renderItem = ({ item }: { item: any }) => {
     const isDelisted = item.on_sale_count === 0 || item.on_sale_count == null;
     
-    // 🌟 核心修复：如果是退市状态，强制读取并显示后台设置的 max_consign_price（退市价/起拍价）
+    // 🌟 核心：强行展示最高限价（起拍价）
     const displayPrice = isDelisted ? (item.max_consign_price || 0) : (item.floor_price_cache || 0);
 
     return (
@@ -74,7 +74,6 @@ export default function MarketScreen() {
           </View>
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>{isDelisted ? '求购参考价' : '地板价'}</Text>
-            {/* 🌟 渲染修正后的价格 */}
             <Text style={[styles.price, isDelisted && {color: '#888'}]}>¥{displayPrice.toFixed(2)}</Text>
           </View>
         </View>

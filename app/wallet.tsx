@@ -34,7 +34,7 @@ export default function WalletScreen() {
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
       if (profile) setBalance((profile.potato_coin_balance || 0).toFixed(2));
 
-      // 🌟 核心修复：纯净查询
+      // 🌟 核心修复：安全抓取，剥离关联风险
       const { data: transferData, error } = await supabase.from('transfer_logs')
         .select('*, collections(name)')
         .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`)
@@ -75,9 +75,7 @@ export default function WalletScreen() {
         setLogs(formattedLogs);
       }
     } catch (err: any) { 
-       // 🌟 透视眼：抓取所有数据结构报错
        Alert.alert("钱包数据读取报错", err.message || JSON.stringify(err)); 
-       console.error(err); 
     } finally { setLoading(false); }
   };
 
@@ -107,14 +105,6 @@ export default function WalletScreen() {
       <View style={styles.walletCard}>
          <Text style={styles.cardLabel}>土豆币可用余额 (¥)</Text>
          <Text style={styles.cardBalance}>{balance}</Text>
-         <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.actionBtn} onPress={() => alert('充值通道暂未开放')}>
-               <Text style={styles.actionBtnText}>充值</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, styles.actionBtnOutline]} onPress={() => alert('提现通道暂未开放')}>
-               <Text style={styles.actionBtnOutlineText}>提现</Text>
-            </TouchableOpacity>
-         </View>
       </View>
 
       <View style={styles.logSection}>
@@ -146,12 +136,7 @@ const styles = StyleSheet.create({
   walletCard: { backgroundColor: '#111', margin: 16, borderRadius: 20, padding: 24, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: {width: 0, height: 5}, elevation: 5 },
   cardLabel: { color: '#CCC', fontSize: 13, marginBottom: 8 },
   cardBalance: { color: '#FFD700', fontSize: 40, fontWeight: '900', marginBottom: 24, fontFamily: 'monospace' },
-  actionRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  actionBtn: { flex: 0.48, backgroundColor: '#FFD700', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  actionBtnText: { color: '#111', fontSize: 16, fontWeight: '900' },
-  actionBtnOutline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#555' },
-  actionBtnOutlineText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
-
+  
   logSection: { flex: 1, backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
   sectionTitle: { fontSize: 16, fontWeight: '900', color: '#111', marginBottom: 16 },
   

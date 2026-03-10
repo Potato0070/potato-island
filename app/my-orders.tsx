@@ -33,6 +33,7 @@ export default function MyOrdersScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // 🌟 核心修复：去除了所有导致崩溃的 seller/buyer 外键关联查询，使用纯净数据！
       if (tab === '寄售中') {
         const { data, error } = await supabase.from('nfts').select('*, collections(name, image_url)').eq('owner_id', user.id).eq('status', 'listed').order('created_at', { ascending: false });
         if(error) throw error;
@@ -59,9 +60,7 @@ export default function MyOrdersScreen() {
         setListData(data || []);
       }
     } catch (err: any) { 
-       // 🌟 透视眼：抓取所有数据结构报错
        Alert.alert("订单数据读取报错", err.message || JSON.stringify(err)); 
-       console.error(err); 
     } finally { setLoading(false); }
   };
 
@@ -89,26 +88,19 @@ export default function MyOrdersScreen() {
       setCancelSaleModal(null);
       showToast('✅ 寄售已取消，藏品已退回金库锁定');
       fetchDataByTab('寄售中'); 
-    } catch (err: any) { 
-      Alert.alert('取消寄售失败', err.message); 
-    } finally { 
-      setProcessing(false); 
-    }
+    } catch (err: any) { Alert.alert('取消寄售失败', err.message); } finally { setProcessing(false); }
   };
 
   const handleIncreasePrice = async () => {
     if (!addPriceModal) return;
     const order = addPriceModal.order;
     const p = parseFloat(newPrice);
-    
     if (isNaN(p) || p <= order.price) return showToast(`加价必须高于当前出价 ¥${order.price}`);
-    
     setProcessing(true);
     try {
       const diffAmount = (p - order.price) * order.quantity; 
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user?.id).single();
-      
       if ((profile?.potato_coin_balance || 0) < diffAmount) throw new Error('钱包余额不足以支付加价差额！');
 
       await supabase.from('profiles').update({ potato_coin_balance: (profile?.potato_coin_balance || 0) - diffAmount }).eq('id', user?.id);
