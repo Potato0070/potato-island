@@ -83,9 +83,9 @@ export default function CollectionScreen() {
       await supabase.from('nfts').update({ owner_id: bid.buyer_id, status: 'idle' }).eq('id', nftToSell.id);
       
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user?.id).single();
-      await supabase.from('profiles').update({ potato_coin_balance: (profile?.potato_coin_balance || 0) + bid.price }).eq('id', user?.id);
+      await supabase.from('profiles').update({ potato_coin_balance: (profile?.potato_coin_balance || 0) + (bid.price || 0) }).eq('id', user?.id);
 
-      const newQuantity = bid.quantity - 1;
+      const newQuantity = (bid.quantity || 1) - 1;
       if (newQuantity <= 0) {
          await supabase.from('buy_orders').update({ status: 'won', quantity: 0 }).eq('id', bid.id);
       } else {
@@ -121,13 +121,12 @@ export default function CollectionScreen() {
            </View>
         </View>
         <View style={styles.nftInfo}>
-          <Text style={styles.serial}>#{String(item.serial_number).padStart(6, '0')}</Text>
-          {/* 🌟 核心拦截：强制匿名化 */}
+          <Text style={styles.serial}>#{String(item.serial_number || 0).padStart(6, '0')}</Text>
           <Text style={styles.owner} numberOfLines={1}>持有者: 土豆岛藏友</Text>
           {isListed ? (
              <View style={styles.priceRow}>
                 <Text style={styles.priceLabel}>一口价</Text>
-                <Text style={styles.priceValue}>¥{item.consign_price}</Text>
+                <Text style={styles.priceValue}>¥{item.consign_price || 0}</Text>
              </View>
           ) : (
              <View style={styles.priceRow}>
@@ -140,10 +139,15 @@ export default function CollectionScreen() {
     );
   };
 
-  // 🌟 渲染：求购与竞价列表
+  // 🌟 核心修复：极致的空值计算兜底，防崩溃白屏！
   const renderBidItem = ({ item, index }: { item: any, index: number }) => {
     const isTop3 = activeTab === 'bids' && index < 3;
     const canSellToHim = myIdleNfts.length > 0 && item.buyer_id !== myUserId;
+    
+    // 安全数值计算
+    const safePrice = item.price || 0;
+    const safeQuantity = item.quantity || 0;
+    const freezeAmount = (safePrice * safeQuantity).toFixed(2);
 
     return (
       <View style={styles.bidCard}>
@@ -151,13 +155,12 @@ export default function CollectionScreen() {
             <Text style={[styles.rankText, isTop3 ? {color: '#111'} : {color: '#888'}]}>{index + 1}</Text>
          </View>
          <View style={{flex: 1}}>
-            {/* 🌟 同样匿名化求购者 */}
             <Text style={styles.bidderName}>求购大户</Text>
-            <Text style={styles.bidInfo}>需求: {item.quantity} | 冻结: ¥{(item.price * item.quantity).toFixed(2)}</Text>
+            <Text style={styles.bidInfo}>需求: {safeQuantity} | 冻结: ¥{freezeAmount}</Text>
          </View>
          <View style={{alignItems: 'flex-end'}}>
             <Text style={styles.bidPriceLabel}>单件出价</Text>
-            <Text style={styles.bidPriceValue}>¥{item.price}</Text>
+            <Text style={styles.bidPriceValue}>¥{safePrice}</Text>
             {canSellToHim && (
                <TouchableOpacity style={styles.matchBtn} onPress={() => setMatchModal({visible: true, bid: item})}>
                   <Text style={styles.matchBtnText}>出给TA</Text>
@@ -197,7 +200,7 @@ export default function CollectionScreen() {
                      </View>
                      <View style={styles.statDivider} />
                      <View style={styles.statItem}>
-                        <Text style={styles.statValue}>{collection?.circulating_supply}</Text>
+                        <Text style={styles.statValue}>{collection?.circulating_supply || 0}</Text>
                         <Text style={styles.statLabel}>全网流通</Text>
                      </View>
                   </View>
@@ -209,7 +212,7 @@ export default function CollectionScreen() {
       {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
       <View style={styles.listSection}>
-         {/* 🌟 核心：四轨切换 Tabs */}
+         {/* 四轨切换 Tabs */}
          <View style={styles.tabsRow}>
             <TouchableOpacity style={[styles.tabBtn, activeTab === 'listed' && styles.tabBtnActive]} onPress={() => setActiveTab('listed')}>
                <Text style={[styles.tabText, activeTab === 'listed' && styles.tabTextActive]}>现货</Text>
@@ -230,7 +233,7 @@ export default function CollectionScreen() {
             <Text style={styles.fomoText}>点击此处发布求购/竞价单，抢先拿下心仪藏品 〉</Text>
          </TouchableOpacity>
 
-         {/* 🌟 条件渲染列表 */}
+         {/* 🌟 条件渲染列表：如果没数据会极其温柔地展示 Emoji 空状态，绝不白屏 */}
          {activeTab === 'listed' ? (
             <FlatList 
                data={listedNfts} 

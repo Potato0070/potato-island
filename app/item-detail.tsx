@@ -90,15 +90,32 @@ export default function ItemDetailScreen() {
     );
   };
 
+  // 🌟 修复大盘交易无法购买的问题（弃用RPC，使用前端串行更新）
   const executeBuy = async () => {
     setBuying(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (userBalance < nft.consign_price) throw new Error('您的钱包余额不足，请先充值！');
-
-      const { error } = await supabase.rpc('execute_trade', { p_nft_id: nft.id, p_buyer_id: user?.id });
-      if (error) throw error;
       
+      const sellerId = nft.owner_id;
+      const price = parseFloat(nft.consign_price);
+
+      // 1. 扣买家钱
+      await supabase.from('profiles').update({ potato_coin_balance: userBalance - price }).eq('id', myUserId);
+      
+      // 2. 加卖家钱
+      const { data: seller } = await supabase.from('profiles').select('potato_coin_balance').eq('id', sellerId).single();
+      if (seller) {
+         await supabase.from('profiles').update({ potato_coin_balance: (seller.potato_coin_balance || 0) + price }).eq('id', sellerId);
+      }
+
+      // 3. 转移所有权并下架
+      await supabase.from('nfts').update({ owner_id: myUserId, status: 'idle', consign_price: null }).eq('id', nft.id);
+
+      // 4. 写流水账
+      await supabase.from('transfer_logs').insert([{
+         nft_id: nft.id, collection_id: nft.collection_id, seller_id: sellerId, buyer_id: myUserId, price: price, transfer_type: 'direct_buy'
+      }]);
+
       setShowPayModal(false);
       Alert.alert('✅ 交易成功', '藏品已打入您的金库！', [{ text: '查看金库', onPress: () => router.replace('/(tabs)/profile') }]);
     } catch (err: any) { Alert.alert('交易失败', err.message); } finally { setBuying(false); }
@@ -112,7 +129,7 @@ export default function ItemDetailScreen() {
      setConfirmListModal(true); // 唤起二次确认防坑弹窗
   };
 
-  // 🌟 核心：执行挂单寄售
+  // 核心：执行挂单寄售
   const executeList = async () => {
      setListing(true);
      try {
@@ -127,6 +144,20 @@ export default function ItemDetailScreen() {
      } finally {
         setListing(false);
      }
+  };
+
+  // 🌟 修复按钮没反应：撤销寄售
+  const handleCancelList = async () => {
+     setListing(true);
+     await supabase.from('nfts').update({ status: 'idle', consign_price: null }).eq('id', nft.id);
+     showToast('已成功撤销寄售，退回金库！');
+     fetchData();
+     setListing(false);
+  };
+
+  // 🌟 修复转赠没反应：跳转至转赠页
+  const handleTransfer = () => {
+     router.push({ pathname: '/transfer', params: { nftId: nft.id } });
   };
 
   if (!nft) return <View style={styles.center}><ActivityIndicator color="#FFD700" /></View>;
@@ -169,7 +200,7 @@ export default function ItemDetailScreen() {
            </View>
         </View>
 
-        {/* 双轨流转账本 (一岛同款) */}
+        {/* 双轨流转账本 */}
         <View style={styles.historySection}>
            <View style={styles.historyHeader}>
               <Text style={styles.sectionTitle}>流转记录</Text>
@@ -212,11 +243,10 @@ export default function ItemDetailScreen() {
 
       {(isOwner && nft.status === 'idle') && (
         <View style={styles.bottomBar}>
-           <View>
-              <Text style={{color: '#999', fontSize: 12}}>我的藏品</Text>
-              <Text style={{color: '#111', fontSize: 16, fontWeight: '900'}}>状态: 金库锁定</Text>
-           </View>
-           <TouchableOpacity style={[styles.buyBtn, {backgroundColor: '#0066FF'}]} onPress={() => setShowListModal(true)}>
+           <TouchableOpacity style={[styles.actionBtn, {flex: 0.45, backgroundColor: '#F5F5F5'}]} onPress={handleTransfer}>
+              <Text style={[styles.buyText, {color: '#111'}]}>🎁 转赠</Text>
+           </TouchableOpacity>
+           <TouchableOpacity style={[styles.buyBtn, {flex: 0.5, backgroundColor: '#0066FF'}]} onPress={() => setShowListModal(true)}>
               <Text style={styles.buyText}>发布寄售</Text>
            </TouchableOpacity>
         </View>
@@ -228,13 +258,13 @@ export default function ItemDetailScreen() {
               <Text style={{color: '#999', fontSize: 12}}>正在寄售中</Text>
               <Text style={{color: '#FF3B30', fontSize: 20, fontWeight: '900'}}>¥ {nft.consign_price}</Text>
            </View>
-           <TouchableOpacity style={[styles.buyBtn, {backgroundColor: '#888'}]} onPress={() => router.push('/my-orders')}>
-              <Text style={styles.buyText}>管理订单</Text>
+           <TouchableOpacity style={[styles.buyBtn, {backgroundColor: '#FFF', borderColor: '#FF3B30', borderWidth: 1}]} onPress={handleCancelList} disabled={listing}>
+              {listing ? <ActivityIndicator color="#FF3B30" /> : <Text style={[styles.buyText, {color: '#FF3B30'}]}>撤销寄售</Text>}
            </TouchableOpacity>
         </View>
       )}
 
-      {/* 🌟 挂单输入价格抽屉 */}
+      {/* 挂单输入价格抽屉 */}
       <Modal visible={showListModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.listSheet}>
@@ -253,7 +283,7 @@ export default function ItemDetailScreen() {
         </View>
       </Modal>
 
-      {/* 🌟 防坑二次确认弹窗 (寄售) */}
+      {/* 防坑二次确认弹窗 (寄售) */}
       <Modal visible={confirmListModal} transparent animationType="fade">
          <View style={styles.modalOverlayCenter}>
             <View style={styles.confirmBox}>
@@ -354,6 +384,7 @@ const styles = StyleSheet.create({
   bottomBar: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderColor: '#F0F0F0' },
   buyBtn: { backgroundColor: '#FF5722', paddingHorizontal: 36, paddingVertical: 14, borderRadius: 25 },
   buyText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
+  actionBtn: { paddingVertical: 14, borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
