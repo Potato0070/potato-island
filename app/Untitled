@@ -20,10 +20,9 @@ export default function CreateBuyOrderScreen() {
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
 
-  // 🌟 核心：计算底线与上限
   const [minPriceLimit, setMinPriceLimit] = useState(0);
   const [maxPriceLimit, setMaxPriceLimit] = useState(Infinity);
-  const [orderMode, setOrderMode] = useState<'buy' | 'bid'>('buy'); // 区分模式
+  const [orderMode, setOrderMode] = useState<'buy' | 'bid'>('buy'); 
 
   const [potatoIds, setPotatoIds] = useState<string[]>([]);
   const [confirmModal, setConfirmModal] = useState(false);
@@ -48,7 +47,7 @@ export default function CreateBuyOrderScreen() {
     });
   }, []);
 
-  // 🌟 动态计算【求购】与【竞价】的核心逻辑
+  // 🌟 核心优化：动态对齐后台数据，决定是求购还是竞价
   useEffect(() => {
     if (activeCollectionId) {
       supabase.from('collections').select('*').eq('id', activeCollectionId).single().then(({data}) => {
@@ -57,12 +56,12 @@ export default function CreateBuyOrderScreen() {
         const isOnSale = (data?.on_sale_count || 0) > 0;
         
         if (isOnSale) {
-           // 有货 -> 求购模式：下限为地板价70%，上限为最高限价
+           // 🌟 求购模式：下限为地板价70%，上限严格锁定为最高限价
            setOrderMode('buy');
            setMinPriceLimit((data?.floor_price_cache || 0) * 0.7);
            setMaxPriceLimit(data?.max_consign_price || 999999);
         } else {
-           // 断货/退市 -> 竞价模式：下限为最高限价，无上限
+           // 🌟 竞价模式：下限为最高限价（退市价），没有上限
            setOrderMode('bid');
            setMinPriceLimit(data?.max_consign_price || 0);
            setMaxPriceLimit(Infinity);
@@ -83,18 +82,18 @@ export default function CreateBuyOrderScreen() {
   };
 
   const handlePublishClick = () => {
-    if (!collection) return showToast('请先选择藏品系列！');
+    if (!collection) return showToast('请先点击上方选择要求购的藏品系列！');
     
     const p = parseFloat(price);
     const q = parseInt(quantity);
-    if (isNaN(p) || p <= 0) return showToast('请输入有效价格');
+    if (isNaN(p) || p <= 0) return showToast('请输入有效出价');
     if (isNaN(q) || q <= 0) return showToast('数量不能少于 1');
     
-    // 🌟 严格验证
-    if (p < minPriceLimit) return showToast(`出价过低！不可低于：¥${minPriceLimit.toFixed(2)}`);
-    if (p > maxPriceLimit) return showToast(`触发熔断！求购上限不得超过：¥${maxPriceLimit.toFixed(2)}`);
+    // 🌟 强势拦截：如果是求购模式，绝对不允许突破最高限价！如果是竞价模式，绝对不允许低于退市价！
+    if (p < minPriceLimit) return showToast(`出价过低！不可低于底线：¥${minPriceLimit.toFixed(2)}`);
+    if (orderMode === 'buy' && p > maxPriceLimit) return showToast(`触发限价熔断！求购价不可超过：¥${maxPriceLimit.toFixed(2)}`);
     
-    if (potatoIds.length < 1) return showToast('金库现货不足！需持有至少 1 张 Potato卡');
+    if (potatoIds.length < 1) return showToast('金库现货不足！需持有至少 1 张真实的 Potato卡');
 
     setConfirmModal(true);
   };
@@ -111,13 +110,12 @@ export default function CreateBuyOrderScreen() {
       await supabase.from('profiles').update({ potato_coin_balance: profile.potato_coin_balance - totalCost }).eq('id', user?.id);
       await supabase.from('nfts').update({ status: 'burned' }).eq('id', potatoIds[0]);
 
-      // 🌟 插入订单时，携带明确的 order_type 字段！
       const { error } = await supabase.from('buy_orders').insert([{ 
          collection_id: collection.id, 
          buyer_id: user?.id, 
          price: parseFloat(price), 
          quantity: parseInt(quantity),
-         order_type: orderMode  // 'buy' 或 'bid'
+         order_type: orderMode  // 写入数据库
       }]);
       if (error) throw error;
       
@@ -164,7 +162,8 @@ export default function CreateBuyOrderScreen() {
               <View style={{flexDirection: 'row', alignItems: 'center', flex: 1}}>
                  <View style={[styles.targetImg, {justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0F0F0'}]}><Text style={{fontSize: 24, color: '#999'}}>+</Text></View>
                  <View style={styles.targetInfo}>
-                    <Text style={[styles.targetName, {color: '#0066FF'}]}>点击选择藏品</Text>
+                    <Text style={[styles.targetName, {color: '#0066FF'}]}>点击选择求购藏品</Text>
+                    <Text style={{fontSize: 11, color: '#888', marginTop: 4}}>大户扫货必选目标</Text>
                  </View>
                  <Text style={{color: '#0066FF', fontSize: 13, fontWeight: '800'}}>去选择 〉</Text>
               </View>
@@ -188,7 +187,7 @@ export default function CreateBuyOrderScreen() {
 
         <View style={styles.ruleBox}>
            <Text style={styles.ruleTitle}>交易说明</Text>
-           <Text style={styles.ruleText}>1. 发起需销毁 1 张 Potato卡。</Text>
+           <Text style={styles.ruleText}>1. 发起需销毁 1 张 Potato卡，不予退回。</Text>
            <Text style={styles.ruleText}>2. <Text style={{fontWeight: 'bold', color: '#111'}}>【求购】</Text>系列未退市时触发。最低价为地板价70%，上限为最高限价。</Text>
            <Text style={styles.ruleText}>3. <Text style={{fontWeight: 'bold', color: '#111'}}>【竞价】</Text>系列退市后触发。最低价为退市价(最高限价)，上不封顶！</Text>
         </View>
@@ -200,7 +199,7 @@ export default function CreateBuyOrderScreen() {
             <Text style={{fontSize: 24, fontWeight: '900', color: '#FF3B30'}}>¥ {((parseFloat(price)||0) * (parseInt(quantity)||1)).toFixed(2)}</Text>
          </View>
          <TouchableOpacity style={[styles.payBtn, (!collection || (orderMode === 'buy' && parseFloat(price) > maxPriceLimit)) && {backgroundColor: '#CCC'}]} onPress={handlePublishClick}>
-            <Text style={styles.payBtnText}>{orderMode === 'bid' ? '发起竞拍' : '确认支付'}</Text>
+            <Text style={styles.payBtnText}>确认支付</Text>
          </TouchableOpacity>
       </View>
 
@@ -236,7 +235,7 @@ export default function CreateBuyOrderScreen() {
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
                <Text style={styles.confirmTitle}>📝 订单确认</Text>
-               <Text style={styles.confirmDesc}>将冻结 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{((parseFloat(price)||0) * (parseInt(quantity)||1)).toFixed(2)}</Text> 资金，并强制销毁 <Text style={{fontWeight:'900'}}>1 张 Potato卡</Text>。是否继续？</Text>
+               <Text style={styles.confirmDesc}>发布将冻结 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{((parseFloat(price)||0) * (parseInt(quantity)||1)).toFixed(2)}</Text> 资金，并强制销毁 <Text style={{fontWeight:'900'}}>1 张 Potato卡</Text>。若撤单，材料卡不退回。是否继续？</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmModal(false)}><Text style={styles.cancelBtnText}>取消</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.confirmBtn} onPress={executePublish} disabled={publishing}>
@@ -261,12 +260,12 @@ const styles = StyleSheet.create({
   toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
   toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
   
-  targetHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: '#F0F0F0' },
+  targetHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: '#F0F0F0', shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 1 },
   targetImg: { width: 70, height: 70, borderRadius: 8, backgroundColor: '#EEE', marginRight: 16 },
   targetInfo: { flex: 1, justifyContent: 'center' },
   targetName: { fontSize: 16, fontWeight: '900', color: '#111', marginBottom: 6 },
-  targetSubHighlight: { fontSize: 12, color: '#FF3B30', fontWeight: '700', marginLeft: 8 },
-  modeTag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  targetSubHighlight: { fontSize: 11, color: '#FF3B30', fontWeight: '700' },
+  modeTag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 6 },
   modeTagText: { fontSize: 10, fontWeight: '900' },
   
   inputGroup: { backgroundColor: '#FFF', borderRadius: 16, paddingHorizontal: 16, marginBottom: 20 },

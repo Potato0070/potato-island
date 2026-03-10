@@ -56,37 +56,52 @@ export default function LaunchDetailScreen() {
     return () => clearInterval(timer);
   }, [launch]);
 
-  // 🌟 核心修复：先发货，再扣钱！绝对防坑！
+  // 🌟 核心修复：先发货，再扣钱，最后写流水加VIP进度！
   const executeMint = async () => {
     setBuying(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('账号未登录');
 
-      // 1. 查余额
-      const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
+      // 1. 查余额和当前的 VIP 消费总额
+      const { data: profile } = await supabase.from('profiles').select('potato_coin_balance, total_consumed').eq('id', user.id).single();
       if (!profile || profile.potato_coin_balance < launch.price) throw new Error('土豆币钱包余额不足！');
 
       // 2. 查库存和总发行量
       const { data: colData } = await supabase.from('collections').select('total_minted').eq('id', launch.collection_id).single();
       const newSerial = (colData?.total_minted || 0) + 1;
 
-      // 3. 🌟 先尝试强行铸造 NFT！(如果出现编号冲突，这里会直接抛出错误，跳到 catch，绝对不会扣钱！)
-      const { error: mintErr } = await supabase.from('nfts').insert([{
+      // 3. 先尝试强行铸造 NFT 并获取插入后的 ID (用于写流水)
+      const { data: newNft, error: mintErr } = await supabase.from('nfts').insert([{
          collection_id: launch.collection_id,
          owner_id: user.id,
          serial_number: newSerial.toString(),
          status: 'idle'
-      }]);
+      }]).select('id').single();
       
-      if (mintErr) {
-         throw new Error('抢购人数过多，网络拥堵，请再试一次！'); // 拦截唯一键冲突报错
+      if (mintErr || !newNft) {
+         throw new Error('抢购人数过多，网络拥堵，请再试一次！'); 
       }
 
-      // 4. 发货成功了，现在安全地扣钱和减库存
-      await supabase.from('profiles').update({ potato_coin_balance: profile.potato_coin_balance - launch.price }).eq('id', user.id);
+      // 4. 🌟 发货成功！扣钱，并同步增加 VIP 的 total_consumed 消费进度！
+      await supabase.from('profiles').update({ 
+         potato_coin_balance: profile.potato_coin_balance - launch.price,
+         total_consumed: (profile.total_consumed || 0) + launch.price
+      }).eq('id', user.id);
+
+      // 5. 减库存，增大盘发行量
       await supabase.from('launch_events').update({ remaining_supply: Math.max(0, launch.remaining_supply - 1) }).eq('id', id);
       await supabase.from('collections').update({ total_minted: newSerial, circulating_supply: newSerial }).eq('id', launch.collection_id);
+
+      // 6. 🌟 写入钱包流水账单！
+      await supabase.from('transfer_logs').insert([{
+         nft_id: newNft.id,
+         collection_id: launch.collection_id,
+         buyer_id: user.id,
+         seller_id: null, // 首发系统发货没有个人卖家
+         price: launch.price,
+         transfer_type: 'launch_mint'
+      }]);
 
       setConfirmModal(false);
       showToast('🎉 抢购成功！藏品已发放到金库！');
@@ -155,6 +170,7 @@ export default function LaunchDetailScreen() {
                <Text style={styles.confirmDesc}>系统将从您的钱包中扣除 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{launch.price}</Text> 购买现货，是否确认？</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmModal(false)}><Text style={styles.cancelBtnText}>取消</Text></TouchableOpacity>
+                  {/* 🌟 就是这里少了个 }，现在补上了！ */}
                   <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#FFD700'}]} onPress={executeMint} disabled={buying}>
                      {buying ? <ActivityIndicator color="#111" /> : <Text style={[styles.confirmBtnText, {color: '#111'}]}>确认支付</Text>}
                   </TouchableOpacity>

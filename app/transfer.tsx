@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -17,6 +17,11 @@ export default function TransferScreen() {
   const [myNfts, setMyNfts] = useState<any[]>([]);
   const [selectedNft, setSelectedNft] = useState<any>(null);
 
+  // 🌟 高级弹窗状态
+  const [confirmModal, setConfirmModal] = useState(false);
+  const [resultModal, setResultModal] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
+
   useEffect(() => {
     // 拉取玩家持有的转赠卡数量
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -27,6 +32,11 @@ export default function TransferScreen() {
     });
   }, []);
 
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 2500);
+  };
+
   const openNftPicker = async () => {
     setShowPicker(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -35,11 +45,16 @@ export default function TransferScreen() {
     setMyNfts(data || []);
   };
 
-  const executeTransfer = async () => {
-    if (!receiverId || receiverId.length < 5) return Alert.alert('错误', '请输入正确的接收人一岛号');
-    if (!selectedNft) return Alert.alert('错误', '请选择要转赠的藏品');
-    if (transferCards < 1) return Alert.alert('转赠卡不足', '您需要拥有至少1张转赠卡才能进行转移操作！');
+  // 🌟 点击“确认转赠”时的初步拦截，唤起二次确认弹窗
+  const handleTransferClick = () => {
+    if (!receiverId || receiverId.length < 5) return showToast('请输入正确的接收人一岛号');
+    if (!selectedNft) return showToast('请选择要转赠的藏品');
+    if (transferCards < 1) return showToast('转赠卡不足，无法进行转移！');
+    setConfirmModal(true);
+  };
 
+  // 🌟 真正的转赠执行逻辑
+  const executeTransfer = async () => {
     setPublishing(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -47,7 +62,6 @@ export default function TransferScreen() {
       await supabase.from('profiles').update({ transfer_cards: transferCards - 1 }).eq('id', user?.id);
       
       // 2. 转移藏品所有权
-      // 真实业务中需要根据一岛号(截取的id)找到真实的 user id，这里假设输入的就是真实ID或者做简单匹配
       const { error } = await supabase.from('nfts').update({ owner_id: receiverId }).eq('id', selectedNft.id);
       if (error) throw error;
 
@@ -56,8 +70,14 @@ export default function TransferScreen() {
         nft_id: selectedNft.id, collection_id: selectedNft.collection_id, seller_id: user?.id, buyer_id: receiverId, price: 0, transfer_type: '好友转赠'
       }]);
 
-      Alert.alert('🎁 转赠成功', '藏品已发送至对方金库！', [{ text: '返回', onPress: () => router.back() }]);
-    } catch (err: any) { Alert.alert('转赠失败', err.message); } finally { setPublishing(false); }
+      setConfirmModal(false);
+      setResultModal(true);
+    } catch (err: any) { 
+      setConfirmModal(false);
+      showToast(`转赠失败: ${err.message}`); 
+    } finally { 
+      setPublishing(false); 
+    }
   };
 
   return (
@@ -67,6 +87,8 @@ export default function TransferScreen() {
         <Text style={styles.navTitle}>资产转赠</Text>
         <View style={styles.navBtn} />
       </View>
+
+      {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
       <ScrollView contentContainerStyle={{padding: 20}}>
          <View style={styles.inputGroup}>
@@ -100,7 +122,7 @@ export default function TransferScreen() {
             </View>
             <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
                <Text style={styles.ownedText}>持有转赠卡: {transferCards}</Text>
-               <TouchableOpacity style={styles.exchangeBtn} onPress={() => Alert.alert('兑换中心', '功能建设中：稍后可使用Potato卡按1:1兑换转赠卡！')}>
+               <TouchableOpacity style={styles.exchangeBtn} onPress={() => showToast('功能建设中：稍后可使用Potato卡按1:1兑换转赠卡！')}>
                   <Text style={styles.exchangeText}>去兑换 〉</Text>
                </TouchableOpacity>
             </View>
@@ -113,7 +135,7 @@ export default function TransferScreen() {
             <Text style={styles.ruleText}>3. 平台严厉打击场外交易与炒作，转赠功能仅限赠与，不构成任何指导意见。</Text>
          </View>
 
-         <TouchableOpacity style={[styles.submitBtn, transferCards < 1 && {backgroundColor: '#CCC'}]} onPress={executeTransfer} disabled={publishing || transferCards < 1}>
+         <TouchableOpacity style={[styles.submitBtn, transferCards < 1 && {backgroundColor: '#CCC'}]} onPress={handleTransferClick} disabled={publishing || transferCards < 1}>
             <Text style={styles.submitBtnText}>{transferCards < 1 ? '转赠卡不足' : '确认转赠'}</Text>
          </TouchableOpacity>
       </ScrollView>
@@ -140,6 +162,35 @@ export default function TransferScreen() {
           </RNSafeAreaView>
         </View>
       </Modal>
+
+      {/* 🌟 严苛二次确认弹窗 */}
+      <Modal visible={confirmModal} transparent animationType="fade">
+         <View style={styles.modalOverlayCenter}>
+            <View style={styles.confirmBox}>
+               <Text style={styles.confirmTitle}>⚠️ 转赠最终确认</Text>
+               <Text style={styles.confirmDesc}>即将扣除 <Text style={{fontWeight:'900', color:'#FF3B30'}}>1 张转赠卡</Text>，并将藏品发送给神秘岛号【<Text style={{fontWeight:'900'}}>{receiverId}</Text>】。此操作<Text style={{fontWeight:'900', color:'#FF3B30'}}>不可逆</Text>！填错ID资产将永久遗失！</Text>
+               <View style={styles.confirmBtnRow}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmModal(false)}><Text style={styles.cancelBtnText}>我再核对下</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.confirmBtn} onPress={executeTransfer} disabled={publishing}>
+                     {publishing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认无误发送</Text>}
+                  </TouchableOpacity>
+               </View>
+            </View>
+         </View>
+      </Modal>
+
+      {/* 🌟 转赠成功弹窗 */}
+      <Modal visible={resultModal} transparent animationType="fade">
+         <View style={styles.modalOverlayCenter}>
+            <View style={[styles.confirmBox, {borderColor: '#0066FF', borderWidth: 2}]}>
+               <Text style={[styles.confirmTitle, {color: '#0066FF', fontSize: 22}]}>🎁 转赠成功</Text>
+               <Text style={[styles.confirmDesc, {fontSize: 15, color: '#111', fontWeight: '800'}]}>您的心意已通过加密通道传达，藏品已成功发送至对方金库！</Text>
+               <TouchableOpacity style={[styles.confirmBtn, {width: '100%', backgroundColor: '#0066FF'}]} onPress={() => { setResultModal(false); router.back(); }}>
+                  <Text style={styles.confirmBtnText}>返回</Text>
+               </TouchableOpacity>
+            </View>
+         </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -150,6 +201,9 @@ const styles = StyleSheet.create({
   navBtn: { width: 40, justifyContent: 'center' },
   iconText: { fontSize: 20, color: '#111' },
   navTitle: { fontSize: 17, fontWeight: '900', color: '#111' },
+  
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
+  toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
 
   inputGroup: { backgroundColor: '#FFF', borderRadius: 16, paddingHorizontal: 16, marginBottom: 20 },
   inputRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16 },
@@ -178,10 +232,20 @@ const styles = StyleSheet.create({
   submitBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
   bottomSheet: { backgroundColor: '#FFF', height: height * 0.6, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderColor: '#F0F0F0' },
   sheetTitle: { fontSize: 18, fontWeight: '900' },
   nftPickRow: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#F9F9F9', borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: 'transparent' },
   nftPickRowActive: { borderColor: '#0066FF', backgroundColor: '#F0F6FF' },
   pickImg: { width: 50, height: 50, borderRadius: 8, marginRight: 12 },
+
+  confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
+  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 16 },
+  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#F5F5F5', alignItems: 'center' },
+  cancelBtnText: { color: '#666', fontSize: 15, fontWeight: '800' },
+  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#0066FF', alignItems: 'center' },
+  confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });

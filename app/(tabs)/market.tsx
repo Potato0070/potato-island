@@ -32,13 +32,10 @@ export default function MarketScreen() {
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
-  // 1. 先过滤分区
   let processedData = activeCategory === 'all' ? collections : collections.filter(c => c.category_id === activeCategory);
 
-  // 2. 🌟 执行高级排序
   processedData = processedData.sort((a, b) => {
      if (activeSort === 'price_asc') {
-        // 退市的沉到底部
         if (a.on_sale_count === 0 && b.on_sale_count !== 0) return 1;
         if (a.on_sale_count !== 0 && b.on_sale_count === 0) return -1;
         return (a.floor_price_cache || 0) - (b.floor_price_cache || 0);
@@ -48,12 +45,14 @@ export default function MarketScreen() {
         if (a.on_sale_count !== 0 && b.on_sale_count === 0) return -1;
         return (b.floor_price_cache || 0) - (a.floor_price_cache || 0);
      }
-     // latest
      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
   const renderItem = ({ item }: { item: any }) => {
     const isDelisted = item.on_sale_count === 0 || item.on_sale_count == null;
+    
+    // 🌟 核心修复：如果是退市状态，强制读取并显示后台设置的 max_consign_price（退市价/起拍价）
+    const displayPrice = isDelisted ? (item.max_consign_price || 0) : (item.floor_price_cache || 0);
 
     return (
       <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => router.push({ pathname: '/collection', params: { id: item.id } })}>
@@ -75,7 +74,8 @@ export default function MarketScreen() {
           </View>
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>{isDelisted ? '求购参考价' : '地板价'}</Text>
-            <Text style={[styles.price, isDelisted && {color: '#888'}]}>¥{item.floor_price_cache?.toFixed(2) || '0.00'}</Text>
+            {/* 🌟 渲染修正后的价格 */}
+            <Text style={[styles.price, isDelisted && {color: '#888'}]}>¥{displayPrice.toFixed(2)}</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -99,7 +99,6 @@ export default function MarketScreen() {
         </ScrollView>
       </View>
       
-      {/* 🌟 核心增量：高级排序工具栏 */}
       <View style={styles.sortBar}>
          <TouchableOpacity onPress={() => setActiveSort('latest')}>
             <Text style={[styles.sortText, activeSort === 'latest' && styles.sortTextActive]}>最新上架</Text>

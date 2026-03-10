@@ -14,15 +14,13 @@ export default function CollectionScreen() {
   const [collection, setCollection] = useState<any>(null);
   const [nfts, setNfts] = useState<any[]>([]);
   const [bids, setBids] = useState<any[]>([]); 
-  const [myIdleNfts, setMyIdleNfts] = useState<any[]>([]); // 🌟 我的闲置现货
-  const [myUserId, setMyUserId] = useState<string>(''); // 🌟 存储当前用户ID用于过滤
+  const [myIdleNfts, setMyIdleNfts] = useState<any[]>([]);
+  const [myUserId, setMyUserId] = useState<string>('');
   
   const [loading, setLoading] = useState(true);
   
-  // 🌟 核心升级：四轨 Tab 状态 ('listed'=现货, 'my_warehouse'=个人仓库, 'buy_orders'=求购大厅, 'bids'=竞价大逃杀)
   const [activeTab, setActiveTab] = useState<'listed' | 'my_warehouse' | 'buy_orders' | 'bids'>('listed'); 
 
-  // 高级弹窗与撮合状态
   const [matchModal, setMatchModal] = useState<{visible: boolean, bid: any} | null>(null);
   const [processing, setProcessing] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
@@ -40,11 +38,9 @@ export default function CollectionScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) setMyUserId(user.id);
 
-      // 1. 获取系列宏观数据
       const { data: colData } = await supabase.from('collections').select('*').eq('id', id).single();
       setCollection(colData);
 
-      // 2. 获取该系列所有未燃烧的卡片 (现货+别人锁定的+我自己的)
       const { data: nftData } = await supabase.from('nfts')
         .select('*, profiles(nickname)')
         .eq('collection_id', id)
@@ -52,7 +48,7 @@ export default function CollectionScreen() {
         .order('consign_price', { ascending: true, nullsFirst: false });
       setNfts(nftData || []);
 
-      // 3. 获取求购与竞价数据 (买盘深度，出价从高到低)
+      // 获取所有的买盘数据
       const { data: bidData } = await supabase.from('buy_orders')
         .select('*, profiles:buyer_id(nickname)')
         .eq('collection_id', id)
@@ -60,7 +56,6 @@ export default function CollectionScreen() {
         .order('price', { ascending: false });
       setBids(bidData || []);
 
-      // 4. 获取当前用户在该系列下的闲置现货 (用于出给TA)
       if (user) {
          const { data: myNftsData } = await supabase.from('nfts')
            .select('*')
@@ -105,11 +100,14 @@ export default function CollectionScreen() {
     } finally { setProcessing(false); }
   };
 
-  // 🌟 数据分类过滤
   const listedNfts = nfts.filter(n => n.status === 'listed');
   const myWarehouseNfts = nfts.filter(n => n.owner_id === myUserId);
+  
+  // 🌟 核心：将买盘数据完美切割！
+  const buyOrdersList = bids.filter(b => b.order_type !== 'bid'); // 求购数据 (兼容旧的 null)
+  const bidOrdersList = bids.filter(b => b.order_type === 'bid'); // 竞价数据
+  const displayBids = activeTab === 'buy_orders' ? buyOrdersList : bidOrdersList;
 
-  // 🌟 渲染：卡片列表 (现货 / 我的仓库)
   const renderNft = ({ item }: { item: any }) => {
     const isListed = item.status === 'listed';
     return (
@@ -139,12 +137,10 @@ export default function CollectionScreen() {
     );
   };
 
-  // 🌟 核心修复：极致的空值计算兜底，防崩溃白屏！
   const renderBidItem = ({ item, index }: { item: any, index: number }) => {
     const isTop3 = activeTab === 'bids' && index < 3;
     const canSellToHim = myIdleNfts.length > 0 && item.buyer_id !== myUserId;
     
-    // 安全数值计算
     const safePrice = item.price || 0;
     const safeQuantity = item.quantity || 0;
     const freezeAmount = (safePrice * safeQuantity).toFixed(2);
@@ -155,7 +151,7 @@ export default function CollectionScreen() {
             <Text style={[styles.rankText, isTop3 ? {color: '#111'} : {color: '#888'}]}>{index + 1}</Text>
          </View>
          <View style={{flex: 1}}>
-            <Text style={styles.bidderName}>求购大户</Text>
+            <Text style={styles.bidderName}>{activeTab === 'bids' ? '竞价大户' : '求购大户'}</Text>
             <Text style={styles.bidInfo}>需求: {safeQuantity} | 冻结: ¥{freezeAmount}</Text>
          </View>
          <View style={{alignItems: 'flex-end'}}>
@@ -212,7 +208,6 @@ export default function CollectionScreen() {
       {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
       <View style={styles.listSection}>
-         {/* 四轨切换 Tabs */}
          <View style={styles.tabsRow}>
             <TouchableOpacity style={[styles.tabBtn, activeTab === 'listed' && styles.tabBtnActive]} onPress={() => setActiveTab('listed')}>
                <Text style={[styles.tabText, activeTab === 'listed' && styles.tabTextActive]}>现货</Text>
@@ -228,12 +223,10 @@ export default function CollectionScreen() {
             </TouchableOpacity>
          </View>
 
-         {/* FOMO 横幅 */}
          <TouchableOpacity style={styles.fomoBanner} activeOpacity={0.8} onPress={() => router.push({pathname: '/create-buy-order', params: {colId: collection?.id}})}>
             <Text style={styles.fomoText}>点击此处发布求购/竞价单，抢先拿下心仪藏品 〉</Text>
          </TouchableOpacity>
 
-         {/* 🌟 条件渲染列表：如果没数据会极其温柔地展示 Emoji 空状态，绝不白屏 */}
          {activeTab === 'listed' ? (
             <FlatList 
                data={listedNfts} 
@@ -243,12 +236,7 @@ export default function CollectionScreen() {
                contentContainerStyle={{ padding: 16, paddingBottom: 100 }} 
                columnWrapperStyle={{ justifyContent: 'space-between' }}
                showsVerticalScrollIndicator={false}
-               ListEmptyComponent={
-                  <View style={{alignItems: 'center', marginTop: 40}}>
-                     <Text style={{fontSize: 40, marginBottom: 10}}>🪹</Text>
-                     <Text style={{color: '#999'}}>当前系列被大户扫空啦，快去发布求购！</Text>
-                  </View>
-               }
+               ListEmptyComponent={<View style={{alignItems: 'center', marginTop: 40}}><Text style={{fontSize: 40, marginBottom: 10}}>🪹</Text><Text style={{color: '#999'}}>当前系列被大户扫空啦，快去发布求购！</Text></View>}
             />
          ) : activeTab === 'my_warehouse' ? (
             <FlatList 
@@ -259,23 +247,20 @@ export default function CollectionScreen() {
                contentContainerStyle={{ padding: 16, paddingBottom: 100 }} 
                columnWrapperStyle={{ justifyContent: 'space-between' }}
                showsVerticalScrollIndicator={false}
-               ListEmptyComponent={
-                  <View style={{alignItems: 'center', marginTop: 40}}>
-                     <Text style={{fontSize: 40, marginBottom: 10}}>📦</Text>
-                     <Text style={{color: '#999'}}>您尚未拥有该系列的藏品</Text>
-                  </View>
-               }
+               ListEmptyComponent={<View style={{alignItems: 'center', marginTop: 40}}><Text style={{fontSize: 40, marginBottom: 10}}>📦</Text><Text style={{color: '#999'}}>您尚未拥有该系列的藏品</Text></View>}
             />
          ) : (
             <FlatList 
-               data={bids}
+               data={displayBids} // 🌟 使用切割后的数据
                keyExtractor={item => item.id}
                contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
                showsVerticalScrollIndicator={false}
                ListEmptyComponent={
                   <View style={{alignItems: 'center', marginTop: 40}}>
                      <Text style={{fontSize: 40, marginBottom: 10}}>📉</Text>
-                     <Text style={{color: '#999'}}>暂无老板出价，点击上方横幅首发求购！</Text>
+                     <Text style={{color: '#999'}}>
+                        {activeTab === 'buy_orders' ? '暂无求购单，点击上方横幅首发求购！' : '暂无竞价单，点击上方发起竞拍！'}
+                     </Text>
                   </View>
                }
                renderItem={renderBidItem}

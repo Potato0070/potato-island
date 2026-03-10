@@ -57,6 +57,7 @@ export default function BlackholeScreen() {
     setProcessing(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('未登录');
       
       // 1. 物理燃烧掉你丢进来的垃圾卡
       await supabase.from('nfts').update({ status: 'burned' }).eq('id', selectedNft.id);
@@ -76,7 +77,7 @@ export default function BlackholeScreen() {
          if (universalCol) {
             // 安全兜底：防止 total_minted 为 undefined 导致崩溃白屏
             const newSerial = (universalCol.total_minted || 0) + 1;
-            await supabase.from('nfts').insert([{ collection_id: universalCol.id, owner_id: user?.id, serial_number: newSerial.toString(), status: 'idle' }]);
+            await supabase.from('nfts').insert([{ collection_id: universalCol.id, owner_id: user.id, serial_number: newSerial.toString(), status: 'idle' }]);
             await supabase.from('collections').update({ total_minted: newSerial, circulating_supply: newSerial }).eq('id', universalCol.id);
          }
          resTitle = '🌟 神迹显现！';
@@ -86,7 +87,7 @@ export default function BlackholeScreen() {
          if (potatoCol) {
             // 安全兜底：防止 total_minted 为 undefined 导致崩溃白屏
             const newSerial = (potatoCol.total_minted || 0) + 1;
-            await supabase.from('nfts').insert([{ collection_id: potatoCol.id, owner_id: user?.id, serial_number: newSerial.toString(), status: 'idle' }]);
+            await supabase.from('nfts').insert([{ collection_id: potatoCol.id, owner_id: user.id, serial_number: newSerial.toString(), status: 'idle' }]);
             await supabase.from('collections').update({ total_minted: newSerial, circulating_supply: newSerial }).eq('id', potatoCol.id);
          }
          resTitle = '💥 献祭失败！';
@@ -199,8 +200,8 @@ export default function BlackholeScreen() {
             <View style={[styles.confirmBox, {backgroundColor: '#222', borderColor: '#FF3B30', borderWidth: 2}]}>
                <Text style={[styles.confirmTitle, {color: '#FF3B30', fontSize: 20}]}>{resultModal?.title}</Text>
                <Text style={[styles.confirmDesc, {fontSize: 16, color: '#FFF', fontWeight: '800'}]}>{resultModal?.msg}</Text>
-               <TouchableOpacity style={[styles.confirmBtn, {width: '100%'}]} onPress={() => { setResultModal(null); setSelectedNft(null); }}>
-                  <Text style={styles.confirmBtnText}>确认</Text>
+               <TouchableOpacity style={[styles.confirmBtn, {width: '100%'}]} onPress={() => { setResultModal(null); setSelectedNft(null); router.replace('/(tabs)/profile'); }}>
+                  <Text style={styles.confirmBtnText}>回金库验货</Text>
                </TouchableOpacity>
             </View>
          </View>

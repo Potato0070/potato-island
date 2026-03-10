@@ -4,7 +4,6 @@ import { ActivityIndicator, FlatList, Image, Modal, ScrollView, StyleSheet, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
-// 🌟 新增 '竞价中' 选项
 const TABS = ['寄售中', '求购中', '竞价中', '已买入', '已卖出'];
 
 export default function MyOrdersScreen() {
@@ -13,11 +12,8 @@ export default function MyOrdersScreen() {
   const [listData, setListData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 高级弹窗状态
   const [cancelModal, setCancelModal] = useState<{visible: boolean, orderId: string, amount: number} | null>(null);
   const [addPriceModal, setAddPriceModal] = useState<{visible: boolean, order: any} | null>(null);
-  
-  // 取消寄售弹窗状态
   const [cancelSaleModal, setCancelSaleModal] = useState<{visible: boolean, nftId: string} | null>(null);
   
   const [newPrice, setNewPrice] = useState('');
@@ -41,9 +37,14 @@ export default function MyOrdersScreen() {
         const { data } = await supabase.from('nfts').select('*, collections(name, image_url)').eq('owner_id', user.id).eq('status', 'listed').order('created_at', { ascending: false });
         setListData(data || []);
       } 
-      // 🌟 兼容 '求购中' 和 '竞价中'，获取相同的买盘挂单数据
-      else if (tab === '求购中' || tab === '竞价中') {
-        const { data } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').order('created_at', { ascending: false });
+      else if (tab === '求购中') {
+        // 🌟 核心：排除 'bid' 的数据，只显示求购
+        const { data } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').neq('order_type', 'bid').order('created_at', { ascending: false });
+        setListData(data || []);
+      }
+      else if (tab === '竞价中') {
+        // 🌟 核心：只显示 'bid' 的数据
+        const { data } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').eq('order_type', 'bid').order('created_at', { ascending: false });
         setListData(data || []);
       }
       else if (tab === '已买入') {
@@ -57,7 +58,6 @@ export default function MyOrdersScreen() {
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
-  // 取消求购单/竞价单 (退钱)
   const handleCancelBuyOrder = async () => {
     if (!cancelModal) return;
     setProcessing(true);
@@ -70,17 +70,15 @@ export default function MyOrdersScreen() {
 
       setCancelModal(null);
       showToast('✅ 撤销成功，资金已退回钱包');
-      fetchDataByTab(activeTab); // 刷新当前 Tab
+      fetchDataByTab(activeTab); 
     } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setProcessing(false); }
   };
 
-  // 取消现货寄售 (状态改回 idle)
   const handleCancelSale = async () => {
     if (!cancelSaleModal) return;
     setProcessing(true);
     try {
       await supabase.from('nfts').update({ status: 'idle', consign_price: null }).eq('id', cancelSaleModal.nftId);
-
       setCancelSaleModal(null);
       showToast('✅ 寄售已取消，藏品已退回金库锁定');
       fetchDataByTab('寄售中'); 
@@ -91,7 +89,6 @@ export default function MyOrdersScreen() {
     }
   };
 
-  // 加价竞拍，补缴差价
   const handleIncreasePrice = async () => {
     if (!addPriceModal) return;
     const order = addPriceModal.order;
@@ -119,7 +116,7 @@ export default function MyOrdersScreen() {
 
   const renderItem = ({ item }: { item: any }) => {
     const isSelling = activeTab === '寄售中';
-    const isBuying = activeTab === '求购中' || activeTab === '竞价中'; // 🌟 兼容两个状态
+    const isBuying = activeTab === '求购中' || activeTab === '竞价中'; 
     
     const colName = Array.isArray(item.collections) ? item.collections[0]?.name : item.collections?.name;
     const colImg = Array.isArray(item.collections) ? item.collections[0]?.image_url : item.collections?.image_url;
@@ -181,7 +178,6 @@ export default function MyOrdersScreen() {
 
       {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
-      {/* 🌟 使用横向 ScrollView 防止 Tab 过多被挤压 */}
       <View style={styles.tabsWrapper}>
          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContainer}>
            {TABS.map(tab => (
@@ -250,7 +246,7 @@ export default function MyOrdersScreen() {
       <Modal visible={!!cancelModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
-               <Text style={styles.confirmTitle}>⚠️ 确认撤回求购</Text>
+               <Text style={styles.confirmTitle}>⚠️ 确认撤回订单</Text>
                <Text style={styles.confirmDesc}>撤单后，冻结的 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{cancelModal?.amount}</Text> 将立即退回钱包。消耗的 Potato卡 <Text style={{fontWeight:'900'}}>不会退还</Text>！</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setCancelModal(null)}><Text style={styles.cancelBtnText}>保持排队</Text></TouchableOpacity>
@@ -274,7 +270,6 @@ const styles = StyleSheet.create({
   toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
   toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
   
-  // 🌟 将容器拆分为 wrapper 和 container 确保滑动丝滑
   tabsWrapper: { backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#F0F0F0' },
   tabsContainer: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10 },
   tabBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, backgroundColor: '#F5F5F5', marginRight: 8 },
