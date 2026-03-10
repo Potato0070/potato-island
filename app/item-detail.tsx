@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -11,6 +11,9 @@ export default function ItemDetailScreen() {
   const { id } = useLocalSearchParams();
   const [nft, setNft] = useState<any>(null);
   
+  // 🌟 当前登录用户信息
+  const [myUserId, setMyUserId] = useState<string>('');
+  
   // 双轨账本数据
   const [currentHistory, setCurrentHistory] = useState<any[]>([]);
   const [allHistory, setAllHistory] = useState<any[]>([]);
@@ -20,17 +23,30 @@ export default function ItemDetailScreen() {
   const [showPayModal, setShowPayModal] = useState(false);
   const [userBalance, setUserBalance] = useState(0);
   
+  // 🌟 挂单寄售状态
+  const [showListModal, setShowListModal] = useState(false);
+  const [listPrice, setListPrice] = useState('');
+  const [confirmListModal, setConfirmListModal] = useState(false);
+  const [listing, setListing] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [buying, setBuying] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
 
   useEffect(() => {
     fetchData();
   }, [id]);
 
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 2500);
+  };
+
   const fetchData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+         setMyUserId(user.id);
          const { data: prof } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
          if (prof) setUserBalance(prof.potato_coin_balance);
       }
@@ -58,7 +74,7 @@ export default function ItemDetailScreen() {
     } catch(e) { console.error(e); } finally { setLoading(false); }
   };
 
-  // 🛡️ 强制二次弹窗确认 (满足你的资产变动必弹窗底线)
+  // 🛡️ 强制二次弹窗确认 (买入)
   const confirmAndPay = () => {
     Alert.alert(
       '🔒 支付防误触确认',
@@ -88,10 +104,36 @@ export default function ItemDetailScreen() {
     } catch (err: any) { Alert.alert('交易失败', err.message); } finally { setBuying(false); }
   };
 
+  // 🌟 挂单寄售的初步拦截
+  const handleListClick = () => {
+     const p = parseFloat(listPrice);
+     if (isNaN(p) || p <= 0) return showToast('请输入有效的寄售价格！');
+     setShowListModal(false);
+     setConfirmListModal(true); // 唤起二次确认防坑弹窗
+  };
+
+  // 🌟 核心：执行挂单寄售
+  const executeList = async () => {
+     setListing(true);
+     try {
+        await supabase.from('nfts').update({ status: 'listed', consign_price: parseFloat(listPrice) }).eq('id', nft.id);
+        setConfirmListModal(false);
+        setListPrice('');
+        showToast('✅ 挂单寄售成功！已进入大盘');
+        fetchData(); // 刷新状态
+     } catch(e: any) {
+        setConfirmListModal(false);
+        showToast(`挂单失败: ${e.message}`);
+     } finally {
+        setListing(false);
+     }
+  };
+
   if (!nft) return <View style={styles.center}><ActivityIndicator color="#FFD700" /></View>;
 
   const hashString = nft.id.replace(/-/g, '').toUpperCase();
   const displayHistory = historyMode === 'current' ? currentHistory : allHistory;
+  const isOwner = myUserId === nft.owner_id;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -101,7 +143,9 @@ export default function ItemDetailScreen() {
         <View style={styles.navBtn} />
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+      {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
+
+      <ScrollView contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
         
         {/* 悬浮 3D 展台设计 */}
         <View style={styles.stageContainer}>
@@ -125,7 +169,7 @@ export default function ItemDetailScreen() {
            </View>
         </View>
 
-        {/* 🌟 核心优化：双轨流转账本 (一岛同款) */}
+        {/* 双轨流转账本 (一岛同款) */}
         <View style={styles.historySection}>
            <View style={styles.historyHeader}>
               <Text style={styles.sectionTitle}>流转记录</Text>
@@ -153,8 +197,8 @@ export default function ItemDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* 底部购买唤醒栏 */}
-      {nft.status === 'listed' && (
+      {/* 🌟 智能底部操作栏 */}
+      {(!isOwner && nft.status === 'listed') && (
         <View style={styles.bottomBar}>
            <View>
               <Text style={{color: '#999', fontSize: 12}}>寄售价格</Text>
@@ -166,13 +210,72 @@ export default function ItemDetailScreen() {
         </View>
       )}
 
-      {/* 🌟 核心优化：底部支付收银台 (一岛同款) */}
+      {(isOwner && nft.status === 'idle') && (
+        <View style={styles.bottomBar}>
+           <View>
+              <Text style={{color: '#999', fontSize: 12}}>我的藏品</Text>
+              <Text style={{color: '#111', fontSize: 16, fontWeight: '900'}}>状态: 金库锁定</Text>
+           </View>
+           <TouchableOpacity style={[styles.buyBtn, {backgroundColor: '#0066FF'}]} onPress={() => setShowListModal(true)}>
+              <Text style={styles.buyText}>发布寄售</Text>
+           </TouchableOpacity>
+        </View>
+      )}
+
+      {(isOwner && nft.status === 'listed') && (
+        <View style={styles.bottomBar}>
+           <View>
+              <Text style={{color: '#999', fontSize: 12}}>正在寄售中</Text>
+              <Text style={{color: '#FF3B30', fontSize: 20, fontWeight: '900'}}>¥ {nft.consign_price}</Text>
+           </View>
+           <TouchableOpacity style={[styles.buyBtn, {backgroundColor: '#888'}]} onPress={() => router.push('/my-orders')}>
+              <Text style={styles.buyText}>管理订单</Text>
+           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* 🌟 挂单输入价格抽屉 */}
+      <Modal visible={showListModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.listSheet}>
+             <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>发布寄售</Text>
+                <TouchableOpacity onPress={() => setShowListModal(false)}><Text style={{color: '#999', fontSize: 24}}>×</Text></TouchableOpacity>
+             </View>
+             <View style={{padding: 20}}>
+                <Text style={{fontSize: 14, color: '#666', marginBottom: 12}}>请输入您的寄售一口价 (¥)</Text>
+                <TextInput style={styles.inputField} keyboardType="decimal-pad" value={listPrice} onChangeText={setListPrice} placeholder="例如: 199.00" textAlign="center" />
+                <TouchableOpacity style={[styles.confirmPayBtn, {backgroundColor: '#0066FF', marginTop: 24}]} onPress={handleListClick}>
+                   <Text style={{color: '#FFF', fontWeight: '900', fontSize: 16}}>下一步</Text>
+                </TouchableOpacity>
+             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 🌟 防坑二次确认弹窗 (寄售) */}
+      <Modal visible={confirmListModal} transparent animationType="fade">
+         <View style={styles.modalOverlayCenter}>
+            <View style={styles.confirmBox}>
+               <Text style={styles.confirmTitle}>📝 寄售确认</Text>
+               <Text style={styles.confirmDesc}>您即将以 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{listPrice}</Text> 的一口价将此藏品挂单至大盘。挂单期间藏品将被冻结，是否继续？</Text>
+               <View style={styles.confirmBtnRow}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmListModal(false)}><Text style={styles.cancelBtnText}>再想想</Text></TouchableOpacity>
+                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#0066FF'}]} onPress={executeList} disabled={listing}>
+                     {listing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认上架</Text>}
+                  </TouchableOpacity>
+               </View>
+            </View>
+         </View>
+      </Modal>
+
+      {/* 底部支付收银台 (买入) */}
       <Modal visible={showPayModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <RNSafeAreaView style={styles.bottomSheet}>
              <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>确认订单</Text>
-                <TouchableOpacity onPress={() => setShowPayModal(false)}><Text style={{color: '#999', fontSize: 20}}>×</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowPayModal(false)}><Text style={{color: '#999', fontSize: 24}}>×</Text></TouchableOpacity>
              </View>
 
              <View style={styles.sheetContent}>
@@ -194,7 +297,6 @@ export default function ItemDetailScreen() {
                          <Text style={styles.payMethodSub}>当前余额: ¥ {userBalance.toFixed(2)}</Text>
                       </View>
                    </View>
-                   {/* 模拟被选中的 Radio 按钮 */}
                    <View style={styles.radioChecked}><View style={styles.radioInner} /></View>
                 </View>
              </View>
@@ -222,6 +324,9 @@ const styles = StyleSheet.create({
   navBtn: { width: 40, justifyContent: 'center' },
   iconText: { fontSize: 20, color: '#111' },
   navTitle: { fontSize: 16, fontWeight: '800', color: '#111' },
+  
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
+  toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
 
   stageContainer: { alignItems: 'center', backgroundColor: '#F0F0F5', paddingVertical: 30 },
   floatBox: { padding: 10, backgroundColor: '#FFF', borderRadius: 16, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 20, shadowOffset: {width: 0, height: 10}, elevation: 10, zIndex: 2 },
@@ -250,8 +355,10 @@ const styles = StyleSheet.create({
   buyBtn: { backgroundColor: '#FF5722', paddingHorizontal: 36, paddingVertical: 14, borderRadius: 25 },
   buyText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
 
-  // 底部收银台样式
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  
+  listSheet: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 40 },
   bottomSheet: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, minHeight: 400 },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderColor: '#F0F0F0' },
   sheetTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
@@ -271,5 +378,15 @@ const styles = StyleSheet.create({
   radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#0066FF' },
 
   sheetFooter: { padding: 20, borderTopWidth: 1, borderColor: '#F0F0F0', paddingBottom: 40 },
-  confirmPayBtn: { backgroundColor: '#FF5722', height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' }
+  confirmPayBtn: { backgroundColor: '#FF5722', height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
+  inputField: { backgroundColor: '#F5F5F5', padding: 16, borderRadius: 12, fontSize: 20, fontWeight: '900', color: '#FF3B30' },
+
+  confirmBox: { width: '85%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
+  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 16 },
+  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#F5F5F5', alignItems: 'center' },
+  cancelBtnText: { color: '#666', fontSize: 15, fontWeight: '800' },
+  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FF3B30', alignItems: 'center' },
+  confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });

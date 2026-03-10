@@ -1,45 +1,43 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
+
+const { height } = Dimensions.get('window');
 
 export default function CreateBuyOrderScreen() {
   const router = useRouter();
   const { colId } = useLocalSearchParams();
+  
+  // 🌟 核心：动态管理的求购目标
+  const [activeCollectionId, setActiveCollectionId] = useState<string | null>((colId as string) || null);
   const [collection, setCollection] = useState<any>(null);
   
+  // 🌟 新增：全盘藏品列表与选择器弹窗
+  const [allCollections, setAllCollections] = useState<any[]>([]);
+  const [showPicker, setShowPicker] = useState(false);
+
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
   const [minPriceLimit, setMinPriceLimit] = useState(0);
 
-  // 🌟 存储真实的卡片 ID
+  // 存储真实的卡片 ID
   const [potatoIds, setPotatoIds] = useState<string[]>([]);
-
-  // 🌟 定制化高级弹窗与提示状态
   const [confirmModal, setConfirmModal] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
+  // 1. 页面加载时：获取所有可交易藏品，并去金库查材料卡
   useEffect(() => {
-    // 1. 拉取求购大盘的宏观限制数据
-    supabase.from('collections').select('*').eq('id', colId).single().then(({data}) => {
-      setCollection(data);
-      const isOnSale = data?.on_sale_count > 0;
-      const basePrice = isOnSale ? (data?.floor_price_cache || 0) : (data?.max_consign_price || 0);
-      setMinPriceLimit(basePrice * 0.7);
-      setLoading(false);
+    supabase.from('collections').select('*').eq('is_tradeable', true).then(({data}) => {
+       if (data) setAllCollections(data);
     });
 
-    // 2. 🌟 核心：去金库里查真实的“闲置 Potato卡”
     supabase.auth.getUser().then(async ({data: {user}}) => {
        if (user) {
-          const { data: myNfts } = await supabase.from('nfts')
-            .select('id, collections(name)')
-            .eq('owner_id', user.id)
-            .eq('status', 'idle');
-            
+          const { data: myNfts } = await supabase.from('nfts').select('id, collections(name)').eq('owner_id', user.id).eq('status', 'idle');
           if (myNfts) {
              const pCards = myNfts.filter((nft: any) => {
                 const colName = Array.isArray(nft.collections) ? nft.collections[0]?.name : nft.collections?.name;
@@ -49,7 +47,24 @@ export default function CreateBuyOrderScreen() {
           }
        }
     });
-  }, [colId]);
+  }, []);
+
+  // 2. 当选择了某个目标藏品时：实时计算最低保护价
+  useEffect(() => {
+    if (activeCollectionId) {
+      supabase.from('collections').select('*').eq('id', activeCollectionId).single().then(({data}) => {
+        setCollection(data);
+        const isOnSale = (data?.on_sale_count || 0) > 0;
+        const basePrice = isOnSale ? (data?.floor_price_cache || 0) : (data?.max_consign_price || 0);
+        setMinPriceLimit(basePrice * 0.7);
+        setLoading(false);
+      });
+    } else {
+      setCollection(null);
+      setMinPriceLimit(0);
+      setLoading(false);
+    }
+  }, [activeCollectionId]);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -57,13 +72,15 @@ export default function CreateBuyOrderScreen() {
   };
 
   const handlePublishClick = () => {
+    if (!collection) return showToast('请先点击上方选择要求购的藏品系列！');
+    
     const p = parseFloat(price);
     const q = parseInt(quantity);
     if (isNaN(p) || p <= 0) return showToast('请输入有效求购价格');
     if (isNaN(q) || q <= 0) return showToast('求购数量不能少于 1');
     if (p < minPriceLimit) return showToast(`出价过低！不可低于底线：¥${minPriceLimit.toFixed(2)}`);
     
-    // 🌟 拦截检查：金库里有没有真实的 Potato卡
+    // 拦截检查：金库里有没有真实的 Potato卡
     if (potatoIds.length < 1) return showToast('金库现货不足！需持有至少 1 张真实的 Potato卡');
 
     setConfirmModal(true);
@@ -83,12 +100,12 @@ export default function CreateBuyOrderScreen() {
          potato_coin_balance: profile.potato_coin_balance - totalCost 
       }).eq('id', user?.id);
 
-      // 2. 🌟 物理销毁 1 张真实的 Potato卡 NFT
+      // 2. 物理销毁 1 张真实的 Potato卡 NFT
       await supabase.from('nfts').update({ status: 'burned' }).eq('id', potatoIds[0]);
 
       // 3. 写入求购大厅订单表
       const { error } = await supabase.from('buy_orders').insert([{ 
-         collection_id: colId, 
+         collection_id: collection.id, 
          buyer_id: user?.id, 
          price: parseFloat(price), 
          quantity: parseInt(quantity) 
@@ -97,8 +114,6 @@ export default function CreateBuyOrderScreen() {
       
       setConfirmModal(false);
       showToast('✅ 发布成功！资金已冻结并进入大盘排队');
-      
-      // 延迟返回，让用户看清成功提示
       setTimeout(() => router.back(), 1500);
     } catch (err: any) { 
        setConfirmModal(false);
@@ -121,25 +136,41 @@ export default function CreateBuyOrderScreen() {
       {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
       <ScrollView contentContainerStyle={{padding: 20}}>
-        <View style={styles.targetHeader}>
-           <Image source={{ uri: collection?.image_url }} style={styles.targetImg} />
-           <View style={styles.targetInfo}>
-              <Text style={styles.targetName} numberOfLines={1}>{collection?.name}</Text>
-              <Text style={styles.targetSubHighlight}>最低出价保护线: ¥{minPriceLimit.toFixed(2)}</Text>
-           </View>
-        </View>
+        
+        {/* 🌟 核心：可点击选择的求购目标框 */}
+        <TouchableOpacity style={styles.targetHeader} activeOpacity={0.8} onPress={() => setShowPicker(true)}>
+           {collection ? (
+              <>
+                 <Image source={{ uri: collection.image_url }} style={styles.targetImg} />
+                 <View style={styles.targetInfo}>
+                    <Text style={styles.targetName} numberOfLines={1}>{collection.name}</Text>
+                    <Text style={styles.targetSubHighlight}>最低出价保护线: ¥{minPriceLimit.toFixed(2)}</Text>
+                 </View>
+                 <Text style={{color: '#999', fontSize: 13, fontWeight: '800'}}>更换 〉</Text>
+              </>
+           ) : (
+              <View style={{flexDirection: 'row', alignItems: 'center', flex: 1}}>
+                 <View style={[styles.targetImg, {justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0F0F0'}]}><Text style={{fontSize: 24, color: '#999'}}>+</Text></View>
+                 <View style={styles.targetInfo}>
+                    <Text style={[styles.targetName, {color: '#0066FF'}]}>点击选择求购藏品</Text>
+                    <Text style={{fontSize: 11, color: '#888', marginTop: 4}}>大户扫货必选目标</Text>
+                 </View>
+                 <Text style={{color: '#0066FF', fontSize: 13, fontWeight: '800'}}>去选择 〉</Text>
+              </View>
+           )}
+        </TouchableOpacity>
 
         <View style={styles.inputGroup}>
            <View style={styles.inputRow}>
               <Text style={styles.inputLabel}>求购价格 (¥)</Text>
-              <TextInput style={styles.inputField} placeholder={`最低 ¥${minPriceLimit.toFixed(2)}`} keyboardType="decimal-pad" value={price} onChangeText={setPrice} textAlign="right" />
+              <TextInput style={styles.inputField} placeholder={`最低 ¥${minPriceLimit.toFixed(2)}`} keyboardType="decimal-pad" value={price} onChangeText={setPrice} textAlign="right" editable={!!collection} />
            </View>
            <View style={[styles.inputRow, {borderBottomWidth: 0}]}>
               <Text style={styles.inputLabel}>求购数量</Text>
               <View style={styles.stepper}>
-                 <TouchableOpacity onPress={() => setQuantity(Math.max(1, parseInt(quantity)-1).toString())}><Text style={styles.stepperBtn}>-</Text></TouchableOpacity>
-                 <TextInput style={styles.stepperInput} value={quantity} onChangeText={setQuantity} keyboardType="number-pad" textAlign="center" />
-                 <TouchableOpacity onPress={() => setQuantity((parseInt(quantity)+1).toString())}><Text style={styles.stepperBtn}>+</Text></TouchableOpacity>
+                 <TouchableOpacity onPress={() => setQuantity(Math.max(1, parseInt(quantity)-1).toString())} disabled={!collection}><Text style={styles.stepperBtn}>-</Text></TouchableOpacity>
+                 <TextInput style={styles.stepperInput} value={quantity} onChangeText={setQuantity} keyboardType="number-pad" textAlign="center" editable={!!collection} />
+                 <TouchableOpacity onPress={() => setQuantity((parseInt(quantity)+1).toString())} disabled={!collection}><Text style={styles.stepperBtn}>+</Text></TouchableOpacity>
               </View>
            </View>
         </View>
@@ -157,12 +188,35 @@ export default function CreateBuyOrderScreen() {
             <Text style={{fontSize: 12, color: '#666'}}>需冻结资金</Text>
             <Text style={{fontSize: 24, fontWeight: '900', color: '#FF3B30'}}>¥ {((parseFloat(price)||0) * (parseInt(quantity)||1)).toFixed(2)}</Text>
          </View>
-         <TouchableOpacity style={styles.payBtn} onPress={handlePublishClick}>
+         <TouchableOpacity style={[styles.payBtn, !collection && {backgroundColor: '#CCC'}]} onPress={handlePublishClick}>
             <Text style={styles.payBtnText}>确认支付</Text>
          </TouchableOpacity>
       </View>
 
-      {/* 🌟 高级定制确认悬浮窗 */}
+      {/* 🌟 底部抽屉选择器：选择求购目标 */}
+      <Modal visible={showPicker} transparent animationType="slide">
+        <View style={styles.bottomSheetOverlay}>
+          <View style={styles.bottomSheet}>
+             <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>选择求购目标</Text>
+                <TouchableOpacity onPress={() => setShowPicker(false)}><Text style={{color: '#999', fontSize: 15, fontWeight: '800'}}>取消</Text></TouchableOpacity>
+             </View>
+             <ScrollView style={{padding: 16}}>
+                {allCollections.map(c => (
+                   <TouchableOpacity key={c.id} style={styles.colPickRow} onPress={() => { setActiveCollectionId(c.id); setShowPicker(false); }}>
+                      <Image source={{uri: c.image_url}} style={styles.pickImg} />
+                      <View style={{flex: 1}}>
+                         <Text style={styles.pickTitle}>{c.name}</Text>
+                         <Text style={styles.pickSub}>在售: <Text style={{color: '#111', fontWeight: '900'}}>{c.on_sale_count || 0}</Text> | 当前底价: ¥{c.floor_price_cache || 0}</Text>
+                      </View>
+                   </TouchableOpacity>
+                ))}
+             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 高级定制确认悬浮窗 */}
       <Modal visible={confirmModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
@@ -192,8 +246,8 @@ const styles = StyleSheet.create({
   toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
   toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
   
-  targetHeader: { flexDirection: 'row', backgroundColor: '#FFF', padding: 16, borderRadius: 16, marginBottom: 20 },
-  targetImg: { width: 70, height: 70, borderRadius: 8, backgroundColor: '#EEE', marginRight: 12 },
+  targetHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: '#F0F0F0', shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 1 },
+  targetImg: { width: 70, height: 70, borderRadius: 8, backgroundColor: '#EEE', marginRight: 16 },
   targetInfo: { flex: 1, justifyContent: 'center' },
   targetName: { fontSize: 16, fontWeight: '900', color: '#111', marginBottom: 6 },
   targetSubHighlight: { fontSize: 11, color: '#FF3B30', fontWeight: '700' },
@@ -215,6 +269,16 @@ const styles = StyleSheet.create({
   payInfo: { flex: 1 },
   payBtn: { backgroundColor: '#FF5722', paddingHorizontal: 30, paddingVertical: 14, borderRadius: 24 },
   payBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
+
+  // 🌟 底部抽屉样式
+  bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  bottomSheet: { backgroundColor: '#FFF', height: height * 0.65, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderColor: '#F0F0F0' },
+  sheetTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
+  colPickRow: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#F9F9F9', borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#F0F0F0' },
+  pickImg: { width: 50, height: 50, borderRadius: 8, marginRight: 12 },
+  pickTitle: { fontSize: 15, fontWeight: '800', color: '#111', marginBottom: 4 },
+  pickSub: { fontSize: 12, color: '#888' },
   
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
   confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },

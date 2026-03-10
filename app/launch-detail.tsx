@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, ImageBackground, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -18,9 +18,18 @@ export default function LaunchDetailScreen() {
   const [isStarted, setIsStarted] = useState(false);
   const [isSoldOut, setIsSoldOut] = useState(false);
 
+  // 🌟 高级定制弹窗与提示
+  const [confirmModal, setConfirmModal] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
+
   useEffect(() => {
     fetchLaunchData();
   }, [id]);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 2500);
+  };
 
   const fetchLaunchData = async () => {
     try {
@@ -58,58 +67,61 @@ export default function LaunchDetailScreen() {
     return () => clearInterval(timer);
   }, [launch]);
 
-  const handleMint = async () => {
-    Alert.alert(
-      '🚀 确认抢购',
-      `将扣除 ¥${launch.price} 土豆币购买【${launch.collection?.name}】首发盲盒，是否继续？`,
-      [
-        { text: '取消', style: 'cancel' },
-        { 
-          text: '确认支付', 
-          style: 'destructive',
-          onPress: async () => {
-            setBuying(true);
-            try {
-              const { data: { user } } = await supabase.auth.getUser();
-              if (!user) throw new Error('未登录');
+  // 🌟 拦截：唤起高级悬浮窗，替代原生的 Alert
+  const handleMintClick = () => {
+    setConfirmModal(true);
+  };
 
-              // 1. 查余额
-              const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
-              if (!profile || profile.potato_coin_balance < launch.price) throw new Error('土豆币余额不足！');
+  // 🌟 核心：执行扣钱和发货逻辑
+  const executeMint = async () => {
+    setBuying(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('账号未登录或会话已过期');
 
-              // 2. 查库存并扣减 (这里用前端模拟事务，真实高并发需转写 RPC)
-              const { data: currentLaunch } = await supabase.from('launch_events').select('remaining_supply').eq('id', id).single();
-              if (!currentLaunch || currentLaunch.remaining_supply <= 0) throw new Error('手慢了，已被抢空！');
+      // 1. 查余额
+      const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
+      if (!profile || profile.potato_coin_balance < launch.price) throw new Error('土豆币钱包余额不足！请先充值');
 
-              // 3. 扣钱
-              await supabase.from('profiles').update({ potato_coin_balance: profile.potato_coin_balance - launch.price }).eq('id', user.id);
-              
-              // 4. 减库存
-              await supabase.from('launch_events').update({ remaining_supply: currentLaunch.remaining_supply - 1 }).eq('id', id);
+      // 2. 查库存
+      const { data: currentLaunch } = await supabase.from('launch_events').select('remaining_supply').eq('id', id).single();
+      if (!currentLaunch || currentLaunch.remaining_supply <= 0) throw new Error('手慢了，已被抢空！');
 
-              // 5. 印钞发货 (状态 idle)
-              const newSerial = launch.total_supply - currentLaunch.remaining_supply + 1;
-              const { error: mintErr } = await supabase.from('nfts').insert([{
-                 collection_id: launch.collection_id,
-                 owner_id: user.id,
-                 serial_number: newSerial.toString(),
-                 status: 'idle'
-              }]);
-              if (mintErr) throw mintErr;
+      // 3. 扣钱
+      await supabase.from('profiles').update({ potato_coin_balance: profile.potato_coin_balance - launch.price }).eq('id', user.id);
+      
+      // 4. 减库存
+      await supabase.from('launch_events').update({ remaining_supply: currentLaunch.remaining_supply - 1 }).eq('id', id);
 
-              // 6. 更新大盘数据
-              await supabase.from('collections').update({
-                 total_minted: newSerial,
-                 circulating_supply: newSerial
-              }).eq('id', launch.collection_id);
+      // 5. 印钞发货 (状态 idle)
+      const newSerial = launch.total_supply - currentLaunch.remaining_supply + 1;
+      const { error: mintErr } = await supabase.from('nfts').insert([{
+         collection_id: launch.collection_id,
+         owner_id: user.id,
+         serial_number: newSerial.toString(),
+         status: 'idle'
+      }]);
+      if (mintErr) throw mintErr;
 
-              Alert.alert('🎉 抢购成功', '首发藏品已打入您的金库！', [{text: '去查看', onPress: () => router.push('/(tabs)/profile')}]);
-              fetchLaunchData();
-            } catch (err: any) { Alert.alert('抢购失败', err.message); } finally { setBuying(false); }
-          }
-        }
-      ]
-    );
+      // 6. 更新大盘数据
+      await supabase.from('collections').update({
+         total_minted: newSerial,
+         circulating_supply: newSerial
+      }).eq('id', launch.collection_id);
+
+      setConfirmModal(false);
+      showToast('🎉 抢购成功！藏品已打入金库');
+      
+      // 刷新数据，并且在1.5秒后自动跳回金库让用户看货
+      fetchLaunchData();
+      setTimeout(() => { router.replace('/(tabs)/profile'); }, 1500);
+      
+    } catch (err: any) { 
+       setConfirmModal(false);
+       showToast(`抢购失败: ${err.message}`); 
+    } finally { 
+       setBuying(false); 
+    }
   };
 
   if (loading || !launch) return <View style={styles.center}><ActivityIndicator color="#FFD700" /></View>;
@@ -118,6 +130,8 @@ export default function LaunchDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
+
       <ImageBackground source={{ uri: launch.collection?.image_url }} style={styles.headerBg} blurRadius={20}>
          <View style={styles.headerOverlay}>
             <View style={styles.navBar}>
@@ -142,7 +156,6 @@ export default function LaunchDetailScreen() {
                <Text style={styles.priceValue}>¥ {launch.price.toFixed(2)}</Text>
             </View>
             
-            {/* 进度条 */}
             <View style={styles.progressSection}>
                <View style={styles.progressLabels}>
                   <Text style={styles.progressText}>已抢 {launch.total_supply - launch.remaining_supply} 份</Text>
@@ -163,11 +176,10 @@ export default function LaunchDetailScreen() {
          </View>
       </ScrollView>
 
-      {/* 底部抢购栏 */}
       <View style={styles.bottomBar}>
          <TouchableOpacity 
             style={[styles.buyBtn, (!isStarted || isSoldOut) && {backgroundColor: '#555'}]} 
-            onPress={handleMint}
+            onPress={handleMintClick}
             disabled={!isStarted || isSoldOut || buying}
          >
             {buying ? <ActivityIndicator color="#111" /> : (
@@ -177,6 +189,22 @@ export default function LaunchDetailScreen() {
             )}
          </TouchableOpacity>
       </View>
+
+      {/* 🌟 抢购防误触二次确认弹窗 */}
+      <Modal visible={confirmModal} transparent animationType="fade">
+         <View style={styles.modalOverlay}>
+            <View style={styles.confirmBox}>
+               <Text style={styles.confirmTitle}>🚀 确认抢购</Text>
+               <Text style={styles.confirmDesc}>系统将从您的钱包中扣除 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{launch.price}</Text> 购买【{launch.collection?.name}】首发现货，资产立刻到账。是否确认？</Text>
+               <View style={styles.confirmBtnRow}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmModal(false)}><Text style={styles.cancelBtnText}>再想想</Text></TouchableOpacity>
+                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#FFD700'}]} onPress={executeMint} disabled={buying}>
+                     {buying ? <ActivityIndicator color="#111" /> : <Text style={[styles.confirmBtnText, {color: '#111'}]}>确认支付</Text>}
+                  </TouchableOpacity>
+               </View>
+            </View>
+         </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -185,6 +213,9 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#111' },
   container: { flex: 1, backgroundColor: '#F5F6F8' },
   
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
+  toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+
   headerBg: { width: '100%', height: 350 },
   headerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' },
   navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, marginTop: 10 },
@@ -216,5 +247,16 @@ const styles = StyleSheet.create({
 
   bottomBar: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30, borderTopWidth: 1, borderColor: '#F0F0F0' },
   buyBtn: { backgroundColor: '#FFD700', height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
-  buyBtnText: { color: '#111', fontSize: 18, fontWeight: '900', letterSpacing: 2 }
+  buyBtnText: { color: '#111', fontSize: 18, fontWeight: '900', letterSpacing: 2 },
+
+  // 悬浮窗样式
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
+  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 16 },
+  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#F5F5F5', alignItems: 'center' },
+  cancelBtnText: { color: '#666', fontSize: 15, fontWeight: '800' },
+  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#111', alignItems: 'center' },
+  confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });
