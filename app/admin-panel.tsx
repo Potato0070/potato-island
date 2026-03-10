@@ -1,10 +1,9 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
-// 🌟 史诗级扩容 Tab
 type AdminTab = '数据罗盘' | '资产调控' | '新增系列' | '快照空投' | '全局参数' | '藏品发新' | '进化配置' | '岛民制裁' | '王国公告' | '神之手';
 interface CategoryItem { id: number; name: string; sort_order: number; }
 
@@ -17,13 +16,15 @@ export default function AdminPanelScreen() {
   
   const [collections, setCollections] = useState<any[]>([]);
   const [adminCategories, setAdminCategories] = useState<CategoryItem[]>([]);
-  
   const [launchList, setLaunchList] = useState<any[]>([]);
   const [synthesisList, setSynthesisList] = useState<any[]>([]);
   const [announceList, setAnnounceList] = useState<any[]>([]);
-
-  // 📊 看板数据
   const [stats, setStats] = useState({ users: 0, transfers: 0, nfts: 0 });
+
+  // 🌟 统一个性化反馈矩阵 (Toast + 二次确认 + 成功反馈)
+  const [toastMsg, setToastMsg] = useState('');
+  const [successModal, setSuccessModal] = useState<{title: string, msg: string} | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{title: string, desc: string, confirmText: string, isDanger: boolean, action: () => Promise<void>} | null>(null);
 
   // 💎 资产调控专属模态框
   const [showPriceModal, setShowPriceModal] = useState(false);
@@ -44,48 +45,40 @@ export default function AdminPanelScreen() {
   const [selectedHour, setSelectedHour] = useState('20');
   const [selectedMinute, setSelectedMinute] = useState('00');
 
-  // 📜 王国公告
+  // 📜 表单状态们
   const [announceTitle, setAnnounceTitle] = useState('');
   const [announceContent, setAnnounceContent] = useState('');
   const [announceImage, setAnnounceImage] = useState('');
   const [announceFeatured, setAnnounceFeatured] = useState(false);
 
-  // 🚀 发新大厅
   const [launchColId, setLaunchColId] = useState('');
   const [launchColName, setLaunchColName] = useState('');
   const [launchPrice, setLaunchPrice] = useState('');
   const [launchSupply, setLaunchSupply] = useState('');
   const [launchStartTime, setLaunchStartTime] = useState('');
 
-  // 🧬 进化配方
   const [synName, setSynName] = useState('');
   const [targetColId, setTargetColId] = useState('');
   const [targetColName, setTargetColName] = useState('');
   const [synMaxCount, setSynMaxCount] = useState('100');
   const [requirements, setRequirements] = useState<{id: string, name: string, count: string}[]>([{ id: '', name: '', count: '1' }]);
 
-  // 👑 神之手
   const [newBalance, setNewBalance] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [mintColId, setMintColId] = useState('');
   const [mintColName, setMintColName] = useState('');
   const [mintAmount, setMintAmount] = useState('1');
 
-  // 🎁 快照空投 
   const [airdropReqs, setAirdropReqs] = useState<{id: string, name: string}[]>([]);
   const [airdropTargetId, setAirdropTargetId] = useState('');
   const [airdropTargetName, setAirdropTargetName] = useState('');
 
-  // 🎯 岛民制裁 (定向操作)
   const [targetUserId, setTargetUserId] = useState('');
   const [targetUserCoin, setTargetUserCoin] = useState('');
   const [targetMailTitle, setTargetMailTitle] = useState('');
   const [targetMailContent, setTargetMailContent] = useState('');
 
-  // ⚙️ 全局参数配置
   const [configs, setConfigs] = useState<Record<string, string>>({});
-
-  // 🖼️ 新增系列
   const [newColName, setNewColName] = useState('');
   const [newColImage, setNewColImage] = useState('');
   const [newColMaxPrice, setNewColMaxPrice] = useState('');
@@ -93,23 +86,25 @@ export default function AdminPanelScreen() {
 
   useFocusEffect(useCallback(() => { initAdmin(); }, []));
 
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 2500);
+  };
+
   const initAdmin = async () => {
     try {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.replace('/');
-      
       const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
-      if (!profile?.is_admin) { Alert.alert('越权拦截', '无权访问！'); return router.back(); }
+      if (!profile?.is_admin) { showToast('越权拦截，无权访问！'); return router.back(); }
       setAdminId(user.id);
-      
       await fetchData();
-    } catch (err: any) { Alert.alert('初始化失败', err.message); } finally { setLoading(false); }
+    } catch (err: any) { showToast(`初始化失败: ${err.message}`); } finally { setLoading(false); }
   };
 
   const fetchData = async () => {
       try {
-          // 基础数据
           const { data: catData } = await supabase.from('categories').select('*').order('sort_order', { ascending: true });
           if (catData) setAdminCategories(catData as CategoryItem[]);
 
@@ -125,7 +120,6 @@ export default function AdminPanelScreen() {
           const { data: aData } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
           if (aData) setAnnounceList(aData);
 
-          // 提取全局参数
           const { data: cfgData } = await supabase.from('system_config').select('*');
           if (cfgData) {
              const cMap: Record<string, string> = {};
@@ -133,15 +127,11 @@ export default function AdminPanelScreen() {
              setConfigs(cMap);
           }
 
-          // 📊 提取罗盘统计数据
           const { count: uCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
           const { count: tCount } = await supabase.from('transfer_logs').select('*', { count: 'exact', head: true });
           const { count: nCount } = await supabase.from('nfts').select('*', { count: 'exact', head: true });
           setStats({ users: uCount || 0, transfers: tCount || 0, nfts: nCount || 0 });
-
-      } catch (e) {
-          console.error("Fetch Data Error: ", e);
-      }
+      } catch (e) { console.error("Fetch Data Error: ", e); }
   };
 
   const openPicker = (target: typeof pickerTarget, index?: number) => {
@@ -181,189 +171,288 @@ export default function AdminPanelScreen() {
     setShowTimePicker(false);
   };
 
-  // ================= 🎯 岛民制裁 (定向操作) =================
-  const handleGrantUserCoins = async () => {
-      if (!targetUserId || !targetUserCoin) return Alert.alert('错误', '请输入完整信息');
-      setPublishing(true);
-      try {
-         const { data: prof, error: fetchErr } = await supabase.from('profiles').select('potato_coin_balance').eq('id', targetUserId).single();
-         if (fetchErr) throw new Error('找不到该用户ID');
-         const newBal = (prof?.potato_coin_balance || 0) + parseFloat(targetUserCoin);
-         await supabase.from('profiles').update({ potato_coin_balance: newBal }).eq('id', targetUserId);
-         Alert.alert('✅ 下发成功', `已向该用户注入 ¥${targetUserCoin} 土豆币！`);
-         setTargetUserCoin('');
-      } catch(e:any) { Alert.alert('操作失败', e.message); } finally { setPublishing(false); }
+  // ================= 🎯 岛民制裁 =================
+  const handleGrantUserCoins = () => {
+      if (!targetUserId || !targetUserCoin) return showToast('请输入完整信息');
+      setConfirmAction({
+          title: '💰 资金注入确认',
+          desc: `确定要向 UID为\n【${targetUserId}】\n的岛民强行注入 ¥${targetUserCoin} 吗？`,
+          confirmText: '确认打款',
+          isDanger: false,
+          action: async () => {
+              const { data: prof, error: fetchErr } = await supabase.from('profiles').select('potato_coin_balance').eq('id', targetUserId).single();
+              if (fetchErr) throw new Error('找不到该用户ID');
+              const newBal = (prof?.potato_coin_balance || 0) + parseFloat(targetUserCoin);
+              await supabase.from('profiles').update({ potato_coin_balance: newBal }).eq('id', targetUserId);
+              setTargetUserCoin('');
+              setSuccessModal({title: '✅ 下发成功', msg: `已向该用户注入 ¥${targetUserCoin} 土豆币！`});
+          }
+      });
   };
 
-  const handleSendDirectMail = async () => {
-      if (!targetUserId || !targetMailTitle || !targetMailContent) return Alert.alert('错误', '请输入完整信息');
-      setPublishing(true);
-      try {
-         await supabase.from('messages').insert([{ user_id: targetUserId, title: targetMailTitle, content: targetMailContent }]);
-         Alert.alert('📩 投递成功', '定向王国信件已送达对方信箱！');
-         setTargetMailTitle(''); setTargetMailContent('');
-      } catch(e:any) { Alert.alert('发送失败', e.message); } finally { setPublishing(false); }
+  const handleSendDirectMail = () => {
+      if (!targetUserId || !targetMailTitle || !targetMailContent) return showToast('请输入完整信息');
+      setConfirmAction({
+          title: '📩 发送专属信件',
+          desc: `确定要将信件【${targetMailTitle}】发送给指定用户吗？`,
+          confirmText: '投递',
+          isDanger: false,
+          action: async () => {
+              await supabase.from('messages').insert([{ user_id: targetUserId, title: targetMailTitle, content: targetMailContent }]);
+              setTargetMailTitle(''); setTargetMailContent('');
+              setSuccessModal({title: '📩 投递成功', msg: '定向王国信件已送达对方信箱！'});
+          }
+      });
   };
 
   // ================= 🖼️ 创建全新藏品母版 =================
-  const handleCreateCollection = async () => {
-      if (!newColName || !newColImage || !newColCategoryId) { return Alert.alert('提示', '请填写名称、图片链接，并选择归属分区！'); }
-      setPublishing(true);
-      try {
-          const { error } = await supabase.from('collections').insert([{ name: newColName, image_url: newColImage, category_id: newColCategoryId, max_consign_price: parseFloat(newColMaxPrice) || null, total_minted: 0, circulating_supply: 0, is_tradeable: false }]);
-          if (error) throw error;
-          Alert.alert('✅ 缔造成功', `全新藏品【${newColName}】母版已铸造！`);
-          setNewColName(''); setNewColImage(''); setNewColMaxPrice(''); setNewColCategoryId(null); fetchData();
-      } catch (err: any) { Alert.alert('创建失败', err.message); } finally { setPublishing(false); }
+  const handleCreateCollection = () => {
+      if (!newColName || !newColImage || !newColCategoryId) { return showToast('请填写名称、图片并选择分区'); }
+      setConfirmAction({
+          title: '✨ 铸造母版确认',
+          desc: `即将把【${newColName}】永久刻入全岛图鉴，不可轻易撤销。`,
+          confirmText: '确认铸造',
+          isDanger: false,
+          action: async () => {
+              const { error } = await supabase.from('collections').insert([{ name: newColName, image_url: newColImage, category_id: newColCategoryId, max_consign_price: parseFloat(newColMaxPrice) || null, total_minted: 0, circulating_supply: 0, is_tradeable: false }]);
+              if (error) throw error;
+              setNewColName(''); setNewColImage(''); setNewColMaxPrice(''); setNewColCategoryId(null); fetchData();
+              setSuccessModal({title: '✅ 缔造成功', msg: `全新藏品母版已铸造！请前往发新或印钞。`});
+          }
+      });
   };
 
   // ================= ⚙️ 动态全局参数保存 =================
   const handleSaveConfig = async (key: string, val: string) => {
       if(!val) return;
-      setPublishing(true);
       try {
          const { data: exist } = await supabase.from('system_config').select('id').eq('key', key).single();
          if (exist) { await supabase.from('system_config').update({ value: val }).eq('key', key); } 
          else { await supabase.from('system_config').insert([{ key, value: val }]); }
-         Alert.alert('✅ 配置更新成功'); fetchData();
-      } catch (e: any) { Alert.alert('错误', e.message); } finally { setPublishing(false); }
+         showToast('✅ 配置更新成功'); fetchData();
+      } catch (e: any) { showToast(`保存失败: ${e.message}`); } 
   };
 
   // ================= 🎁 全网快照空投 =================
-  const executeAirdrop = async () => {
-      if (airdropReqs.length === 0 || !airdropTargetId) return Alert.alert('提示', '请选择快照要求和空投目标');
-      Alert.alert('🚨 终极确认', `即将扫描全岛持有者，向下取整并空投【${airdropTargetName}】！`, [
-          {text: '取消', style: 'cancel'},
-          {text: '⚡ 确认执行', style: 'destructive', onPress: async () => {
-              setPublishing(true);
-              try {
-                  const reqIds = airdropReqs.map(r => r.id);
-                  const { data: userNfts } = await supabase.from('nfts').select('owner_id, collection_id').in('collection_id', reqIds).eq('status', 'idle');
-                  if (!userNfts || userNfts.length === 0) throw new Error('全网无人持有该组合');
+  const executeAirdrop = () => {
+      if (airdropReqs.length === 0 || !airdropTargetId) return showToast('请选择快照要求和空投目标');
+      setConfirmAction({
+          title: '🚨 终极快照空投指令',
+          desc: `即将扫描全岛持有者，向下取整并强行空投【${airdropTargetName}】！此动作涉及大规模资产变动，不可逆！`,
+          confirmText: '⚡ 确认执行',
+          isDanger: true,
+          action: async () => {
+              const reqIds = airdropReqs.map(r => r.id);
+              const { data: userNfts } = await supabase.from('nfts').select('owner_id, collection_id').in('collection_id', reqIds).eq('status', 'idle');
+              if (!userNfts || userNfts.length === 0) throw new Error('全网无人持有该组合');
 
-                  const userColCounts: Record<string, Record<string, number>> = {};
-                  userNfts.forEach(nft => {
-                     if (!userColCounts[nft.owner_id]) userColCounts[nft.owner_id] = {};
-                     userColCounts[nft.owner_id][nft.collection_id] = (userColCounts[nft.owner_id][nft.collection_id] || 0) + 1;
-                  });
+              const userColCounts: Record<string, Record<string, number>> = {};
+              userNfts.forEach(nft => {
+                 if (!userColCounts[nft.owner_id]) userColCounts[nft.owner_id] = {};
+                 userColCounts[nft.owner_id][nft.collection_id] = (userColCounts[nft.owner_id][nft.collection_id] || 0) + 1;
+              });
 
-                  const { data: rewardCol } = await supabase.from('collections').select('total_minted').eq('id', airdropTargetId).single();
-                  let currentMinted = rewardCol?.total_minted || 0;
-                  
-                  const newNfts: any[] = [];
-                  const messageInserts: any[] = [];
+              const { data: rewardCol } = await supabase.from('collections').select('total_minted').eq('id', airdropTargetId).single();
+              let currentMinted = rewardCol?.total_minted || 0;
+              
+              const newNfts: any[] = [];
+              const messageInserts: any[] = [];
 
-                  Object.keys(userColCounts).forEach(userId => {
-                      const counts = userColCounts[userId];
-                      let combos = Infinity;
-                      for (const reqId of reqIds) {
-                          if (!counts[reqId]) { combos = 0; break; }
-                          combos = Math.min(combos, counts[reqId]);
+              Object.keys(userColCounts).forEach(userId => {
+                  const counts = userColCounts[userId];
+                  let combos = Infinity;
+                  for (const reqId of reqIds) {
+                      if (!counts[reqId]) { combos = 0; break; }
+                      combos = Math.min(combos, counts[reqId]);
+                  }
+                  if (combos > 0) {
+                      for(let i=0; i<combos; i++) {
+                          currentMinted++;
+                          newNfts.push({ collection_id: airdropTargetId, owner_id: userId, serial_number: currentMinted.toString(), status: 'idle' });
                       }
+                      messageInserts.push({ user_id: userId, title: '🎁 史诗级快照空投', content: `基于资产快照，已向您空投了 ${combos} 份【${airdropTargetName}】！` });
+                  }
+              });
 
-                      if (combos > 0) {
-                          for(let i=0; i<combos; i++) {
-                              currentMinted++;
-                              newNfts.push({ collection_id: airdropTargetId, owner_id: userId, serial_number: currentMinted.toString(), status: 'idle' });
-                          }
-                          messageInserts.push({ user_id: userId, title: '🎁 史诗级快照空投', content: `基于资产快照，已向您空投了 ${combos} 份【${airdropTargetName}】！` });
-                      }
-                  });
+              if (newNfts.length === 0) throw new Error('没有用户满足完整组合');
 
-                  if (newNfts.length === 0) throw new Error('没有用户满足完整组合');
+              await supabase.from('nfts').insert(newNfts);
+              await supabase.from('collections').update({ total_minted: currentMinted, circulating_supply: currentMinted }).eq('id', airdropTargetId);
+              await supabase.from('messages').insert(messageInserts);
 
-                  await supabase.from('nfts').insert(newNfts);
-                  await supabase.from('collections').update({ total_minted: currentMinted, circulating_supply: currentMinted }).eq('id', airdropTargetId);
-                  await supabase.from('messages').insert(messageInserts);
-
-                  Alert.alert('✅ 空投大获成功', `共计空投了 ${newNfts.length} 份藏品！`);
-                  setAirdropReqs([]); setAirdropTargetId(''); setAirdropTargetName('');
-              } catch (e: any) { Alert.alert('空投失败', e.message); } finally { setPublishing(false); }
-          }}
-      ]);
+              setAirdropReqs([]); setAirdropTargetId(''); setAirdropTargetName('');
+              setSuccessModal({title: '✅ 空投大获成功', msg: `共计向全网投递了 ${newNfts.length} 份藏品及信件！`});
+          }
+      });
   };
 
-
   // ================= 💎 核心资产调控功能 =================
-  const toggleTradeable = async (item: any) => {
-      const newVal = !item.is_tradeable;
-      const { error } = await supabase.from('collections').update({ is_tradeable: newVal }).eq('id', item.id);
-      if (error) Alert.alert('错误', error.message); else fetchData();
+  const toggleTradeable = (item: any) => {
+      setConfirmAction({
+          title: '⚖️ 流通状态调控',
+          desc: `确定要将【${item.name}】的状态修改为 ${item.is_tradeable ? '已冻结(禁止买卖)' : '允许流通'} 吗？`,
+          confirmText: '确认更改',
+          isDanger: item.is_tradeable, // 如果是冻结操作，标红
+          action: async () => {
+              const newVal = !item.is_tradeable;
+              const { error } = await supabase.from('collections').update({ is_tradeable: newVal }).eq('id', item.id);
+              if (error) throw error;
+              fetchData();
+              showToast('状态已更新');
+          }
+      });
   };
 
   const executeUpdatePrice = async () => {
     const price = parseFloat(editValue);
-    if (isNaN(price) || price < 0) return Alert.alert('错误', '无效价格');
-    const { error } = await supabase.rpc('update_max_price_and_clean', { p_collection_id: selectedCol.id, p_new_max_price: price });
-    if (error) Alert.alert('操作失败', error.message); else { setShowPriceModal(false); fetchData(); }
+    if (isNaN(price) || price < 0) return showToast('无效价格');
+    setPublishing(true);
+    try {
+        const { error } = await supabase.rpc('update_max_price_and_clean', { p_collection_id: selectedCol.id, p_new_max_price: price });
+        if (error) throw error;
+        setShowPriceModal(false); fetchData(); showToast('限价及违规盘清理完毕');
+    } catch(e:any){ showToast(`操作失败: ${e.message}`); } finally { setPublishing(false); }
   };
 
   const executeChangeCategory = async (catId: number) => {
-      const { error } = await supabase.from('collections').update({ category_id: catId }).eq('id', selectedCol.id);
-      if (error) Alert.alert('转移失败', error.message); else { setShowCategoryModal(false); fetchData(); }
+      setPublishing(true);
+      try{
+         const { error } = await supabase.from('collections').update({ category_id: catId }).eq('id', selectedCol.id);
+         if (error) throw error;
+         setShowCategoryModal(false); fetchData(); showToast('分区转移成功');
+      }catch(e:any){showToast(e.message);}finally{setPublishing(false);}
   };
 
   const executeBurnToRuins = async () => {
       const amount = parseInt(burnAmount);
-      if (isNaN(amount) || amount <= 0) return Alert.alert('错误', '无效整数');
+      if (isNaN(amount) || amount <= 0) return showToast('请输入有效整数');
+      if (amount > selectedCol.circulating_supply) return showToast('销毁数量不能超过大盘流通存量');
+
       setPublishing(true);
       try {
           const { error: updateErr } = await supabase.from('collections').update({ circulating_supply: selectedCol.circulating_supply - amount }).eq('id', selectedCol.id);
           if (updateErr) throw updateErr;
           await supabase.from('announcements').insert([{ title: '🚨 宏观销毁播报', content: `刚刚清道夫将 ${amount} 份【${selectedCol.name}】打入废墟！`, image_url: selectedCol.image_url, is_featured: false, author_name: '土豆清道夫' }]);
-          Alert.alert('🔥 销毁成功'); setShowBurnModal(false); setBurnAmount(''); fetchData();
-      } catch (err: any) { Alert.alert('失败', err.message); } finally { setPublishing(false); }
+          
+          setShowBurnModal(false); setBurnAmount(''); fetchData();
+          setSuccessModal({title: '🔥 销毁成功', msg: '物资已打入废墟，全岛播报已发出。'});
+      } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setPublishing(false); }
   };
 
   // ================= 其他模块操作 =================
-  const handlePublishAnnouncement = async () => {
-    if (!announceTitle || !announceContent || !announceImage) return Alert.alert('提示', '请填写完整');
-    setPublishing(true);
-    await supabase.from('announcements').insert([{ title: announceTitle, content: announceContent, image_url: announceImage, is_featured: announceFeatured, author_name: '土豆国王' }]);
-    setPublishing(false); Alert.alert('成功'); setAnnounceTitle(''); setAnnounceContent(''); setAnnounceImage(''); fetchData(); 
+  const handlePublishAnnouncement = () => {
+    if (!announceTitle || !announceContent || !announceImage) return showToast('请填写完整');
+    setConfirmAction({
+        title: '📣 颁布旨意',
+        desc: '即将向全岛发送此公告，是否确认？',
+        confirmText: '立刻发布',
+        isDanger: false,
+        action: async () => {
+            const { error } = await supabase.from('announcements').insert([{ title: announceTitle, content: announceContent, image_url: announceImage, is_featured: announceFeatured, author_name: '土豆国王' }]);
+            if (error) throw error;
+            setAnnounceTitle(''); setAnnounceContent(''); setAnnounceImage(''); fetchData(); 
+            showToast('✅ 旨意已下达');
+        }
+    });
   };
-  const handleDeleteAnnouncement = async (id: string) => { await supabase.from('announcements').delete().eq('id', id); fetchData(); };
 
-  const handleCreateLaunch = async () => { 
-      if (!launchColId || !launchPrice || !launchSupply || !launchStartTime) return Alert.alert('提示', '请填写完整参数');
-      setPublishing(true);
-      await supabase.from('launch_events').insert([{ collection_id: launchColId, price: parseFloat(launchPrice), total_supply: parseInt(launchSupply), remaining_supply: parseInt(launchSupply), start_time: launchStartTime }]);
-      setPublishing(false); Alert.alert('✅ 部署成功'); setLaunchColId(''); setLaunchColName(''); fetchData(); 
+  const handleDeleteAnnouncement = (id: string) => {
+      setConfirmAction({
+          title: '🚨 删除公告',
+          desc: '确定要全网删除这条公告/播报吗？操作无法恢复。',
+          confirmText: '强制删除',
+          isDanger: true,
+          action: async () => {
+              await supabase.from('announcements').delete().eq('id', id); fetchData(); showToast('删除成功');
+          }
+      });
   };
-  const handleDeleteLaunch = async (id: string) => { await supabase.from('launch_events').delete().eq('id', id); fetchData(); };
+
+  const handleCreateLaunch = () => { 
+      if (!launchColId || !launchPrice || !launchSupply || !launchStartTime) return showToast('请填写完整参数');
+      setConfirmAction({
+          title: '🚀 发售排期',
+          desc: `确定要在 ${new Date(launchStartTime).toLocaleString()} 开启【${launchColName}】的首发抢购吗？`,
+          confirmText: '锁定排期',
+          isDanger: false,
+          action: async () => {
+              await supabase.from('launch_events').insert([{ collection_id: launchColId, price: parseFloat(launchPrice), total_supply: parseInt(launchSupply), remaining_supply: parseInt(launchSupply), start_time: launchStartTime }]);
+              setLaunchColId(''); setLaunchColName(''); fetchData(); 
+              setSuccessModal({title: '✅ 部署成功', msg: '首发大厅排期已锁定，静候疯抢！'});
+          }
+      });
+  };
+
+  const handleDeleteLaunch = (id: string) => { 
+      setConfirmAction({ title: '🚨 撤销发售', desc: '强行终止发售事件？', confirmText: '终止', isDanger: true, action: async () => { await supabase.from('launch_events').delete().eq('id', id); fetchData(); }});
+  };
   
-  const handleCreateSynthesis = async () => { 
-      if (!synName || !targetColId) return Alert.alert('错误', '请填写完整配方');
-      setPublishing(true);
-      const { data: evData } = await supabase.from('synthesis_events').insert([{ name: synName, target_collection_id: targetColId, end_time: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), max_count: parseInt(synMaxCount) || 0 }]).select('id').single();
-      const reqInserts = requirements.map(r => ({ event_id: evData!.id, req_collection_id: r.id, req_count: parseInt(r.count) }));
-      await supabase.from('synthesis_requirements').insert(reqInserts);
-      setPublishing(false); Alert.alert('成功'); fetchData(); setSynName(''); setRequirements([{ id: '', name: '', count: '1' }]);
+  const handleCreateSynthesis = () => { 
+      if (!synName || !targetColId) return showToast('请填写完整配方');
+      setConfirmAction({
+          title: '🧬 变异指令',
+          desc: '确定下发此变异合成配方吗？',
+          confirmText: '下发',
+          isDanger: false,
+          action: async () => {
+              const { data: evData } = await supabase.from('synthesis_events').insert([{ name: synName, target_collection_id: targetColId, end_time: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), max_count: parseInt(synMaxCount) || 0 }]).select('id').single();
+              const reqInserts = requirements.map(r => ({ event_id: evData!.id, req_collection_id: r.id, req_count: parseInt(r.count) }));
+              await supabase.from('synthesis_requirements').insert(reqInserts);
+              fetchData(); setSynName(''); setRequirements([{ id: '', name: '', count: '1' }]);
+              setSuccessModal({title: '✅ 配方已生效', msg: '变异合成通道已开启。'});
+          }
+      });
   };
-  const handleDeleteSynthesis = async (id: string) => { await supabase.from('synthesis_events').delete().eq('id', id); fetchData(); };
+
+  const handleDeleteSynthesis = (id: string) => { 
+      setConfirmAction({ title: '🚨 关闭合成通道', desc: '强行关闭该配方？', confirmText: '关闭', isDanger: true, action: async () => { await supabase.from('synthesis_events').delete().eq('id', id); fetchData(); }});
+  };
   
   const addRequirement = () => setRequirements([...requirements, { id: '', name: '', count: '1' }]);
   const removeRequirement = (index: number) => setRequirements(requirements.filter((_, i) => i !== index));
   const updateReqCount = (index: number, val: string) => { const newReqs = [...requirements]; newReqs[index].count = val; setRequirements(newReqs); };
 
-  const handleTamperBalance = async () => {
-      if(!newBalance) return;
-      await supabase.from('profiles').update({ potato_coin_balance: parseFloat(newBalance) }).eq('id', adminId);
-      Alert.alert('成功', '资金已强行覆写！'); setNewBalance('');
+  const handleTamperBalance = () => {
+      if(!newBalance) return showToast('请输入余额');
+      setConfirmAction({ title: '💰 资金篡改', desc: '即将强行覆写您的个人土豆币余额，是否继续？', confirmText: '注入', isDanger: true, action: async () => {
+          await supabase.from('profiles').update({ potato_coin_balance: parseFloat(newBalance) }).eq('id', adminId);
+          setNewBalance(''); setSuccessModal({title:'成功', msg:'您的私人小金库已塞满！'});
+      }});
   };
-  const handleCreateCategory = async () => {
-      if(!newCategoryName) return;
-      await supabase.from('categories').insert([{ name: newCategoryName, sort_order: 99 }]);
-      Alert.alert('成功', '新分类已创建！'); setNewCategoryName(''); fetchData();
+
+  const handleCreateCategory = () => {
+      if(!newCategoryName) return showToast('请输入分类名');
+      setConfirmAction({ title: '🗂️ 新增分区', desc: `新增【${newCategoryName}】？`, confirmText: '创建', isDanger: false, action: async () => {
+          await supabase.from('categories').insert([{ name: newCategoryName, sort_order: 99 }]);
+          setNewCategoryName(''); fetchData(); showToast('新分类已创建');
+      }});
   };
-  const handleMintCustom = async () => {
-      if(!mintColId || !mintAmount) return Alert.alert('提示', '请选择藏品');
-      const { data: col } = await supabase.from('collections').select('total_minted').eq('id', mintColId).single();
-      const startNum = (col?.total_minted || 0) + 1;
-      const inserts = Array.from({length: parseInt(mintAmount)}).map((_, i) => ({ collection_id: mintColId, owner_id: adminId, serial_number: (startNum + i).toString(), status: 'idle' }));
-      await supabase.from('nfts').insert(inserts);
-      await supabase.from('collections').update({ total_minted: startNum + parseInt(mintAmount) - 1, circulating_supply: startNum + parseInt(mintAmount) - 1 }).eq('id', mintColId);
-      Alert.alert('🖨️ 印钞成功'); setMintColId(''); setMintColName(''); setMintAmount('1'); fetchData();
+
+  const handleMintCustom = () => {
+      if(!mintColId || !mintAmount) return showToast('请选择藏品并输入数量');
+      setConfirmAction({ title: '🖨️ 虚空印钞', desc: `将向您的私人金库印发 ${mintAmount} 张【${mintColName}】，并增加全岛流通存量，是否执行？`, confirmText: '开机印钞', isDanger: false, action: async () => {
+          const { data: col } = await supabase.from('collections').select('total_minted').eq('id', mintColId).single();
+          const startNum = (col?.total_minted || 0) + 1;
+          const inserts = Array.from({length: parseInt(mintAmount)}).map((_, i) => ({ collection_id: mintColId, owner_id: adminId, serial_number: (startNum + i).toString(), status: 'idle' }));
+          await supabase.from('nfts').insert(inserts);
+          await supabase.from('collections').update({ total_minted: startNum + parseInt(mintAmount) - 1, circulating_supply: startNum + parseInt(mintAmount) - 1 }).eq('id', mintColId);
+          setMintColId(''); setMintColName(''); setMintAmount('1'); fetchData();
+          setSuccessModal({title: '🖨️ 印钞完成', msg: '印钞机冷却完毕，资产已进私人金库。'});
+      }});
+  };
+
+  // 🌟 统一执行函数：接管所有 Action 的 Loading 状态
+  const executeUnifiedAction = async () => {
+      if (!confirmAction) return;
+      setPublishing(true);
+      try {
+          await confirmAction.action();
+      } catch (e:any) {
+          showToast(`操作异常: ${e.message}`);
+      } finally {
+          setPublishing(false);
+          setConfirmAction(null);
+      }
   };
 
   // ================= UI 渲染 =================
@@ -404,6 +493,9 @@ export default function AdminPanelScreen() {
         <Text style={styles.navTitle}>👑 创世中枢</Text>
         <View style={styles.navBtn} />
       </View>
+
+      {/* 轻量级黑框 Toast */}
+      {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabRowOuter} contentContainerStyle={styles.tabRow}>
         {(['数据罗盘', '资产调控', '岛民制裁', '快照空投', '全局参数', '新增系列', '藏品发新', '进化配置', '王国公告', '神之手'] as AdminTab[]).map(t => (
@@ -535,7 +627,7 @@ export default function AdminPanelScreen() {
                       <TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('airdropReq')}><Text style={styles.pickerBtnText}>+ 添加要求持有的藏品</Text></TouchableOpacity>
                       <Text style={{color:'#FFF', fontWeight:'800', marginBottom:10, marginTop:10}}>2. 设定空投奖励目标</Text>
                       <TouchableOpacity style={[styles.pickerBtn, {borderColor:'#FFD700'}]} onPress={() => openPicker('airdropTarget')}><Text style={[styles.pickerBtnText, {color: airdropTargetName ? '#FFD700' : '#888'}]}>{airdropTargetName ? `🎁 空投物: ${airdropTargetName}` : '+ 选择要派发的空投藏品'}</Text></TouchableOpacity>
-                      <TouchableOpacity style={[styles.goldBtn, {marginTop: 20}]} onPress={executeAirdrop} disabled={publishing}><Text style={styles.goldBtnText}>{publishing ? '扫描中...' : '⚡ 立即执行全岛空投'}</Text></TouchableOpacity>
+                      <TouchableOpacity style={[styles.goldBtn, {marginTop: 20}]} onPress={executeAirdrop} disabled={publishing}><Text style={styles.goldBtnText}>{publishing ? '准备指令...' : '⚡ 立即执行全岛空投'}</Text></TouchableOpacity>
                    </View>
                 </View>
               )}
@@ -548,7 +640,7 @@ export default function AdminPanelScreen() {
                     <TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('launch')}><Text style={styles.pickerBtnText}>{launchColName ? `📍 已选发售物: ${launchColName}` : '+ 从图库选择发售藏品'}</Text></TouchableOpacity>
                     <View style={{flexDirection: 'row', justifyContent: 'space-between'}}><TextInput style={[styles.inputDark, {flex: 0.48}]} placeholder="首发价 ¥" placeholderTextColor="#666" keyboardType="decimal-pad" value={launchPrice} onChangeText={setLaunchPrice} /><TextInput style={[styles.inputDark, {flex: 0.48}]} placeholder="释放数量" placeholderTextColor="#666" keyboardType="number-pad" value={launchSupply} onChangeText={setLaunchSupply} /></View>
                     <TouchableOpacity style={[styles.pickerBtn, {borderColor: '#00E5FF', minHeight: 50}]} onPress={() => setShowTimePicker(true)}><Text style={[styles.pickerBtnText, {color: launchStartTime ? '#00E5FF' : '#666'}]}>{launchStartTime ? `⏰ 开售: ${new Date(launchStartTime).toLocaleString()}` : '⏱️ 点击设定开售时间'}</Text></TouchableOpacity>
-                    <TouchableOpacity style={styles.goldBtn} onPress={handleCreateLaunch} disabled={publishing}><Text style={styles.goldBtnText}>{publishing ? '部署中...' : '⚡ 锁定发售排期'}</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.goldBtn} onPress={handleCreateLaunch} disabled={publishing}><Text style={styles.goldBtnText}>⚡ 锁定发售排期</Text></TouchableOpacity>
                   </View>
                   {launchList.map(item => (<View key={item.id} style={styles.manageCard}><View style={{flex: 1}}><Text style={{color: '#FFF', fontWeight: '800'}}>{item.collection?.name}</Text><Text style={{color: '#888', fontSize: 12}}>剩余: {item.remaining_supply}/{item.total_supply}</Text></View><TouchableOpacity style={styles.delBtn} onPress={() => handleDeleteLaunch(item.id)}><Text style={{color:'#FFF'}}>🗑️</Text></TouchableOpacity></View>))}
                 </View>
@@ -578,7 +670,7 @@ export default function AdminPanelScreen() {
                     <TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('announce')}>{announceImage ? (<Image source={{uri: announceImage}} style={{width: '100%', height: 100, borderRadius: 8, resizeMode: 'cover'}} />) : (<Text style={styles.pickerBtnText}>🖼️ 从资产库选择配图</Text>)}</TouchableOpacity>
                     <TextInput style={styles.inputDark} placeholder="震撼人心的标题" placeholderTextColor="#666" value={announceTitle} onChangeText={setAnnounceTitle} />
                     <TextInput style={[styles.inputDark, {height: 150, textAlignVertical: 'top'}]} placeholder="输入旨意正文..." placeholderTextColor="#666" multiline value={announceContent} onChangeText={setAnnounceContent} />
-                    <TouchableOpacity style={styles.goldBtn} onPress={handlePublishAnnouncement} disabled={publishing}><Text style={styles.goldBtnText}>{publishing ? '传达中...' : '传达至全岛'}</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.goldBtn} onPress={handlePublishAnnouncement} disabled={publishing}><Text style={styles.goldBtnText}>传达至全岛</Text></TouchableOpacity>
                   </View>
                   {announceList.map(item => (<View key={item.id} style={styles.manageCard}><View style={{flex: 1}}><Text style={{color: item.author_name === '土豆清道夫' ? '#FF3B30' : '#FFF', fontWeight: '800'}}>{item.title}</Text></View><TouchableOpacity style={styles.delBtn} onPress={() => handleDeleteAnnouncement(item.id)}><Text style={{color:'#FFF'}}>🗑️</Text></TouchableOpacity></View>))}
                 </View>
@@ -597,10 +689,10 @@ export default function AdminPanelScreen() {
         </View>
       )}
 
-      {/* ================= 💎 模态框集合 ================= */}
+      {/* ================= 💎 专属业务模态框 ================= */}
       <Modal visible={showPriceModal} transparent animationType="fade">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayFull}>
-          <View style={[styles.timePickerBox, {marginBottom: 100}]}><Text style={styles.modalTitle}>修改最高限价</Text><TextInput style={[styles.inputDark, {fontSize: 24, textAlign: 'center', color: '#00E5FF', fontWeight: '900', borderColor: '#00E5FF'}]} keyboardType="decimal-pad" value={editValue} onChangeText={setEditValue} autoFocus /><View style={{flexDirection: 'row', marginTop: 20}}><TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowPriceModal(false)}><Text style={{color: '#CCC'}}>取消</Text></TouchableOpacity><TouchableOpacity style={[styles.goldBtn, {flex: 1, marginTop: 0}]} onPress={executeUpdatePrice}><Text style={styles.goldBtnText}>确认修改</Text></TouchableOpacity></View></View>
+          <View style={[styles.timePickerBox, {marginBottom: 100}]}><Text style={styles.modalTitle}>修改最高限价</Text><TextInput style={[styles.inputDark, {fontSize: 24, textAlign: 'center', color: '#00E5FF', fontWeight: '900', borderColor: '#00E5FF'}]} keyboardType="decimal-pad" value={editValue} onChangeText={setEditValue} autoFocus /><View style={{flexDirection: 'row', marginTop: 20}}><TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowPriceModal(false)}><Text style={{color: '#CCC'}}>取消</Text></TouchableOpacity><TouchableOpacity style={[styles.goldBtn, {flex: 1, marginTop: 0}]} onPress={executeUpdatePrice} disabled={publishing}><Text style={styles.goldBtnText}>确认修改</Text></TouchableOpacity></View></View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -609,7 +701,7 @@ export default function AdminPanelScreen() {
           <View style={styles.timePickerBox}>
              <Text style={styles.modalTitle}>转移至新分区</Text>
              {adminCategories.map(cat => (
-                 <TouchableOpacity key={cat.id} style={[styles.inputDark, {padding: 12, alignItems: 'center'}]} onPress={() => executeChangeCategory(cat.id)}>
+                 <TouchableOpacity key={cat.id} style={[styles.inputDark, {padding: 12, alignItems: 'center'}]} onPress={() => executeChangeCategory(cat.id)} disabled={publishing}>
                      <Text style={{color: '#FFF', fontWeight: '800'}}>{cat.name}</Text>
                  </TouchableOpacity>
              ))}
@@ -639,6 +731,35 @@ export default function AdminPanelScreen() {
         <View style={styles.modalOverlayFull}><View style={styles.modalContentFull}><View style={styles.pickerHeader}><Text style={styles.modalTitle}>选择藏品</Text><TouchableOpacity onPress={() => setShowColPicker(false)}><Text style={{color:'#999', fontSize: 16}}>关闭</Text></TouchableOpacity></View><FlatList data={collections} keyExtractor={item => item.id} numColumns={3} renderItem={({item}) => (<TouchableOpacity style={styles.miniCard} onPress={() => handleSelectFromPicker(item)}><Image source={{uri: item.image_url}} style={styles.miniImg} /><Text style={styles.miniName} numberOfLines={1}>{item.name}</Text></TouchableOpacity>)}/></View></View>
       </Modal>
 
+      {/* ================= 🛡️ 终极防误触【二次确认】模态框 ================= */}
+      <Modal visible={!!confirmAction} transparent animationType="fade">
+         <View style={styles.modalOverlayCenter}>
+            <View style={styles.confirmBox}>
+               <Text style={[styles.confirmTitle, confirmAction?.isDanger && {color: '#FF3B30'}]}>{confirmAction?.title}</Text>
+               <Text style={styles.confirmDesc}>{confirmAction?.desc}</Text>
+               <View style={styles.confirmBtnRow}>
+                  <TouchableOpacity style={styles.cancelBtnOutline} onPress={() => setConfirmAction(null)}><Text style={styles.cancelBtnOutlineText}>取消</Text></TouchableOpacity>
+                  <TouchableOpacity style={[styles.confirmBtn, confirmAction?.isDanger ? {backgroundColor: '#FF3B30'} : {backgroundColor: '#0066FF'}]} onPress={executeUnifiedAction} disabled={publishing}>
+                     {publishing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>{confirmAction?.confirmText}</Text>}
+                  </TouchableOpacity>
+               </View>
+            </View>
+         </View>
+      </Modal>
+
+      {/* ================= 🎉 极客【成功反馈】模态框 ================= */}
+      <Modal visible={!!successModal} transparent animationType="fade">
+         <View style={styles.modalOverlayCenter}>
+            <View style={[styles.confirmBox, {borderColor: '#FFD700', borderWidth: 2}]}>
+               <Text style={[styles.confirmTitle, {color: '#FFD700', fontSize: 22}]}>{successModal?.title}</Text>
+               <Text style={[styles.confirmDesc, {fontSize: 15, color: '#CCC', fontWeight: '800', lineHeight: 22}]}>{successModal?.msg}</Text>
+               <TouchableOpacity style={[styles.confirmBtn, {width: '100%', backgroundColor: '#FFD700'}]} onPress={() => setSuccessModal(null)}>
+                  <Text style={[styles.confirmBtnText, {color: '#111'}]}>朕知道了</Text>
+               </TouchableOpacity>
+            </View>
+         </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -656,6 +777,9 @@ const styles = StyleSheet.create({
   tabText: { color: '#888', fontWeight: '700', fontSize: 13 },
   tabTextActive: { color: '#111', fontWeight: '900' },
   
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(255,215,0,0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100, shadowColor: '#FFD700', shadowOpacity: 0.5, shadowRadius: 10 },
+  toastText: { color: '#111', fontSize: 14, fontWeight: '900' },
+
   statCard: { width: '48%', backgroundColor: '#1C1C1E', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#333' },
   statLabel: { color: '#888', fontSize: 12, fontWeight: '800', marginBottom: 8 },
   statNumber: { color: '#FFF', fontSize: 24, fontWeight: '900', fontFamily: 'monospace' },
@@ -705,5 +829,15 @@ const styles = StyleSheet.create({
   timeBtnActive: { backgroundColor: '#00E5FF', borderColor: '#00E5FF' },
   timeBtnText: { color: '#FFF', fontSize: 14 },
   timeBtnTextActive: { color: '#000', fontWeight: '800' },
-  mCancelBtn: { height: 50, borderRadius: 12, borderWidth: 1, borderColor: '#555', justifyContent: 'center', alignItems: 'center' }
+  mCancelBtn: { height: 50, borderRadius: 12, borderWidth: 1, borderColor: '#555', justifyContent: 'center', alignItems: 'center' },
+
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
+  confirmBox: { width: '85%', backgroundColor: '#1C1C1E', borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#333' },
+  confirmTitle: { fontSize: 20, fontWeight: '900', color: '#FFF', marginBottom: 16 },
+  confirmDesc: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  cancelBtnOutline: { flex: 0.48, paddingVertical: 14, borderRadius: 12, backgroundColor: '#111', borderWidth: 1, borderColor: '#444', alignItems: 'center' },
+  cancelBtnOutlineText: { color: '#888', fontSize: 15, fontWeight: '800' },
+  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });
