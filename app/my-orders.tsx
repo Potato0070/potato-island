@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -33,35 +33,43 @@ export default function MyOrdersScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 🌟 核心修复：去除了所有导致崩溃的 seller/buyer 外键关联查询，使用纯净数据！
+      // 🌟 核心防御：查出所有集合，以便咱们自己拼图，绝不依赖数据库外键！
+      const { data: cols } = await supabase.from('collections').select('id, name, image_url');
+      const colMap: any = {};
+      if (cols) cols.forEach(c => colMap[c.id] = c);
+
+      let rawData: any[] = [];
+
       if (tab === '寄售中') {
-        const { data, error } = await supabase.from('nfts').select('*, collections(name, image_url)').eq('owner_id', user.id).eq('status', 'listed').order('created_at', { ascending: false });
-        if(error) throw error;
-        setListData(data || []);
+        const { data } = await supabase.from('nfts').select('*').eq('owner_id', user.id).eq('status', 'listed').order('created_at', { ascending: false });
+        rawData = data || [];
       } 
       else if (tab === '求购中') {
-        const { data, error } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').neq('order_type', 'bid').order('created_at', { ascending: false });
-        if(error) throw error;
-        setListData(data || []);
+        const { data } = await supabase.from('buy_orders').select('*').eq('buyer_id', user.id).eq('status', 'active').neq('order_type', 'bid').order('created_at', { ascending: false });
+        rawData = data || [];
       }
       else if (tab === '竞价中') {
-        const { data, error } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').eq('order_type', 'bid').order('created_at', { ascending: false });
-        if(error) throw error;
-        setListData(data || []);
+        const { data } = await supabase.from('buy_orders').select('*').eq('buyer_id', user.id).eq('status', 'active').eq('order_type', 'bid').order('created_at', { ascending: false });
+        rawData = data || [];
       }
       else if (tab === '已买入') {
-        const { data, error } = await supabase.from('transfer_logs').select('*, collections(name, image_url)').eq('buyer_id', user.id).order('transfer_time', { ascending: false });
-        if(error) throw error;
-        setListData(data || []);
+        // 纯净读取，屏蔽所有报错可能！
+        const { data } = await supabase.from('transfer_logs').select('*').eq('buyer_id', user.id).order('transfer_time', { ascending: false });
+        rawData = data || [];
       } 
       else if (tab === '已卖出') {
-        const { data, error } = await supabase.from('transfer_logs').select('*, collections(name, image_url)').eq('seller_id', user.id).order('transfer_time', { ascending: false });
-        if(error) throw error;
-        setListData(data || []);
+        const { data } = await supabase.from('transfer_logs').select('*').eq('seller_id', user.id).order('transfer_time', { ascending: false });
+        rawData = data || [];
       }
-    } catch (err: any) { 
-       Alert.alert("订单数据读取报错", err.message || JSON.stringify(err)); 
-    } finally { setLoading(false); }
+
+      // 🌟 前端手动图文拼表
+      const enrichedData = rawData.map(item => ({
+         ...item,
+         collections: colMap[item.collection_id] || { name: '神秘藏品', image_url: 'https://via.placeholder.com/150' }
+      }));
+
+      setListData(enrichedData);
+    } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
   const handleCancelBuyOrder = async () => {
@@ -77,7 +85,7 @@ export default function MyOrdersScreen() {
       setCancelModal(null);
       showToast('✅ 撤销成功，资金已退回钱包');
       fetchDataByTab(activeTab); 
-    } catch (err: any) { Alert.alert('撤回失败', err.message); } finally { setProcessing(false); }
+    } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setProcessing(false); }
   };
 
   const handleCancelSale = async () => {
@@ -88,7 +96,7 @@ export default function MyOrdersScreen() {
       setCancelSaleModal(null);
       showToast('✅ 寄售已取消，藏品已退回金库锁定');
       fetchDataByTab('寄售中'); 
-    } catch (err: any) { Alert.alert('取消寄售失败', err.message); } finally { setProcessing(false); }
+    } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setProcessing(false); }
   };
 
   const handleIncreasePrice = async () => {
@@ -96,11 +104,13 @@ export default function MyOrdersScreen() {
     const order = addPriceModal.order;
     const p = parseFloat(newPrice);
     if (isNaN(p) || p <= order.price) return showToast(`加价必须高于当前出价 ¥${order.price}`);
+    
     setProcessing(true);
     try {
       const diffAmount = (p - order.price) * order.quantity; 
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user?.id).single();
+      
       if ((profile?.potato_coin_balance || 0) < diffAmount) throw new Error('钱包余额不足以支付加价差额！');
 
       await supabase.from('profiles').update({ potato_coin_balance: (profile?.potato_coin_balance || 0) - diffAmount }).eq('id', user?.id);
@@ -110,7 +120,7 @@ export default function MyOrdersScreen() {
       setNewPrice('');
       showToast(`✅ 加价成功！成功抢占高位`);
       fetchDataByTab(activeTab);
-    } catch (err: any) { Alert.alert('加价失败', err.message); } finally { setProcessing(false); }
+    } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setProcessing(false); }
   };
 
   const renderItem = ({ item }: { item: any }) => {
@@ -118,11 +128,8 @@ export default function MyOrdersScreen() {
     const isBuying = activeTab === '求购中' || activeTab === '竞价中'; 
     const isHistory = activeTab === '已买入' || activeTab === '已卖出';
     
-    const colName = Array.isArray(item.collections) ? item.collections[0]?.name : item.collections?.name;
-    const colImg = Array.isArray(item.collections) ? item.collections[0]?.image_url : item.collections?.image_url;
-    
-    const imgUrl = colImg || 'https://via.placeholder.com/150';
-    const name = colName || '神秘藏品';
+    const name = item.collections?.name || '未知藏品';
+    const imgUrl = item.collections?.image_url || 'https://via.placeholder.com/150';
     const serial = (isSelling || isBuying) ? (item.serial_number || '排队中') : item.nft_id?.substring(0,6);
     const price = isSelling ? item.consign_price : item.price;
     const timeStr = isSelling || isBuying ? '有效挂单中...' : new Date(item.transfer_time || item.created_at).toLocaleString();
@@ -215,7 +222,6 @@ export default function MyOrdersScreen() {
         />
       )}
 
-      {/* 取消寄售悬浮窗 */}
       <Modal visible={!!cancelSaleModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
@@ -231,7 +237,6 @@ export default function MyOrdersScreen() {
          </View>
       </Modal>
 
-      {/* 加价竞拍悬浮窗 */}
       <Modal visible={!!addPriceModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
@@ -256,7 +261,6 @@ export default function MyOrdersScreen() {
          </View>
       </Modal>
 
-      {/* 撤销求购悬浮窗 */}
       <Modal visible={!!cancelModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>

@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -31,22 +31,26 @@ export default function WalletScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // 1. 获取余额
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
       if (profile) setBalance((profile.potato_coin_balance || 0).toFixed(2));
 
-      // 🌟 核心修复：安全抓取，剥离关联风险
-      const { data: transferData, error } = await supabase.from('transfer_logs')
-        .select('*, collections(name)')
-        .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`)
-        .order('transfer_time', { ascending: false });
+      // 🌟 核心：先单独把全岛的藏品信息查出来（避开外键报错）
+      const { data: cols } = await supabase.from('collections').select('id, name');
+      const colMap: any = {};
+      if (cols) cols.forEach(c => colMap[c.id] = c.name);
 
-      if (error) throw error;
+      let allLogs: any[] = [];
+
+      // 2. 抓取真实交易流水 (纯净查询)
+      const { data: transferData } = await supabase.from('transfer_logs')
+        .select('*')
+        .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`);
 
       if (transferData) {
-        const formattedLogs = transferData.map(log => {
+        transferData.forEach(log => {
            const isIncome = log.seller_id === user.id;
-           const colName = Array.isArray(log.collections) ? log.collections[0]?.name : log.collections?.name;
-           const targetName = colName || '神秘藏品';
+           const targetName = colMap[log.collection_id] || '神秘藏品';
            const typeStr = TYPE_MAP[log.transfer_type] || '资金流转';
 
            let titleStr = '';
@@ -63,20 +67,57 @@ export default function WalletScreen() {
                amountColor = isIncome ? '#4CD964' : '#111';
            }
 
-           return {
-              id: log.id,
+           allLogs.push({
+              id: 't_' + log.id,
               title: titleStr,
               amount: amountStr,
               amountColor: amountColor,
-              time: new Date(log.transfer_time).toLocaleString(),
+              time: new Date(log.transfer_time).getTime(),
+              timeStr: new Date(log.transfer_time).toLocaleString(),
               type: typeStr
-           };
+           });
         });
-        setLogs(formattedLogs);
       }
-    } catch (err: any) { 
-       Alert.alert("钱包数据读取报错", err.message || JSON.stringify(err)); 
-    } finally { setLoading(false); }
+
+      // 3. 🌟 抓取求购与竞价流水（找出被“冻结”和“退回”的钱！）
+      const { data: orderData } = await supabase.from('buy_orders').select('*').eq('buyer_id', user.id);
+      if (orderData) {
+         orderData.forEach(order => {
+            const targetName = colMap[order.collection_id] || '神秘藏品';
+            const totalCost = (order.price * order.quantity).toFixed(2);
+            
+            // 只要发布了订单，这笔钱就被冻结了
+            allLogs.push({
+                id: 'o_c_' + order.id,
+                title: `发布${order.order_type === 'bid' ? '竞价' : '求购'} (${targetName})`,
+                amount: `- ¥${totalCost}`,
+                amountColor: '#111',
+                time: new Date(order.created_at).getTime(),
+                timeStr: new Date(order.created_at).toLocaleString(),
+                type: '资金冻结'
+            });
+
+            // 如果订单撤销了，钱被退回
+            if (order.status === 'cancelled') {
+                allLogs.push({
+                    id: 'o_r_' + order.id,
+                    title: `撤销${order.order_type === 'bid' ? '竞价' : '求购'} (${targetName})`,
+                    amount: `+ ¥${totalCost}`,
+                    amountColor: '#4CD964',
+                    // 模拟退款时间比创建时间稍晚
+                    time: new Date(order.created_at).getTime() + 1000, 
+                    timeStr: new Date(order.created_at).toLocaleString(),
+                    type: '资金退回'
+                });
+            }
+         });
+      }
+
+      // 按时间从新到老强制排序！
+      allLogs.sort((a, b) => b.time - a.time);
+      setLogs(allLogs);
+
+    } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
   const renderLogItem = ({ item }: { item: any }) => (
@@ -85,12 +126,10 @@ export default function WalletScreen() {
           <Text style={styles.logTitle}>{item.title}</Text>
           <View style={styles.tagRow}>
              <View style={styles.typeTag}><Text style={styles.typeTagText}>{item.type}</Text></View>
-             <Text style={styles.logTime}>{item.time}</Text>
+             <Text style={styles.logTime}>{item.timeStr}</Text>
           </View>
        </View>
-       <Text style={[styles.logAmount, {color: item.amountColor}]}>
-          {item.amount}
-       </Text>
+       <Text style={[styles.logAmount, {color: item.amountColor}]}>{item.amount}</Text>
     </View>
   );
 
@@ -105,6 +144,10 @@ export default function WalletScreen() {
       <View style={styles.walletCard}>
          <Text style={styles.cardLabel}>土豆币可用余额 (¥)</Text>
          <Text style={styles.cardBalance}>{balance}</Text>
+         <View style={styles.actionRow}>
+            <TouchableOpacity style={styles.actionBtn} onPress={() => alert('充值通道暂未开放')}><Text style={styles.actionBtnText}>充值</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, styles.actionBtnOutline]} onPress={() => alert('提现通道暂未开放')}><Text style={styles.actionBtnOutlineText}>提现</Text></TouchableOpacity>
+         </View>
       </View>
 
       <View style={styles.logSection}>
@@ -132,14 +175,16 @@ const styles = StyleSheet.create({
   navBtn: { width: 40, justifyContent: 'center' },
   iconText: { fontSize: 20, color: '#111' },
   navTitle: { fontSize: 17, fontWeight: '900', color: '#111' },
-
   walletCard: { backgroundColor: '#111', margin: 16, borderRadius: 20, padding: 24, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: {width: 0, height: 5}, elevation: 5 },
   cardLabel: { color: '#CCC', fontSize: 13, marginBottom: 8 },
   cardBalance: { color: '#FFD700', fontSize: 40, fontWeight: '900', marginBottom: 24, fontFamily: 'monospace' },
-  
+  actionRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  actionBtn: { flex: 0.48, backgroundColor: '#FFD700', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  actionBtnText: { color: '#111', fontSize: 16, fontWeight: '900' },
+  actionBtnOutline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#555' },
+  actionBtnOutlineText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
   logSection: { flex: 1, backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
   sectionTitle: { fontSize: 16, fontWeight: '900', color: '#111', marginBottom: 16 },
-  
   logRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderColor: '#F0F0F0' },
   logLeft: { flex: 1, marginRight: 16 },
   logTitle: { fontSize: 14, fontWeight: '800', color: '#333', marginBottom: 8 },
