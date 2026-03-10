@@ -1,3 +1,4 @@
+import * as Clipboard from 'expo-clipboard'; // 🌟 引入剪贴板组件
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Dimensions, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -10,7 +11,7 @@ const CARD_WIDTH = (width - 48) / 2;
 const MENU_GRID = [
   { name: '订单', icon: '📝', route: '/my-orders' },
   { name: '邀请', icon: '🤝', route: '' },
-  { name: '求购', icon: '🛒', route: '/create-buy-order' }, // 这里的路由可以后续优化为求购列表
+  { name: '求购', icon: '🛒', route: '/create-buy-order' }, 
   { name: '钱包', icon: '👛', route: '/wallet' },
   { name: '合成', icon: '🧬', route: '/synthesis-list' },
   { name: '权益', icon: '💎', route: '/vip-privilege' },
@@ -35,7 +36,7 @@ export default function ProfileScreen() {
       const { data: profData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       setProfile(profData);
 
-      // 2. 获取个人藏品并按系列聚合 (一岛化：显示持有量)
+      // 2. 获取个人藏品并按系列聚合
       const { data: nfts } = await supabase.from('nfts').select('id, collection_id, status, collections(id, name, image_url)')
         .eq('owner_id', user.id).neq('status', 'burned');
       
@@ -56,6 +57,14 @@ export default function ProfileScreen() {
 
   useFocusEffect(useCallback(() => { fetchProfileData(); }, []));
 
+  // 🌟 核心：复制土豆岛号功能
+  const copyToClipboard = async () => {
+    if (profile?.id) {
+       await Clipboard.setStringAsync(profile.id);
+       alert('✅ 土豆岛号已复制到剪贴板！');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchProfileData} tintColor="#D49A36" />}>
@@ -70,7 +79,13 @@ export default function ProfileScreen() {
                <Text style={styles.nickname}>{profile?.nickname || '土豆岛民'}</Text>
                <View style={styles.vipTag}><Text style={styles.vipText}>V1</Text></View>
             </View>
-            <Text style={styles.uid}>一岛号: td_{profile?.id?.substring(0,8) || '00000000'} 📋</Text>
+            {/* 🌟 修改为土豆岛号并增加高颜值复制按钮 */}
+            <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 6}}>
+               <Text style={styles.uid}>土豆岛号: td_{profile?.id?.substring(0,8).toUpperCase() || '00000000'}</Text>
+               <TouchableOpacity style={styles.copyBtn} onPress={copyToClipboard}>
+                  <Text style={styles.copyBtnText}>复制</Text>
+               </TouchableOpacity>
+            </View>
           </View>
           <TouchableOpacity style={styles.qrCodeBtn}><Text style={{fontSize: 24}}>🪪</Text></TouchableOpacity>
         </View>
@@ -87,7 +102,7 @@ export default function ProfileScreen() {
            </TouchableOpacity>
         )}
 
-        {/* --- 2. 🌟 一岛化：财富与收益看板 (VIP卡片) --- */}
+        {/* --- 2. 财富与收益看板 --- */}
         <View style={styles.wealthCard}>
            <View style={styles.wealthTop}>
               <View style={{flexDirection: 'row', alignItems: 'center'}}>
@@ -113,7 +128,7 @@ export default function ProfileScreen() {
            </View>
         </View>
 
-        {/* --- 3. 🌟 一岛化：8宫格操作区 --- */}
+        {/* --- 3. 8宫格操作区 --- */}
         <View style={styles.gridContainer}>
           {MENU_GRID.map((item, index) => (
             <TouchableOpacity key={index} style={styles.gridItem} activeOpacity={0.7} onPress={() => item.route ? router.push(item.route as any) : null}>
@@ -123,10 +138,10 @@ export default function ProfileScreen() {
           ))}
         </View>
 
-        {/* --- 4. 🌟 一岛化：抽签日历横幅 (预留盲盒入口) --- */}
-        <TouchableOpacity style={styles.bannerAd} activeOpacity={0.9}>
+        {/* --- 4. 抽签日历横幅 --- */}
+        <TouchableOpacity style={styles.bannerAd} activeOpacity={0.9} onPress={() => router.push('/lottery')}>
            <View style={{flex: 1}}>
-              <Text style={styles.bannerTitle}>抽签日历</Text>
+              <Text style={styles.bannerTitle}>命运抽签</Text>
               <Text style={styles.bannerSub}>DRAW LOTS CALENDAR</Text>
            </View>
            <Text style={{fontSize: 40}}>📅</Text>
@@ -180,8 +195,12 @@ const styles = StyleSheet.create({
   nickname: { fontSize: 20, fontWeight: '900', color: '#111' },
   vipTag: { backgroundColor: '#0066FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 },
   vipText: { color: '#FFF', fontSize: 10, fontWeight: '900', fontStyle: 'italic' },
-  uid: { fontSize: 12, color: '#888', marginTop: 6, fontFamily: 'monospace' },
+  uid: { fontSize: 12, color: '#888', fontFamily: 'monospace' },
   qrCodeBtn: { padding: 10 },
+
+  // 🌟 复制按钮样式
+  copyBtn: { marginLeft: 8, backgroundColor: '#FFF5E6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#D49A36' },
+  copyBtnText: { color: '#D49A36', fontSize: 10, fontWeight: '800' },
 
   // 上帝通道
   adminBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', marginHorizontal: 16, marginBottom: 16, padding: 16, borderRadius: 16, shadowColor: '#FFD700', shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: {width: 0, height: 4}, elevation: 5 },

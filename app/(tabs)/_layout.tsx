@@ -9,17 +9,12 @@ export default function TabLayout() {
         tabBarActiveTintColor: '#D49A36', // 土豆岛专属金
         tabBarInactiveTintColor: '#999',
         tabBarStyle: {
-          backgroundColor: '#FFF',
+          backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
-          borderColor: '#F0F0F0',
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 8,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 10,
-          elevation: 5,
+          borderTopColor: '#F0F0F0',
+          height: 65,             // 🌟 增加基础高度
+          paddingBottom: 10,      // 🌟 增加底部内边距，把文字顶上来
+          paddingTop: 5,
         },
         tabBarLabelStyle: {
           fontSize: 11,
