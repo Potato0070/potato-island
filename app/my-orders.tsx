@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -33,43 +33,35 @@ export default function MyOrdersScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 🌟 核心防御：查出所有集合，以便咱们自己拼图，绝不依赖数据库外键！
-      const { data: cols } = await supabase.from('collections').select('id, name, image_url');
-      const colMap: any = {};
-      if (cols) cols.forEach(c => colMap[c.id] = c);
-
-      let rawData: any[] = [];
-
+      // 🌟 核心：使用最安全的原生 join，绝不抛出隐藏错误！
       if (tab === '寄售中') {
-        const { data } = await supabase.from('nfts').select('*').eq('owner_id', user.id).eq('status', 'listed').order('created_at', { ascending: false });
-        rawData = data || [];
+        const { data, error } = await supabase.from('nfts').select('*, collections(name, image_url)').eq('owner_id', user.id).eq('status', 'listed').order('created_at', { ascending: false });
+        if(error) Alert.alert("寄售查询报错", error.message);
+        setListData(data || []);
       } 
       else if (tab === '求购中') {
-        const { data } = await supabase.from('buy_orders').select('*').eq('buyer_id', user.id).eq('status', 'active').neq('order_type', 'bid').order('created_at', { ascending: false });
-        rawData = data || [];
+        const { data, error } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').neq('order_type', 'bid').order('created_at', { ascending: false });
+        if(error) Alert.alert("求购查询报错", error.message);
+        setListData(data || []);
       }
       else if (tab === '竞价中') {
-        const { data } = await supabase.from('buy_orders').select('*').eq('buyer_id', user.id).eq('status', 'active').eq('order_type', 'bid').order('created_at', { ascending: false });
-        rawData = data || [];
+        const { data, error } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').eq('order_type', 'bid').order('created_at', { ascending: false });
+        if(error) Alert.alert("竞价查询报错", error.message);
+        setListData(data || []);
       }
       else if (tab === '已买入') {
-        // 纯净读取，屏蔽所有报错可能！
-        const { data } = await supabase.from('transfer_logs').select('*').eq('buyer_id', user.id).order('transfer_time', { ascending: false });
-        rawData = data || [];
+        const { data, error } = await supabase.from('transfer_logs').select('*, collections(name, image_url)').eq('buyer_id', user.id).order('transfer_time', { ascending: false });
+        if(error) Alert.alert("已买入查询报错", error.message);
+        setListData(data || []);
       } 
       else if (tab === '已卖出') {
-        const { data } = await supabase.from('transfer_logs').select('*').eq('seller_id', user.id).order('transfer_time', { ascending: false });
-        rawData = data || [];
+        const { data, error } = await supabase.from('transfer_logs').select('*, collections(name, image_url)').eq('seller_id', user.id).order('transfer_time', { ascending: false });
+        if(error) Alert.alert("已卖出查询报错", error.message);
+        setListData(data || []);
       }
-
-      // 🌟 前端手动图文拼表
-      const enrichedData = rawData.map(item => ({
-         ...item,
-         collections: colMap[item.collection_id] || { name: '神秘藏品', image_url: 'https://via.placeholder.com/150' }
-      }));
-
-      setListData(enrichedData);
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+    } catch (err: any) { 
+       Alert.alert("致命错误", err.message || JSON.stringify(err)); 
+    } finally { setLoading(false); }
   };
 
   const handleCancelBuyOrder = async () => {
@@ -85,7 +77,7 @@ export default function MyOrdersScreen() {
       setCancelModal(null);
       showToast('✅ 撤销成功，资金已退回钱包');
       fetchDataByTab(activeTab); 
-    } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setProcessing(false); }
+    } catch (err: any) { Alert.alert('撤回失败', err.message); } finally { setProcessing(false); }
   };
 
   const handleCancelSale = async () => {
@@ -96,21 +88,20 @@ export default function MyOrdersScreen() {
       setCancelSaleModal(null);
       showToast('✅ 寄售已取消，藏品已退回金库锁定');
       fetchDataByTab('寄售中'); 
-    } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setProcessing(false); }
+    } catch (err: any) { Alert.alert('取消寄售失败', err.message); } finally { setProcessing(false); }
   };
 
   const handleIncreasePrice = async () => {
     if (!addPriceModal) return;
     const order = addPriceModal.order;
     const p = parseFloat(newPrice);
-    if (isNaN(p) || p <= order.price) return showToast(`加价必须高于当前出价 ¥${order.price}`);
     
+    if (isNaN(p) || p <= order.price) return showToast(`加价必须高于当前出价 ¥${order.price}`);
     setProcessing(true);
     try {
       const diffAmount = (p - order.price) * order.quantity; 
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user?.id).single();
-      
       if ((profile?.potato_coin_balance || 0) < diffAmount) throw new Error('钱包余额不足以支付加价差额！');
 
       await supabase.from('profiles').update({ potato_coin_balance: (profile?.potato_coin_balance || 0) - diffAmount }).eq('id', user?.id);
@@ -120,7 +111,7 @@ export default function MyOrdersScreen() {
       setNewPrice('');
       showToast(`✅ 加价成功！成功抢占高位`);
       fetchDataByTab(activeTab);
-    } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setProcessing(false); }
+    } catch (err: any) { Alert.alert('加价失败', err.message); } finally { setProcessing(false); }
   };
 
   const renderItem = ({ item }: { item: any }) => {
@@ -128,8 +119,11 @@ export default function MyOrdersScreen() {
     const isBuying = activeTab === '求购中' || activeTab === '竞价中'; 
     const isHistory = activeTab === '已买入' || activeTab === '已卖出';
     
-    const name = item.collections?.name || '未知藏品';
-    const imgUrl = item.collections?.image_url || 'https://via.placeholder.com/150';
+    const colName = Array.isArray(item.collections) ? item.collections[0]?.name : item.collections?.name;
+    const colImg = Array.isArray(item.collections) ? item.collections[0]?.image_url : item.collections?.image_url;
+    
+    const imgUrl = colImg || 'https://via.placeholder.com/150';
+    const name = colName || '神秘藏品';
     const serial = (isSelling || isBuying) ? (item.serial_number || '排队中') : item.nft_id?.substring(0,6);
     const price = isSelling ? item.consign_price : item.price;
     const timeStr = isSelling || isBuying ? '有效挂单中...' : new Date(item.transfer_time || item.created_at).toLocaleString();
@@ -226,7 +220,7 @@ export default function MyOrdersScreen() {
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
                <Text style={styles.confirmTitle}>📦 取消寄售</Text>
-               <Text style={styles.confirmDesc}>确定要将该藏品从大盘中撤下吗？撤下后藏品将重新在您的金库中被锁定。</Text>
+               <Text style={styles.confirmDesc}>确定要将该藏品从大盘中撤下吗？</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setCancelSaleModal(null)}><Text style={styles.cancelBtnText}>再挂一会</Text></TouchableOpacity>
                   <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#333'}]} onPress={handleCancelSale} disabled={processing}>
@@ -241,7 +235,7 @@ export default function MyOrdersScreen() {
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
                <Text style={styles.confirmTitle}>📈 加价竞拍</Text>
-               <Text style={styles.confirmDesc}>当前出价: <Text style={{fontWeight:'900'}}>¥{addPriceModal?.order?.price}</Text> (需求 {addPriceModal?.order?.quantity} 件)</Text>
+               <Text style={styles.confirmDesc}>当前出价: ¥{addPriceModal?.order?.price}</Text>
                <TextInput 
                   style={styles.inputField} 
                   placeholder="请输入新的单件出价" 
@@ -250,7 +244,6 @@ export default function MyOrdersScreen() {
                   onChangeText={setNewPrice} 
                   textAlign="center"
                />
-               <Text style={{fontSize: 12, color: '#FF3B30', marginBottom: 20}}>* 加价将从钱包中实时冻结扣除差额资金</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => {setAddPriceModal(null); setNewPrice('');}}><Text style={styles.cancelBtnText}>取消</Text></TouchableOpacity>
                   <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#0066FF'}]} onPress={handleIncreasePrice} disabled={processing}>
@@ -265,7 +258,7 @@ export default function MyOrdersScreen() {
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
                <Text style={styles.confirmTitle}>⚠️ 确认撤回订单</Text>
-               <Text style={styles.confirmDesc}>撤单后，冻结的 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{cancelModal?.amount}</Text> 将立即退回钱包。消耗的 Potato卡 <Text style={{fontWeight:'900'}}>不会退还</Text>！</Text>
+               <Text style={styles.confirmDesc}>撤单后，冻结的 ¥{cancelModal?.amount} 将立即退回钱包。</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setCancelModal(null)}><Text style={styles.cancelBtnText}>保持排队</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.confirmBtn} onPress={handleCancelBuyOrder} disabled={processing}>

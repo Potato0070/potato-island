@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Dimensions, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -31,26 +31,25 @@ export default function WalletScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 1. 获取余额
+      // 1. 获取最新余额
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
       if (profile) setBalance((profile.potato_coin_balance || 0).toFixed(2));
 
-      // 🌟 核心：先单独把全岛的藏品信息查出来（避开外键报错）
-      const { data: cols } = await supabase.from('collections').select('id, name');
-      const colMap: any = {};
-      if (cols) cols.forEach(c => colMap[c.id] = c.name);
-
       let allLogs: any[] = [];
 
-      // 2. 抓取真实交易流水 (纯净查询)
-      const { data: transferData } = await supabase.from('transfer_logs')
-        .select('*')
-        .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`);
+      // 2. 🌟 恢复最原生、最稳定的流水关联查询
+      const { data: transferData, error: tErr } = await supabase.from('transfer_logs')
+        .select('*, collections(name)')
+        .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`)
+        .order('transfer_time', { ascending: false });
+
+      if (tErr) Alert.alert("流水查询报错", tErr.message);
 
       if (transferData) {
         transferData.forEach(log => {
            const isIncome = log.seller_id === user.id;
-           const targetName = colMap[log.collection_id] || '神秘藏品';
+           const colName = Array.isArray(log.collections) ? log.collections[0]?.name : log.collections?.name;
+           const targetName = colName || '神秘藏品';
            const typeStr = TYPE_MAP[log.transfer_type] || '资金流转';
 
            let titleStr = '';
@@ -79,14 +78,19 @@ export default function WalletScreen() {
         });
       }
 
-      // 3. 🌟 抓取求购与竞价流水（找出被“冻结”和“退回”的钱！）
-      const { data: orderData } = await supabase.from('buy_orders').select('*').eq('buyer_id', user.id);
+      // 3. 🌟 原生查询订单冻结金额
+      const { data: orderData, error: oErr } = await supabase.from('buy_orders')
+        .select('*, collections(name)')
+        .eq('buyer_id', user.id);
+
+      if (oErr) Alert.alert("订单查询报错", oErr.message);
+
       if (orderData) {
          orderData.forEach(order => {
-            const targetName = colMap[order.collection_id] || '神秘藏品';
+            const colName = Array.isArray(order.collections) ? order.collections[0]?.name : order.collections?.name;
+            const targetName = colName || '神秘藏品';
             const totalCost = (order.price * order.quantity).toFixed(2);
             
-            // 只要发布了订单，这笔钱就被冻结了
             allLogs.push({
                 id: 'o_c_' + order.id,
                 title: `发布${order.order_type === 'bid' ? '竞价' : '求购'} (${targetName})`,
@@ -97,14 +101,12 @@ export default function WalletScreen() {
                 type: '资金冻结'
             });
 
-            // 如果订单撤销了，钱被退回
             if (order.status === 'cancelled') {
                 allLogs.push({
                     id: 'o_r_' + order.id,
                     title: `撤销${order.order_type === 'bid' ? '竞价' : '求购'} (${targetName})`,
                     amount: `+ ¥${totalCost}`,
                     amountColor: '#4CD964',
-                    // 模拟退款时间比创建时间稍晚
                     time: new Date(order.created_at).getTime() + 1000, 
                     timeStr: new Date(order.created_at).toLocaleString(),
                     type: '资金退回'
@@ -113,11 +115,13 @@ export default function WalletScreen() {
          });
       }
 
-      // 按时间从新到老强制排序！
+      // 重新对所有合并后的账单按时间排序
       allLogs.sort((a, b) => b.time - a.time);
       setLogs(allLogs);
 
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+    } catch (err: any) { 
+      Alert.alert("严重错误", err.message || JSON.stringify(err));
+    } finally { setLoading(false); }
   };
 
   const renderLogItem = ({ item }: { item: any }) => (
