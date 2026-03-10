@@ -35,21 +35,23 @@ export default function WalletScreen() {
       const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
       if (profile) setBalance((profile.potato_coin_balance || 0).toFixed(2));
 
+      // 🌟 核心：先纯净查出全岛所有藏品的名字，绝不依赖关联！
+      const { data: cols } = await supabase.from('collections').select('id, name');
+      const colMap: any = {};
+      if (cols) cols.forEach(c => colMap[c.id] = c.name);
+
       let allLogs: any[] = [];
 
-      // 2. 🌟 恢复最原生、最稳定的流水关联查询
-      const { data: transferData, error: tErr } = await supabase.from('transfer_logs')
-        .select('*, collections(name)')
-        .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`)
-        .order('transfer_time', { ascending: false });
-
-      if (tErr) Alert.alert("流水查询报错", tErr.message);
+      // 2. 纯净查出属于你的所有流水
+      const { data: transferData } = await supabase.from('transfer_logs')
+        .select('*')
+        .or(`seller_id.eq.${user.id},buyer_id.eq.${user.id}`);
 
       if (transferData) {
         transferData.forEach(log => {
            const isIncome = log.seller_id === user.id;
-           const colName = Array.isArray(log.collections) ? log.collections[0]?.name : log.collections?.name;
-           const targetName = colName || '神秘藏品';
+           // 手动贴上藏品名字
+           const targetName = colMap[log.collection_id] || '神秘藏品';
            const typeStr = TYPE_MAP[log.transfer_type] || '资金流转';
 
            let titleStr = '';
@@ -78,17 +80,14 @@ export default function WalletScreen() {
         });
       }
 
-      // 3. 🌟 原生查询订单冻结金额
-      const { data: orderData, error: oErr } = await supabase.from('buy_orders')
-        .select('*, collections(name)')
+      // 3. 纯净查出你的所有订单冻结记录
+      const { data: orderData } = await supabase.from('buy_orders')
+        .select('*')
         .eq('buyer_id', user.id);
-
-      if (oErr) Alert.alert("订单查询报错", oErr.message);
 
       if (orderData) {
          orderData.forEach(order => {
-            const colName = Array.isArray(order.collections) ? order.collections[0]?.name : order.collections?.name;
-            const targetName = colName || '神秘藏品';
+            const targetName = colMap[order.collection_id] || '神秘藏品';
             const totalCost = (order.price * order.quantity).toFixed(2);
             
             allLogs.push({
@@ -115,12 +114,12 @@ export default function WalletScreen() {
          });
       }
 
-      // 重新对所有合并后的账单按时间排序
+      // 按时间从新到老强制排序！
       allLogs.sort((a, b) => b.time - a.time);
       setLogs(allLogs);
 
     } catch (err: any) { 
-      Alert.alert("严重错误", err.message || JSON.stringify(err));
+      Alert.alert("渲染错误", err.message);
     } finally { setLoading(false); }
   };
 

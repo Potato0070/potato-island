@@ -33,34 +33,44 @@ export default function MyOrdersScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 🌟 核心：使用最安全的原生 join，绝不抛出隐藏错误！
+      // 🌟 核心：先手动查出所有的集合信息备用！
+      const { data: cols } = await supabase.from('collections').select('id, name, image_url');
+      const colMap: any = {};
+      if (cols) cols.forEach(c => colMap[c.id] = c);
+
+      let rawData: any[] = [];
+
+      // 🌟 纯净抓取数据，绝不连表！
       if (tab === '寄售中') {
-        const { data, error } = await supabase.from('nfts').select('*, collections(name, image_url)').eq('owner_id', user.id).eq('status', 'listed').order('created_at', { ascending: false });
-        if(error) Alert.alert("寄售查询报错", error.message);
-        setListData(data || []);
+        const { data } = await supabase.from('nfts').select('*').eq('owner_id', user.id).eq('status', 'listed').order('created_at', { ascending: false });
+        rawData = data || [];
       } 
       else if (tab === '求购中') {
-        const { data, error } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').neq('order_type', 'bid').order('created_at', { ascending: false });
-        if(error) Alert.alert("求购查询报错", error.message);
-        setListData(data || []);
+        const { data } = await supabase.from('buy_orders').select('*').eq('buyer_id', user.id).eq('status', 'active').neq('order_type', 'bid').order('created_at', { ascending: false });
+        rawData = data || [];
       }
       else if (tab === '竞价中') {
-        const { data, error } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').eq('order_type', 'bid').order('created_at', { ascending: false });
-        if(error) Alert.alert("竞价查询报错", error.message);
-        setListData(data || []);
+        const { data } = await supabase.from('buy_orders').select('*').eq('buyer_id', user.id).eq('status', 'active').eq('order_type', 'bid').order('created_at', { ascending: false });
+        rawData = data || [];
       }
       else if (tab === '已买入') {
-        const { data, error } = await supabase.from('transfer_logs').select('*, collections(name, image_url)').eq('buyer_id', user.id).order('transfer_time', { ascending: false });
-        if(error) Alert.alert("已买入查询报错", error.message);
-        setListData(data || []);
+        const { data } = await supabase.from('transfer_logs').select('*').eq('buyer_id', user.id).order('transfer_time', { ascending: false });
+        rawData = data || [];
       } 
       else if (tab === '已卖出') {
-        const { data, error } = await supabase.from('transfer_logs').select('*, collections(name, image_url)').eq('seller_id', user.id).order('transfer_time', { ascending: false });
-        if(error) Alert.alert("已卖出查询报错", error.message);
-        setListData(data || []);
+        const { data } = await supabase.from('transfer_logs').select('*').eq('seller_id', user.id).order('transfer_time', { ascending: false });
+        rawData = data || [];
       }
+
+      // 🌟 前端手动无敌拼表法！把图片和名字硬贴上去！
+      const enrichedData = rawData.map(item => ({
+         ...item,
+         collections: colMap[item.collection_id] || { name: '神秘藏品', image_url: 'https://via.placeholder.com/150' }
+      }));
+
+      setListData(enrichedData);
     } catch (err: any) { 
-       Alert.alert("致命错误", err.message || JSON.stringify(err)); 
+       Alert.alert("渲染错误", err.message); 
     } finally { setLoading(false); }
   };
 
@@ -95,8 +105,8 @@ export default function MyOrdersScreen() {
     if (!addPriceModal) return;
     const order = addPriceModal.order;
     const p = parseFloat(newPrice);
-    
     if (isNaN(p) || p <= order.price) return showToast(`加价必须高于当前出价 ¥${order.price}`);
+    
     setProcessing(true);
     try {
       const diffAmount = (p - order.price) * order.quantity; 
@@ -119,11 +129,10 @@ export default function MyOrdersScreen() {
     const isBuying = activeTab === '求购中' || activeTab === '竞价中'; 
     const isHistory = activeTab === '已买入' || activeTab === '已卖出';
     
-    const colName = Array.isArray(item.collections) ? item.collections[0]?.name : item.collections?.name;
-    const colImg = Array.isArray(item.collections) ? item.collections[0]?.image_url : item.collections?.image_url;
+    // 我们在组装时已经处理好格式，直接读！
+    const name = item.collections?.name;
+    const imgUrl = item.collections?.image_url;
     
-    const imgUrl = colImg || 'https://via.placeholder.com/150';
-    const name = colName || '神秘藏品';
     const serial = (isSelling || isBuying) ? (item.serial_number || '排队中') : item.nft_id?.substring(0,6);
     const price = isSelling ? item.consign_price : item.price;
     const timeStr = isSelling || isBuying ? '有效挂单中...' : new Date(item.transfer_time || item.created_at).toLocaleString();
