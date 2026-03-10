@@ -25,6 +25,17 @@ export default function BlackholeScreen() {
     setTimeout(() => setToastMsg(''), 2500);
   };
 
+  // 🌟 核心防白屏：极限容错的数据解析函数
+  const getColName = (nft: any) => {
+     if (!nft || !nft.collections) return '未知藏品';
+     return Array.isArray(nft.collections) ? (nft.collections[0]?.name || '未知') : (nft.collections.name || '未知');
+  };
+  
+  const getColImage = (nft: any) => {
+     if (!nft || !nft.collections) return 'https://via.placeholder.com/150';
+     return Array.isArray(nft.collections) ? (nft.collections[0]?.image_url || 'https://via.placeholder.com/150') : (nft.collections.image_url || 'https://via.placeholder.com/150');
+  };
+
   const openPicker = async () => {
     setShowPicker(true);
     try {
@@ -38,8 +49,7 @@ export default function BlackholeScreen() {
        // 🌟 核心拦截：不允许投入 Potato卡！
        if (data) {
           const validNfts = data.filter((nft: any) => {
-             const colName = Array.isArray(nft.collections) ? nft.collections[0]?.name : nft.collections?.name;
-             return colName !== 'Potato卡';
+             return getColName(nft) !== 'Potato卡';
           });
           setMyNfts(validNfts);
        }
@@ -75,7 +85,6 @@ export default function BlackholeScreen() {
       if (roll === 99) { 
          // 🌟 1% 极品：铸造 1 张真实的【万能土豆卡】NFT 给玩家
          if (universalCol) {
-            // 安全兜底：防止 total_minted 为 undefined 导致崩溃白屏
             const newSerial = (universalCol.total_minted || 0) + 1;
             await supabase.from('nfts').insert([{ collection_id: universalCol.id, owner_id: user.id, serial_number: newSerial.toString(), status: 'idle' }]);
             await supabase.from('collections').update({ total_minted: newSerial, circulating_supply: newSerial }).eq('id', universalCol.id);
@@ -85,7 +94,6 @@ export default function BlackholeScreen() {
       } else { 
          // 🌟 99% 保底：铸造 1 张真实的【Potato卡】NFT 给玩家
          if (potatoCol) {
-            // 安全兜底：防止 total_minted 为 undefined 导致崩溃白屏
             const newSerial = (potatoCol.total_minted || 0) + 1;
             await supabase.from('nfts').insert([{ collection_id: potatoCol.id, owner_id: user.id, serial_number: newSerial.toString(), status: 'idle' }]);
             await supabase.from('collections').update({ total_minted: newSerial, circulating_supply: newSerial }).eq('id', potatoCol.id);
@@ -103,9 +111,6 @@ export default function BlackholeScreen() {
        setProcessing(false); 
     }
   };
-
-  const getColName = (nft: any) => Array.isArray(nft.collections) ? nft.collections[0]?.name : nft.collections?.name;
-  const getColImage = (nft: any) => Array.isArray(nft.collections) ? nft.collections[0]?.image_url : nft.collections?.image_url;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -136,7 +141,7 @@ export default function BlackholeScreen() {
               <View style={{alignItems: 'center'}}>
                  <Image source={{uri: getColImage(selectedNft)}} style={styles.selectedImg} />
                  <Text style={styles.selectedName}>{getColName(selectedNft)}</Text>
-                 <Text style={styles.selectedSerial}>#{String(selectedNft.serial_number).padStart(6, '0')}</Text>
+                 <Text style={styles.selectedSerial}>#{String(selectedNft.serial_number || 0).padStart(6, '0')}</Text>
               </View>
             ) : (
               <View style={{alignItems: 'center'}}>
@@ -168,7 +173,7 @@ export default function BlackholeScreen() {
                          <Image source={{uri: getColImage(nft)}} style={styles.pickImg} />
                          <View style={{flex: 1}}>
                             <Text style={{fontSize: 14, fontWeight: '800', color: '#FFF'}}>{getColName(nft)}</Text>
-                            <Text style={{fontSize: 11, color: '#888'}}>编号: #{nft.serial_number}</Text>
+                            <Text style={{fontSize: 11, color: '#888'}}>编号: #{String(nft.serial_number || 0).padStart(6, '0')}</Text>
                          </View>
                       </TouchableOpacity>
                    ))

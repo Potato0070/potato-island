@@ -48,7 +48,6 @@ export default function CollectionScreen() {
         .order('consign_price', { ascending: true, nullsFirst: false });
       setNfts(nftData || []);
 
-      // 获取所有的买盘数据
       const { data: bidData } = await supabase.from('buy_orders')
         .select('*, profiles:buyer_id(nickname)')
         .eq('collection_id', id)
@@ -103,10 +102,9 @@ export default function CollectionScreen() {
   const listedNfts = nfts.filter(n => n.status === 'listed');
   const myWarehouseNfts = nfts.filter(n => n.owner_id === myUserId);
   
-  // 🌟 核心：将买盘数据完美切割！
-  const buyOrdersList = bids.filter(b => b.order_type !== 'bid'); // 求购数据 (兼容旧的 null)
-  const bidOrdersList = bids.filter(b => b.order_type === 'bid'); // 竞价数据
-  const displayBids = activeTab === 'buy_orders' ? buyOrdersList : bidOrdersList;
+  // 🌟 强力切割数据
+  const buyOrdersList = bids.filter(b => b.order_type !== 'bid'); 
+  const bidOrdersList = bids.filter(b => b.order_type === 'bid'); 
 
   const renderNft = ({ item }: { item: any }) => {
     const isListed = item.status === 'listed';
@@ -141,8 +139,9 @@ export default function CollectionScreen() {
     const isTop3 = activeTab === 'bids' && index < 3;
     const canSellToHim = myIdleNfts.length > 0 && item.buyer_id !== myUserId;
     
-    const safePrice = item.price || 0;
-    const safeQuantity = item.quantity || 0;
+    // 🌟 最强防御机制：保证数值绝对不为空
+    const safePrice = Number(item.price) || 0;
+    const safeQuantity = Number(item.quantity) || 0;
     const freezeAmount = (safePrice * safeQuantity).toFixed(2);
 
     return (
@@ -227,7 +226,8 @@ export default function CollectionScreen() {
             <Text style={styles.fomoText}>点击此处发布求购/竞价单，抢先拿下心仪藏品 〉</Text>
          </TouchableOpacity>
 
-         {activeTab === 'listed' ? (
+         {/* 🌟 核心防白屏：重构为纯粹的并列 if 渲染块 */}
+         {activeTab === 'listed' && (
             <FlatList 
                data={listedNfts} 
                renderItem={renderNft} 
@@ -238,7 +238,9 @@ export default function CollectionScreen() {
                showsVerticalScrollIndicator={false}
                ListEmptyComponent={<View style={{alignItems: 'center', marginTop: 40}}><Text style={{fontSize: 40, marginBottom: 10}}>🪹</Text><Text style={{color: '#999'}}>当前系列被大户扫空啦，快去发布求购！</Text></View>}
             />
-         ) : activeTab === 'my_warehouse' ? (
+         )}
+         
+         {activeTab === 'my_warehouse' && (
             <FlatList 
                data={myWarehouseNfts} 
                renderItem={renderNft} 
@@ -249,18 +251,34 @@ export default function CollectionScreen() {
                showsVerticalScrollIndicator={false}
                ListEmptyComponent={<View style={{alignItems: 'center', marginTop: 40}}><Text style={{fontSize: 40, marginBottom: 10}}>📦</Text><Text style={{color: '#999'}}>您尚未拥有该系列的藏品</Text></View>}
             />
-         ) : (
+         )}
+
+         {activeTab === 'buy_orders' && (
             <FlatList 
-               data={displayBids} // 🌟 使用切割后的数据
+               data={buyOrdersList}
                keyExtractor={item => item.id}
                contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
                showsVerticalScrollIndicator={false}
                ListEmptyComponent={
                   <View style={{alignItems: 'center', marginTop: 40}}>
                      <Text style={{fontSize: 40, marginBottom: 10}}>📉</Text>
-                     <Text style={{color: '#999'}}>
-                        {activeTab === 'buy_orders' ? '暂无求购单，点击上方横幅首发求购！' : '暂无竞价单，点击上方发起竞拍！'}
-                     </Text>
+                     <Text style={{color: '#999'}}>暂无求购单，点击上方横幅首发求购！</Text>
+                  </View>
+               }
+               renderItem={renderBidItem}
+            />
+         )}
+
+         {activeTab === 'bids' && (
+            <FlatList 
+               data={bidOrdersList}
+               keyExtractor={item => item.id}
+               contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+               showsVerticalScrollIndicator={false}
+               ListEmptyComponent={
+                  <View style={{alignItems: 'center', marginTop: 40}}>
+                     <Text style={{fontSize: 40, marginBottom: 10}}>📉</Text>
+                     <Text style={{color: '#999'}}>暂无竞价单，点击上方发起竞拍！</Text>
                   </View>
                }
                renderItem={renderBidItem}

@@ -18,6 +18,11 @@ const VIP_TIERS = [
 export default function VipPrivilegeScreen() {
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
+  
+  // 🌟 核心：存储真实的万能卡库存与对应卡片的ID集合 (用于真实烧卡)
+  const [realUniversalCount, setRealUniversalCount] = useState(0);
+  const [universalNftIds, setUniversalNftIds] = useState<string[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
 
@@ -34,9 +39,25 @@ export default function VipPrivilegeScreen() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      // 🌟 获取用户身份、消费金额、真实 VIP 等级、以及拥有的万能卡数量！
-      const { data } = await supabase.from('profiles').select('id, is_admin, vip_level, total_consumed, universal_cards').eq('id', user.id).single();
+      // 1. 获取用户身份和消费金额
+      const { data } = await supabase.from('profiles').select('id, is_admin, vip_level, total_consumed').eq('id', user.id).single();
       setProfile(data);
+
+      // 2. 🌟 盘点真实金库：查出所有的万能卡
+      const { data: myNfts } = await supabase.from('nfts').select('id, collections(name)').eq('owner_id', user.id).eq('status', 'idle');
+      let uCount = 0;
+      let uIds: string[] = [];
+      if (myNfts) {
+         myNfts.forEach((nft: any) => {
+            const colName = Array.isArray(nft.collections) ? nft.collections[0]?.name : nft.collections?.name;
+            if (colName === '万能土豆卡') {
+               uCount++;
+               uIds.push(nft.id);
+            }
+         });
+      }
+      setRealUniversalCount(uCount);
+      setUniversalNftIds(uIds);
     }
     setLoading(false);
   };
@@ -45,31 +66,29 @@ export default function VipPrivilegeScreen() {
 
   // 🌟 唤起烧卡升级弹窗
   const handleUpgradeClick = (cost: number, nextLv: number, nextName: string) => {
-    if ((profile?.universal_cards || 0) < cost) {
-       return showToast(`万能土豆卡不足！(需要 ${cost} 张，当前仅 ${profile?.universal_cards || 0} 张)`);
+    if (realUniversalCount < cost) {
+       return showToast(`万能土豆卡不足！(需要 ${cost} 张，当前仅 ${realUniversalCount} 张)`);
     }
     setUpgradeModal({ visible: true, cost, nextLv, nextName });
   };
 
-  // 🌟 执行烧卡，真金白银地扣卡并强行提权！
+  // 🌟 执行真实烧卡，物理粉碎万能卡并强行提权！
   const executeUpgrade = async () => {
     if (!upgradeModal) return;
     setProcessing(true);
     try {
-      const currentCards = profile?.universal_cards || 0;
-      if (currentCards < upgradeModal.cost) throw new Error('万能卡不足！被发现试图作弊！');
+      if (realUniversalCount < upgradeModal.cost) throw new Error('万能卡不足！被发现试图作弊！');
 
-      // 强行扣卡并提升等级
-      await supabase.from('profiles')
-         .update({ 
-            universal_cards: currentCards - upgradeModal.cost,
-            vip_level: upgradeModal.nextLv 
-         })
-         .eq('id', profile.id);
+      // 1. 挑出需要数量的万能卡，物理烧毁
+      const cardsToBurn = universalNftIds.slice(0, upgradeModal.cost);
+      await supabase.from('nfts').update({ status: 'burned' }).in('id', cardsToBurn);
+
+      // 2. 强行提升等级
+      await supabase.from('profiles').update({ vip_level: upgradeModal.nextLv }).eq('id', profile.id);
 
       setUpgradeModal(null);
       showToast(`⚡ 飞升成功！您已登阶为【${upgradeModal.nextName}】！`);
-      fetchProfile(); // 刷新界面
+      fetchProfile(); // 刷新界面，重新盘点剩余卡片
     } catch (err: any) {
       setUpgradeModal(null);
       showToast(`升级失败: ${err.message}`);
@@ -178,12 +197,12 @@ export default function VipPrivilegeScreen() {
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
                <Text style={styles.confirmTitle}>👑 登神确认</Text>
-               <Text style={styles.confirmDesc}>将直接消耗 <Text style={{color:'#FF3B30', fontWeight:'900'}}>{upgradeModal?.cost} 张</Text> 极其稀有的【万能土豆卡】，越过消费门槛，立刻将您的身份强行提升为【{upgradeModal?.nextName}】！是否执行？</Text>
+               <Text style={styles.confirmDesc}>将直接燃烧 <Text style={{color:'#FF3B30', fontWeight:'900'}}>{upgradeModal?.cost} 张</Text> 极其稀有的【万能土豆卡】并将其永久物理销毁，借此越过消费门槛，立刻将您的身份强行提升为【{upgradeModal?.nextName}】！是否执行？</Text>
                
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setUpgradeModal(null)}><Text style={styles.cancelBtnText}>太贵了</Text></TouchableOpacity>
                   <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#FFD700'}]} onPress={executeUpgrade} disabled={processing}>
-                     {processing ? <ActivityIndicator color="#111" /> : <Text style={[styles.confirmBtnText, {color: '#111'}]}>确认飞升</Text>}
+                     {processing ? <ActivityIndicator color="#111" /> : <Text style={[styles.confirmBtnText, {color: '#111'}]}>确认燃烧飞升</Text>}
                   </TouchableOpacity>
                </View>
             </View>

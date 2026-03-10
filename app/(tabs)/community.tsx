@@ -5,8 +5,7 @@ import { ActivityIndicator, Alert, FlatList, Image, Modal, StyleSheet, Text, Tou
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../supabase';
 
-// 🌟 设定超级管理员的 ID，用于扣除他的卡！(请确保你的管理员账号里有大量Potato卡，否则烧不动)
-// 在你 Supabase 的 auth.users 表里复制你的 UUID 填到这里
+// 🌟 设定超级管理员的 ID，用于扣除他的卡！
 const SUPER_ADMIN_ID = '你的超级管理员UUID_在这里替换'; 
 
 export default function CommunityScreen() {
@@ -35,11 +34,43 @@ export default function CommunityScreen() {
       const { data, error } = await supabase
         .from('announcements')
         .select('*')
-        .order('is_featured', { ascending: false })
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false }); // 🌟 取消数据库的强制置顶排序，改由前端智能控制
         
       if (error) throw error;
-      setAnnouncements(data || []);
+
+      // 🌟 核心：前端数据清洗器！重塑身份、头像和置顶规则
+      let formattedData = (data || []).map(item => {
+         let displayAuthor = item.author_name || '王国大喇叭';
+         let icon = '👑';
+         let bgColor = '#111';
+         let isFeatured = item.is_featured;
+
+         if (item.author_name === '创世中枢' || item.author_name === '超级中枢') {
+             displayAuthor = '超级播报'; // 🌟 改名
+             icon = '📢'; // 🌟 换喇叭头像
+             bgColor = '#0066FF'; // 专属科技蓝
+             isFeatured = false; // 🌟 强行扒掉置顶特权！
+         } else if (item.author_name === '土豆清道夫') {
+             icon = '🚨';
+             bgColor = '#FF3B30';
+             isFeatured = false;
+         } else if (item.author_name === '土豆国王') {
+             icon = '🥔';
+             bgColor = '#D49A36';
+             isFeatured = true; // 🌟 只有土豆国王强制置顶
+         }
+
+         return { ...item, display_author: displayAuthor, avatar_icon: icon, avatar_bg: bgColor, is_featured: isFeatured };
+      });
+
+      // 🌟 重新按 is_featured 和 时间智能排序
+      formattedData.sort((a, b) => {
+         if (a.is_featured && !b.is_featured) return -1;
+         if (!a.is_featured && b.is_featured) return 1;
+         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+
+      setAnnouncements(formattedData);
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
@@ -53,67 +84,57 @@ export default function CommunityScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 1. 找一张超级管理员的 Potato 卡
       const { data: adminNfts } = await supabase.from('nfts')
          .select('id, collections!inner(name)')
-         .eq('owner_id', SUPER_ADMIN_ID) // ⚠️ 如果测试时管理员没卡，可以暂时注释这行，烧点赞者自己的卡
+         .eq('owner_id', SUPER_ADMIN_ID) 
          .eq('status', 'idle')
          .eq('collections.name', 'Potato卡')
          .limit(1);
 
       if (!adminNfts || adminNfts.length === 0) {
-         // 管理员没卡了，只能加点赞数，不烧卡
          await supabase.from('announcements').update({ likes_count: (post.likes_count || 0) + 1 }).eq('id', post.id);
          Alert.alert('点赞成功', '由于神谕金库库存不足，本次未触发通缩神迹。');
       } else {
          const cardToBurn = adminNfts[0];
-
-         // 2. 物理销毁这张卡
          await supabase.from('nfts').update({ status: 'burned' }).eq('id', cardToBurn.id);
-
-         // 3. 点赞数 + 1
          await supabase.from('announcements').update({ likes_count: (post.likes_count || 0) + 1 }).eq('id', post.id);
 
-         // 4. 🌟 适配表结构：既然没有 messages 表，直接作为“全网广播”插入到公告表！
          const { data: profile } = await supabase.from('profiles').select('nickname').eq('id', user.id).single();
          await supabase.from('announcements').insert([{
             title: '🔥 全网通缩神迹降临！',
             content: `岛民【${profile?.nickname || '神秘信徒'}】刚刚赞颂了王国旨意，触发了神迹！官方金库已当场焚毁 1 张 Potato卡！大盘通缩加剧！`,
-            author_name: '土豆清道夫', // 专属特殊作者名
-            is_featured: false // 不置顶，让它作为最新动态自然流动
+            author_name: '土豆清道夫',
+            is_featured: false
          }]);
 
-         // 5. 弹窗震撼提示
          setBurnModal({ visible: true, msg: `您赞颂了王国旨意，触发了神迹！\n官方金库已当场焚毁 1 张 Potato卡！\n全岛通缩加剧！` });
       }
 
-      // 记录本地已点赞
       const newLiked = { ...likedPosts, [post.id]: true };
       setLikedPosts(newLiked);
       AsyncStorage.setItem('liked_announcements', JSON.stringify(newLiked));
-      
-      // 刷新列表
       fetchAnnouncements();
-
     } catch (e: any) {
       Alert.alert('点赞失败', e.message);
     }
   };
 
   const renderPost = ({ item }: { item: any }) => {
-    const isCleaner = item.author_name === '土豆清道夫'; 
+    const isSystemBroadcast = item.display_author === '超级播报' || item.display_author === '土豆清道夫'; 
     const hasLiked = likedPosts[item.id];
 
     return (
-      <View style={[styles.card, isCleaner && styles.cardCleaner]}>
+      <View style={[styles.card, item.display_author === '土豆清道夫' && styles.cardCleaner, item.display_author === '超级播报' && styles.cardBroadcast]}>
         <View style={styles.cardHeader}>
            <View style={{flexDirection: 'row', alignItems: 'center'}}>
-              <View style={[styles.avatarBox, isCleaner ? {backgroundColor: '#FF3B30'} : {backgroundColor: '#111'}]}>
-                 <Text style={{fontSize: 16}}>{isCleaner ? '🚨' : '👑'}</Text>
+              <View style={[styles.avatarBox, {backgroundColor: item.avatar_bg}]}>
+                 <Text style={{fontSize: 16}}>{item.avatar_icon}</Text>
               </View>
               <View>
                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                    <Text style={[styles.authorName, isCleaner && {color: '#FF3B30'}]}>{item.author_name || '王国大喇叭'}</Text>
+                    <Text style={[styles.authorName, item.display_author === '土豆清道夫' && {color: '#FF3B30'}, item.display_author === '超级播报' && {color: '#0066FF'}]}>
+                       {item.display_author}
+                    </Text>
                     {item.is_featured && <View style={styles.featuredTag}><Text style={styles.featuredTagText}>置顶</Text></View>}
                  </View>
                  <Text style={styles.timeText}>{new Date(item.created_at).toLocaleString()}</Text>
@@ -128,8 +149,8 @@ export default function CommunityScreen() {
            <Image source={{ uri: item.image_url }} style={styles.postImg} />
         )}
 
-        {/* 土豆清道夫的系统播报不需要点赞和评论按钮 */}
-        {!isCleaner && (
+        {/* 🌟 只有正常帖子才显示点赞和评论，系统播报直接隐藏 */}
+        {!isSystemBroadcast && (
           <View style={styles.cardFooter}>
              <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(item)}>
                 <Text style={styles.actionIcon}>{hasLiked ? '🔥' : '👍'}</Text>
@@ -193,6 +214,7 @@ const styles = StyleSheet.create({
 
   card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
   cardCleaner: { borderWidth: 1, borderColor: '#FFB3B0', backgroundColor: '#FFF5F5' },
+  cardBroadcast: { borderWidth: 1, borderColor: '#CCE0FF', backgroundColor: '#F0F6FF' }, // 🌟 超级播报专属蓝色皮肤
   
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   avatarBox: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
