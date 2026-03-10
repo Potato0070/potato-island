@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
@@ -13,9 +13,20 @@ export default function MyNftDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
 
+  // 🌟 高级定制弹窗矩阵，全面替换原生 Alert
+  const [cancelListModal, setCancelListModal] = useState(false);
+  const [transferTipModal, setTransferTipModal] = useState(false);
+  const [successModal, setSuccessModal] = useState<{title: string, msg: string} | null>(null);
+  const [toastMsg, setToastMsg] = useState('');
+
   useEffect(() => {
     fetchMyNft();
   }, [id]);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 2500);
+  };
 
   const fetchMyNft = async () => {
     try {
@@ -25,38 +36,24 @@ export default function MyNftDetailScreen() {
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
-  // 🛡️ 核心：撤销挂单的二次确认逻辑
-  const handleCancelList = () => {
-    Alert.alert(
-      '🚨 撤单确认',
-      `您确定要将【${nft?.collections?.name}】从大盘撤下吗？\n撤下后，该藏品将回到您的金库变为闲置状态。`,
-      [
-        { text: '再想想', style: 'cancel' },
-        { 
-          text: '确认撤回', 
-          style: 'destructive',
-          onPress: async () => {
-            setProcessing(true);
-            try {
-              // 更新状态为 idle，清空挂单价。底层触发器会自动同步大盘在售数量！
-              const { error } = await supabase.from('nfts').update({ status: 'idle', consign_price: null }).eq('id', id);
-              if (error) throw error;
-              
-              Alert.alert('✅ 撤回成功', '藏品已安全退回金库！');
-              fetchMyNft(); // 刷新页面状态
-            } catch (err: any) { Alert.alert('失败', err.message); } finally { setProcessing(false); }
-          }
-        }
-      ]
-    );
-  };
-
-  // 🛡️ 转移操作的二次拦截 (如果后续加上这功能的话，先预留)
-  const handleGoTransfer = () => {
-    Alert.alert('流转提示', '前往转赠页面将消耗 1 张转赠卡，是否继续？', [
-      { text: '取消', style: 'cancel' },
-      { text: '前往', onPress: () => router.push('/transfer') }
-    ]);
+  // 🌟 撤销挂单的真实执行逻辑
+  const executeCancelList = async () => {
+    setProcessing(true);
+    try {
+      const { error } = await supabase.from('nfts').update({ status: 'idle', consign_price: null }).eq('id', id);
+      if (error) throw error;
+      
+      setCancelListModal(false);
+      setTimeout(() => {
+         setSuccessModal({ title: '✅ 撤回成功', msg: '您的藏品已安全退回金库，恢复闲置状态！' });
+         fetchMyNft(); // 刷新页面状态
+      }, 400);
+    } catch (err: any) { 
+      setCancelListModal(false);
+      showToast(`撤回失败: ${err.message}`); 
+    } finally { 
+      setProcessing(false); 
+    }
   };
 
   if (loading || !nft) return <View style={styles.center}><ActivityIndicator color="#0066FF" /></View>;
@@ -72,6 +69,8 @@ export default function MyNftDetailScreen() {
         <View style={styles.navBtn} />
       </View>
 
+      {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
+
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
         {/* 顶部展台 */}
         <View style={styles.stageContainer}>
@@ -81,7 +80,7 @@ export default function MyNftDetailScreen() {
            <View style={styles.shadowOval} />
            
            <View style={[styles.statusBadge, isListed ? {backgroundColor: '#FF3B30'} : {backgroundColor: '#4CD964'}]}>
-               <Text style={styles.statusBadgeText}>{isListed ? `寄售中 (¥${nft.consign_price})` : '金库闲置'}</Text>
+               <Text style={styles.statusBadgeText}>{isListed ? `大盘寄售中 (¥${nft.consign_price})` : '金库闲置中'}</Text>
            </View>
         </View>
 
@@ -110,12 +109,12 @@ export default function MyNftDetailScreen() {
       {/* 底部操作栏 */}
       <View style={styles.bottomBar}>
          {isListed ? (
-            <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelList} disabled={processing}>
-               {processing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.cancelBtnText}>撤销寄售</Text>}
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setCancelListModal(true)} disabled={processing}>
+               <Text style={styles.cancelBtnText}>撤销寄售</Text>
             </TouchableOpacity>
          ) : (
             <>
-              <TouchableOpacity style={styles.subActionBtn} onPress={handleGoTransfer}>
+              <TouchableOpacity style={styles.subActionBtn} onPress={() => setTransferTipModal(true)}>
                  <Text style={styles.subActionText}>转赠</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.mainActionBtn} onPress={() => router.push({pathname: '/publish-consign', params: {id: nft.id}})}>
@@ -124,6 +123,52 @@ export default function MyNftDetailScreen() {
             </>
          )}
       </View>
+
+      {/* 🌟 撤销寄售二次确认弹窗 */}
+      <Modal visible={cancelListModal} transparent animationType="fade">
+         <View style={styles.modalOverlayCenter}>
+            <View style={styles.confirmBox}>
+               <Text style={styles.confirmTitle}>🚨 撤单确认</Text>
+               <Text style={styles.confirmDesc}>您确定要将【<Text style={{fontWeight:'900', color:'#111'}}>{nft?.collections?.name}</Text>】从大盘撤下吗？撤下后，该藏品将回到您的金库变为闲置状态。</Text>
+               <View style={styles.confirmBtnRow}>
+                  <TouchableOpacity style={styles.cancelBtnOutline} onPress={() => setCancelListModal(false)}><Text style={styles.cancelBtnOutlineText}>再想想</Text></TouchableOpacity>
+                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#FF3B30'}]} onPress={executeCancelList} disabled={processing}>
+                     {processing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认撤回</Text>}
+                  </TouchableOpacity>
+               </View>
+            </View>
+         </View>
+      </Modal>
+
+      {/* 🌟 转赠提示确认弹窗 */}
+      <Modal visible={transferTipModal} transparent animationType="fade">
+         <View style={styles.modalOverlayCenter}>
+            <View style={styles.confirmBox}>
+               <Text style={styles.confirmTitle}>🎁 流转提示</Text>
+               <Text style={styles.confirmDesc}>前往转赠页面进行交易，将消耗 <Text style={{fontWeight:'900', color:'#FF3B30'}}>1 张转赠卡</Text>，是否继续？</Text>
+               <View style={styles.confirmBtnRow}>
+                  <TouchableOpacity style={styles.cancelBtnOutline} onPress={() => setTransferTipModal(false)}><Text style={styles.cancelBtnOutlineText}>取消</Text></TouchableOpacity>
+                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#0066FF'}]} onPress={() => { setTransferTipModal(false); router.push('/transfer'); }}>
+                     <Text style={styles.confirmBtnText}>前往转赠</Text>
+                  </TouchableOpacity>
+               </View>
+            </View>
+         </View>
+      </Modal>
+
+      {/* 🌟 成功反馈高级弹窗 */}
+      <Modal visible={!!successModal} transparent animationType="fade">
+         <View style={styles.modalOverlayCenter}>
+            <View style={[styles.confirmBox, {borderColor: '#4CD964', borderWidth: 2}]}>
+               <Text style={[styles.confirmTitle, {color: '#4CD964', fontSize: 22}]}>{successModal?.title}</Text>
+               <Text style={[styles.confirmDesc, {fontSize: 15, color: '#111', fontWeight: '800', lineHeight: 22}]}>{successModal?.msg}</Text>
+               <TouchableOpacity style={[styles.confirmBtn, {width: '100%', backgroundColor: '#4CD964'}]} onPress={() => setSuccessModal(null)}>
+                  <Text style={styles.confirmBtnText}>知道了</Text>
+               </TouchableOpacity>
+            </View>
+         </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -135,6 +180,9 @@ const styles = StyleSheet.create({
   navBtn: { width: 40, justifyContent: 'center' },
   iconText: { fontSize: 20, color: '#111' },
   navTitle: { fontSize: 16, fontWeight: '800', color: '#111' },
+
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
+  toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
 
   stageContainer: { alignItems: 'center', backgroundColor: '#F0F0F5', paddingVertical: 40, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, marginBottom: 20 },
   floatBox: { padding: 10, backgroundColor: '#FFF', borderRadius: 16, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 20, shadowOffset: {width: 0, height: 10}, elevation: 10, zIndex: 2 },
@@ -158,5 +206,15 @@ const styles = StyleSheet.create({
   subActionBtn: { flex: 0.3, backgroundColor: '#F0F6FF', paddingVertical: 14, borderRadius: 25, alignItems: 'center', marginRight: 12 },
   subActionText: { color: '#0066FF', fontSize: 15, fontWeight: '800' },
   mainActionBtn: { flex: 0.7, backgroundColor: '#0066FF', paddingVertical: 14, borderRadius: 25, alignItems: 'center' },
-  mainActionText: { color: '#FFF', fontSize: 16, fontWeight: '900' }
+  mainActionText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
+
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  confirmBox: { width: '85%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
+  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 16 },
+  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  cancelBtnOutline: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#F5F5F5', alignItems: 'center' },
+  cancelBtnOutlineText: { color: '#666', fontSize: 15, fontWeight: '800' },
+  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, alignItems: 'center' },
+  confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });
