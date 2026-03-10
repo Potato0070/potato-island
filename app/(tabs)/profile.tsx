@@ -1,4 +1,4 @@
-import * as Clipboard from 'expo-clipboard'; // 🌟 引入剪贴板组件
+import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Dimensions, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -18,6 +18,15 @@ const MENU_GRID = [
   { name: '转赠', icon: '🎁', route: '/transfer' },
   { name: '设置', icon: '⚙️', route: '/change-avatar' },
 ];
+
+// 🌟 等级映射字典
+const VIP_TIER_NAMES: Record<number, string> = {
+  1: '大众会员',
+  2: '黄金会员',
+  3: '铂金会员',
+  4: '钻石会员',
+  5: '黑钻会员'
+};
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -57,13 +66,16 @@ export default function ProfileScreen() {
 
   useFocusEffect(useCallback(() => { fetchProfileData(); }, []));
 
-  // 🌟 核心：复制土豆岛号功能
   const copyToClipboard = async () => {
     if (profile?.id) {
        await Clipboard.setStringAsync(profile.id);
        alert('✅ 土豆岛号已复制到剪贴板！');
     }
   };
+
+  // 🌟 核心：计算真实需要显示的等级，如果为管理员则直接满级
+  const displayLevel = profile?.is_admin ? 5 : (profile?.vip_level || 1);
+  const displayName = profile?.is_admin ? '创世神' : VIP_TIER_NAMES[displayLevel];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -77,9 +89,10 @@ export default function ProfileScreen() {
           <View style={styles.userInfo}>
             <View style={{flexDirection: 'row', alignItems: 'center'}}>
                <Text style={styles.nickname}>{profile?.nickname || '土豆岛民'}</Text>
-               <View style={styles.vipTag}><Text style={styles.vipText}>V1</Text></View>
+               {/* 🌟 动态同步的顶部等级 Tag */}
+               <View style={styles.vipTag}><Text style={styles.vipText}>V{displayLevel}</Text></View>
+               {profile?.is_admin && <View style={[styles.vipTag, {backgroundColor: '#FF3B30', marginLeft: 4}]}><Text style={styles.vipText}>Admin</Text></View>}
             </View>
-            {/* 🌟 修改为土豆岛号并增加高颜值复制按钮 */}
             <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 6}}>
                <Text style={styles.uid}>土豆岛号: td_{profile?.id?.substring(0,8).toUpperCase() || '00000000'}</Text>
                <TouchableOpacity style={styles.copyBtn} onPress={copyToClipboard}>
@@ -90,7 +103,7 @@ export default function ProfileScreen() {
           <TouchableOpacity style={styles.qrCodeBtn}><Text style={{fontSize: 24}}>🪪</Text></TouchableOpacity>
         </View>
 
-        {/* --- 🌟 专属上帝通道：创世中枢 --- */}
+        {/* --- 专属上帝通道：创世中枢 --- */}
         {profile?.is_admin && (
            <TouchableOpacity style={styles.adminBanner} onPress={() => router.push('/admin-panel')} activeOpacity={0.8}>
               <View style={styles.adminIconBox}><Text style={{fontSize: 20}}>👑</Text></View>
@@ -106,7 +119,8 @@ export default function ProfileScreen() {
         <View style={styles.wealthCard}>
            <View style={styles.wealthTop}>
               <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                 <Text style={styles.wealthVipTitle}>👑 大众会员</Text>
+                 {/* 🌟 动态同步的会员名称 */}
+                 <Text style={styles.wealthVipTitle}>👑 {displayName}</Text>
                  <Text style={styles.wealthVipSub}> | 升级享受更多权益，去查看 〉</Text>
               </View>
               <Text style={styles.wealthVipLogo}>VIP</Text>
@@ -188,7 +202,6 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9F9F9' },
   
-  // 头部档案区
   header: { flexDirection: 'row', alignItems: 'center', padding: 20, backgroundColor: '#F9F9F9' },
   avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#EEE', borderWidth: 2, borderColor: '#FFF' },
   userInfo: { flex: 1, marginLeft: 16 },
@@ -198,17 +211,14 @@ const styles = StyleSheet.create({
   uid: { fontSize: 12, color: '#888', fontFamily: 'monospace' },
   qrCodeBtn: { padding: 10 },
 
-  // 🌟 复制按钮样式
   copyBtn: { marginLeft: 8, backgroundColor: '#FFF5E6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#D49A36' },
   copyBtnText: { color: '#D49A36', fontSize: 10, fontWeight: '800' },
 
-  // 上帝通道
   adminBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', marginHorizontal: 16, marginBottom: 16, padding: 16, borderRadius: 16, shadowColor: '#FFD700', shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: {width: 0, height: 4}, elevation: 5 },
   adminIconBox: { width: 40, height: 40, backgroundColor: 'rgba(255,215,0,0.2)', borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   adminTitle: { color: '#FFD700', fontSize: 16, fontWeight: '900', marginBottom: 4 },
   adminSub: { color: '#CCC', fontSize: 11 },
 
-  // 财富与收益看板
   wealthCard: { backgroundColor: '#FFF5E6', marginHorizontal: 16, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#FFE4B5' },
   wealthTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   wealthVipTitle: { fontSize: 15, fontWeight: '900', color: '#8B5A2B' },
@@ -219,19 +229,16 @@ const styles = StyleSheet.create({
   wealthDataValue: { fontSize: 18, fontWeight: '900', color: '#4A2E1B', marginBottom: 4 },
   wealthDataLabel: { fontSize: 11, color: '#8B5A2B' },
 
-  // 8宫格
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 16, paddingVertical: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 8, elevation: 1 },
   gridItem: { width: '25%', alignItems: 'center', marginBottom: 16 },
   gridIconWrapper: { width: 44, height: 44, borderRadius: 16, backgroundColor: '#F5F6F8', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   gridIconEmoji: { fontSize: 22 },
   gridText: { fontSize: 12, color: '#333', fontWeight: '600' },
 
-  // 抽签日历横幅
   bannerAd: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E6F0FF', marginHorizontal: 16, borderRadius: 16, padding: 20, marginBottom: 24 },
   bannerTitle: { fontSize: 20, fontWeight: '900', color: '#0047AB', marginBottom: 4 },
   bannerSub: { fontSize: 10, color: '#4169E1', letterSpacing: 1 },
 
-  // 藏品归纳区
   collectionSection: { paddingHorizontal: 16 },
   colHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   sectionTitle: { fontSize: 18, fontWeight: '900', color: '#111' },

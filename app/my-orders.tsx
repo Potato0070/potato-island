@@ -1,10 +1,11 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
-const TABS = ['寄售中', '求购中', '已买入', '已卖出'];
+// 🌟 新增 '竞价中' 选项
+const TABS = ['寄售中', '求购中', '竞价中', '已买入', '已卖出'];
 
 export default function MyOrdersScreen() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function MyOrdersScreen() {
   const [cancelModal, setCancelModal] = useState<{visible: boolean, orderId: string, amount: number} | null>(null);
   const [addPriceModal, setAddPriceModal] = useState<{visible: boolean, order: any} | null>(null);
   
-  // 🌟 新增：取消寄售弹窗状态
+  // 取消寄售弹窗状态
   const [cancelSaleModal, setCancelSaleModal] = useState<{visible: boolean, nftId: string} | null>(null);
   
   const [newPrice, setNewPrice] = useState('');
@@ -40,7 +41,8 @@ export default function MyOrdersScreen() {
         const { data } = await supabase.from('nfts').select('*, collections(name, image_url)').eq('owner_id', user.id).eq('status', 'listed').order('created_at', { ascending: false });
         setListData(data || []);
       } 
-      else if (tab === '求购中') {
+      // 🌟 兼容 '求购中' 和 '竞价中'，获取相同的买盘挂单数据
+      else if (tab === '求购中' || tab === '竞价中') {
         const { data } = await supabase.from('buy_orders').select('*, collections(name, image_url)').eq('buyer_id', user.id).eq('status', 'active').order('created_at', { ascending: false });
         setListData(data || []);
       }
@@ -55,7 +57,7 @@ export default function MyOrdersScreen() {
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
-  // 🌟 核心逻辑：取消求购单 (退钱)
+  // 取消求购单/竞价单 (退钱)
   const handleCancelBuyOrder = async () => {
     if (!cancelModal) return;
     setProcessing(true);
@@ -68,21 +70,20 @@ export default function MyOrdersScreen() {
 
       setCancelModal(null);
       showToast('✅ 撤销成功，资金已退回钱包');
-      fetchDataByTab('求购中');
+      fetchDataByTab(activeTab); // 刷新当前 Tab
     } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setProcessing(false); }
   };
 
-  // 🌟 核心逻辑：取消现货寄售 (状态改回 idle)
+  // 取消现货寄售 (状态改回 idle)
   const handleCancelSale = async () => {
     if (!cancelSaleModal) return;
     setProcessing(true);
     try {
-      // 状态恢复为空闲，同时可以把价格清空（设为null）
       await supabase.from('nfts').update({ status: 'idle', consign_price: null }).eq('id', cancelSaleModal.nftId);
 
       setCancelSaleModal(null);
       showToast('✅ 寄售已取消，藏品已退回金库锁定');
-      fetchDataByTab('寄售中'); // 刷新当前列表
+      fetchDataByTab('寄售中'); 
     } catch (err: any) { 
       showToast(`取消失败: ${err.message}`); 
     } finally { 
@@ -112,15 +113,14 @@ export default function MyOrdersScreen() {
       setAddPriceModal(null);
       setNewPrice('');
       showToast(`✅ 加价成功！成功抢占高位`);
-      fetchDataByTab('求购中');
+      fetchDataByTab(activeTab);
     } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setProcessing(false); }
   };
 
   const renderItem = ({ item }: { item: any }) => {
     const isSelling = activeTab === '寄售中';
-    const isBuying = activeTab === '求购中';
+    const isBuying = activeTab === '求购中' || activeTab === '竞价中'; // 🌟 兼容两个状态
     
-    // 兼容可能为数组的 collections
     const colName = Array.isArray(item.collections) ? item.collections[0]?.name : item.collections?.name;
     const colImg = Array.isArray(item.collections) ? item.collections[0]?.image_url : item.collections?.image_url;
     
@@ -141,7 +141,7 @@ export default function MyOrdersScreen() {
            <Image source={{ uri: imgUrl }} style={styles.img} />
            <View style={styles.info}>
               <Text style={styles.title} numberOfLines={1}>{name}</Text>
-              <Text style={styles.serial}>{isBuying ? `求购数量: ${item.quantity}` : `#${serial}`}</Text>
+              <Text style={styles.serial}>{isBuying ? `${activeTab === '竞价中' ? '竞价' : '求购'}数量: ${item.quantity}` : `#${serial}`}</Text>
            </View>
            <View style={styles.priceBox}>
               <Text style={styles.priceLabel}>{isSelling || isBuying ? (isSelling ? '一口价' : '当前出价') : '成交价'}</Text>
@@ -149,7 +149,6 @@ export default function MyOrdersScreen() {
            </View>
         </View>
 
-        {/* 🌟 寄售中：操作栏 (新增取消寄售) */}
         {isSelling && (
            <View style={styles.cardFooter}>
               <TouchableOpacity style={[styles.actionBtnOutline, {borderColor: '#888'}]} onPress={() => setCancelSaleModal({visible: true, nftId: item.id})}>
@@ -158,7 +157,6 @@ export default function MyOrdersScreen() {
            </View>
         )}
 
-        {/* 求购中：操作栏 */}
         {isBuying && (
            <View style={styles.cardFooter}>
               <TouchableOpacity style={styles.actionBtnOutline} onPress={() => setAddPriceModal({visible: true, order: item})}>
@@ -183,12 +181,15 @@ export default function MyOrdersScreen() {
 
       {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
-      <View style={styles.tabsContainer}>
-        {TABS.map(tab => (
-          <TouchableOpacity key={tab} style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]} onPress={() => setActiveTab(tab)}>
-             <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
-          </TouchableOpacity>
-        ))}
+      {/* 🌟 使用横向 ScrollView 防止 Tab 过多被挤压 */}
+      <View style={styles.tabsWrapper}>
+         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContainer}>
+           {TABS.map(tab => (
+             <TouchableOpacity key={tab} style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]} onPress={() => setActiveTab(tab)}>
+                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
+             </TouchableOpacity>
+           ))}
+         </ScrollView>
       </View>
       
       {loading ? (
@@ -199,11 +200,12 @@ export default function MyOrdersScreen() {
           renderItem={renderItem} 
           keyExtractor={item => item.id} 
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }} 
+          showsVerticalScrollIndicator={false}
           ListEmptyComponent={<View style={styles.emptyBox}><Text style={{fontSize: 40, marginBottom: 10}}>📭</Text><Text style={{color: '#999'}}>暂无{activeTab}数据</Text></View>}
         />
       )}
 
-      {/* 🌟 确认取消寄售悬浮窗 */}
+      {/* 取消寄售悬浮窗 */}
       <Modal visible={!!cancelSaleModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
@@ -271,11 +273,15 @@ const styles = StyleSheet.create({
   navTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
   toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
   toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
-  tabsContainer: { flexDirection: 'row', backgroundColor: '#FFF', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderColor: '#F0F0F0' },
+  
+  // 🌟 将容器拆分为 wrapper 和 container 确保滑动丝滑
+  tabsWrapper: { backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#F0F0F0' },
+  tabsContainer: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10 },
   tabBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, backgroundColor: '#F5F5F5', marginRight: 8 },
   tabBtnActive: { backgroundColor: '#E6F0FF' },
   tabText: { fontSize: 13, color: '#666', fontWeight: '600' },
   tabTextActive: { color: '#0066FF', fontWeight: '900' },
+  
   card: { backgroundColor: '#FFF', borderRadius: 12, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 5, elevation: 1 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderColor: '#F9F9F9' },
   timeText: { fontSize: 12, color: '#999' },
