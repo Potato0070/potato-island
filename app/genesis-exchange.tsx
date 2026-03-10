@@ -7,22 +7,46 @@ import { supabase } from '../supabase';
 export default function GenesisExchangeScreen() {
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
+  
+  // 🌟 新增：存储金库里真实的卡片数量
+  const [realPotatoCount, setRealPotatoCount] = useState(0);
+  const [realUniversalCount, setRealUniversalCount] = useState(0);
+
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
 
-  // 🌟 高级定制确认弹窗
   const [confirmModal, setConfirmModal] = useState<{visible: boolean, type: 'universal' | 'elder', costStr: string} | null>(null);
   const [toastMsg, setToastMsg] = useState('');
 
-  useEffect(() => { fetchProfile(); }, []);
+  useEffect(() => { fetchProfileAndInventory(); }, []);
 
-  const fetchProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase.from('profiles').select('potato_cards, universal_cards, nickname').eq('id', user.id).single();
-      setProfile(data);
-    }
-    setLoading(false);
+  const fetchProfileAndInventory = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // 1. 获取基础档案 (昵称等)
+        const { data: profData } = await supabase.from('profiles').select('nickname').eq('id', user.id).single();
+        setProfile(profData);
+
+        // 2. 🌟 核心：去金库实时盘点真实的卡片库存！
+        const { data: myNfts } = await supabase.from('nfts').select('id, collections(name)').eq('owner_id', user.id).eq('status', 'idle');
+        
+        let pCount = 0;
+        let uCount = 0;
+        
+        if (myNfts) {
+           myNfts.forEach((nft: any) => {
+              // 兼容对象或数组形式的 collection 关联查询
+              const colName = Array.isArray(nft.collections) ? nft.collections[0]?.name : nft.collections?.name;
+              if (colName === 'Potato卡') pCount++;
+              if (colName === '万能土豆卡') uCount++;
+           });
+        }
+        
+        setRealPotatoCount(pCount);
+        setRealUniversalCount(uCount);
+      }
+    } catch(err) { console.error(err); } finally { setLoading(false); }
   };
 
   const showToast = (msg: string) => {
@@ -31,16 +55,13 @@ export default function GenesisExchangeScreen() {
   };
 
   const handleExchangeClick = (type: 'universal' | 'elder') => {
-    if (!profile) return showToast('数据加载中，请稍后');
-    
-    const potatoCards = Number(profile.potato_cards) || 0;
-    const universalCards = Number(profile.universal_cards) || 0;
+    if (loading) return showToast('数据加载中，请稍后');
 
     if (type === 'universal') {
-       if (potatoCards < 200) return showToast(`余额不足！需要 200 张 Potato卡 (当前 ${potatoCards} 张)`);
+       if (realPotatoCount < 200) return showToast(`金库现货不足！需要 200 张真实的 Potato卡 (当前 ${realPotatoCount} 张)`);
        setConfirmModal({ visible: true, type, costStr: '200 张 Potato卡' });
     } else {
-       if (universalCards < 10) return showToast(`余额不足！需要 10 张 万能土豆卡 (当前 ${universalCards} 张)`);
+       if (realUniversalCount < 10) return showToast(`金库现货不足！需要 10 张真实的 万能土豆卡 (当前 ${realUniversalCount} 张)`);
        setConfirmModal({ visible: true, type, costStr: '10 张 万能土豆卡' });
     }
   };
@@ -51,32 +72,49 @@ export default function GenesisExchangeScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
+      // 取出当前用户金库里对应的闲置卡片准备销毁
+      const { data: myIdleNfts } = await supabase.from('nfts').select('id, collections(name)').eq('owner_id', user?.id).eq('status', 'idle');
+      
       if (confirmModal.type === 'universal') {
-         // 扣 200 Potato，加 1 万能卡
-         const { error } = await supabase.from('profiles').update({
-            potato_cards: profile.potato_cards - 200,
-            universal_cards: (profile.universal_cards || 0) + 1
-         }).eq('id', user?.id);
-         if (error) throw error;
-         showToast('✅ 创世神迹！成功兑换 1 张【万能土豆卡】！');
+         // 1. 挑出 200 张 Potato卡 准备物理销毁
+         const potatoesToBurn = myIdleNfts?.filter((n: any) => (Array.isArray(n.collections) ? n.collections[0]?.name : n.collections?.name) === 'Potato卡').slice(0, 200).map(n => n.id) || [];
+         
+         if (potatoesToBurn.length < 200) throw new Error('金库库存异常，未能成功抓取 200 张卡片');
+
+         // 2. 销毁这 200 张卡
+         await supabase.from('nfts').update({ status: 'burned' }).in('id', potatoesToBurn);
+
+         // 3. 铸造 1 张【万能土豆卡】并打入金库
+         const { data: uniColData } = await supabase.from('collections').select('id, total_minted').eq('name', '万能土豆卡').single();
+         if (uniColData) {
+            const newSerial = (uniColData.total_minted || 0) + 1;
+            await supabase.from('nfts').insert([{ collection_id: uniColData.id, owner_id: user?.id, serial_number: newSerial.toString(), status: 'idle' }]);
+            await supabase.from('collections').update({ total_minted: newSerial, circulating_supply: newSerial }).eq('id', uniColData.id);
+         }
+         
+         showToast('✅ 创世神迹！成功兑换 1 张真实的【万能土豆卡】！');
       } 
       else if (confirmModal.type === 'elder') {
-         // 扣 10 万能卡，铸造 1 个长老 NFT
-         const { data: colData } = await supabase.from('collections').select('id, total_minted, name').eq('name', '褐皮土豆长老').single();
+         // 1. 挑出 10 张万能土豆卡准备销毁
+         const universalsToBurn = myIdleNfts?.filter((n: any) => (Array.isArray(n.collections) ? n.collections[0]?.name : n.collections?.name) === '万能土豆卡').slice(0, 10).map(n => n.id) || [];
+         
+         if (universalsToBurn.length < 10) throw new Error('金库万能卡库存异常！');
+
+         // 2. 销毁 10 张万能卡
+         await supabase.from('nfts').update({ status: 'burned' }).in('id', universalsToBurn);
+
+         // 3. 铸造 1 个【褐皮土豆长老】NFT
+         const { data: colData } = await supabase.from('collections').select('id, total_minted').eq('name', '褐皮土豆长老').single();
          if (!colData) throw new Error('系统尚未配置【褐皮土豆长老】系列资产！');
 
-         // 扣卡
-         await supabase.from('profiles').update({ universal_cards: profile.universal_cards - 10 }).eq('id', user?.id);
-
-         // 印发长老并上链
-         const newSerial = colData.total_minted + 1;
+         const newSerial = (colData.total_minted || 0) + 1;
          await supabase.from('nfts').insert([{ collection_id: colData.id, owner_id: user?.id, serial_number: newSerial.toString(), status: 'idle' }]);
          await supabase.from('collections').update({ total_minted: newSerial, circulating_supply: newSerial }).eq('id', colData.id);
 
-         // 全服播报
+         // 4. 全服播报
          await supabase.from('announcements').insert([{ 
             title: '👑 创世殿堂降临神迹！', 
-            content: `恭喜岛民【${profile.nickname || '神秘玩家'}】在创世发新殿堂，用 10 张万能卡成功兑换出神级资产【褐皮土豆长老】！全岛震动！`, 
+            content: `恭喜岛民【${profile?.nickname || '神秘玩家'}】在创世发新殿堂，永久燃烧了 10 张万能卡，成功召唤出神级资产【褐皮土豆长老】！全岛震动！`, 
             author_name: '创世中枢', 
             is_featured: true 
          }]);
@@ -85,7 +123,8 @@ export default function GenesisExchangeScreen() {
       }
 
       setConfirmModal(null);
-      fetchProfile();
+      // 兑换完立刻重新盘点库存！
+      fetchProfileAndInventory();
     } catch (err: any) { 
       showToast(`兑换失败: ${err.message}`); 
       setConfirmModal(null);
@@ -111,12 +150,12 @@ export default function GenesisExchangeScreen() {
             <Text style={styles.headerTitle}>超级单品兑换殿堂</Text>
             <Text style={styles.headerSub}>收集基础材料，向上合成，获取全岛最顶级的权力资产。</Text>
             <View style={styles.balanceRow}>
-               <Text style={styles.balanceText}>Potato卡: <Text style={{color:'#FF3B30'}}>{profile?.potato_cards || 0}</Text></Text>
-               <Text style={styles.balanceText}>万能卡: <Text style={{color:'#D49A36'}}>{profile?.universal_cards || 0}</Text></Text>
+               {/* 🌟 这里显示真正盘点出来的闲置库存 */}
+               <Text style={styles.balanceText}>Potato卡: <Text style={{color:'#FF3B30'}}>{realPotatoCount}</Text></Text>
+               <Text style={styles.balanceText}>万能卡: <Text style={{color:'#D49A36'}}>{realUniversalCount}</Text></Text>
             </View>
          </View>
 
-         {/* 万能卡兑换模块 */}
          <View style={styles.exchangeCard}>
             <View style={styles.cardInfo}>
                <View style={styles.imgPlaceholder}><Text style={{fontSize: 40}}>🌟</Text></View>
@@ -134,7 +173,6 @@ export default function GenesisExchangeScreen() {
             </TouchableOpacity>
          </View>
 
-         {/* 长老兑换模块 */}
          <View style={[styles.exchangeCard, {borderColor: '#FFD700', borderWidth: 1}]}>
             <View style={styles.cardInfo}>
                <View style={[styles.imgPlaceholder, {backgroundColor: '#FFF5E6'}]}><Text style={{fontSize: 40}}>👑</Text></View>
@@ -153,7 +191,6 @@ export default function GenesisExchangeScreen() {
          </View>
       </ScrollView>
 
-      {/* 🌟 严苛二次确认弹窗 */}
       <Modal visible={!!confirmModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
