@@ -74,7 +74,8 @@ export default function BlackholeScreen() {
       if (roll === 99) { 
          // 🌟 1% 极品：铸造 1 张真实的【万能土豆卡】NFT 给玩家
          if (universalCol) {
-            const newSerial = universalCol.total_minted + 1;
+            // 安全兜底：防止 total_minted 为 undefined 导致崩溃白屏
+            const newSerial = (universalCol.total_minted || 0) + 1;
             await supabase.from('nfts').insert([{ collection_id: universalCol.id, owner_id: user?.id, serial_number: newSerial.toString(), status: 'idle' }]);
             await supabase.from('collections').update({ total_minted: newSerial, circulating_supply: newSerial }).eq('id', universalCol.id);
          }
@@ -83,7 +84,8 @@ export default function BlackholeScreen() {
       } else { 
          // 🌟 99% 保底：铸造 1 张真实的【Potato卡】NFT 给玩家
          if (potatoCol) {
-            const newSerial = potatoCol.total_minted + 1;
+            // 安全兜底：防止 total_minted 为 undefined 导致崩溃白屏
+            const newSerial = (potatoCol.total_minted || 0) + 1;
             await supabase.from('nfts').insert([{ collection_id: potatoCol.id, owner_id: user?.id, serial_number: newSerial.toString(), status: 'idle' }]);
             await supabase.from('collections').update({ total_minted: newSerial, circulating_supply: newSerial }).eq('id', potatoCol.id);
          }
