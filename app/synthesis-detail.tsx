@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
@@ -10,24 +10,35 @@ export default function SynthesisDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   
+  // 🌟 核心：用于自动滚动的引用
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [actionAreaY, setActionAreaY] = useState(0);
+
   const [eventData, setEventData] = useState<any>(null);
   const [requirements, setRequirements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [synthesizing, setSynthesizing] = useState(false);
 
-  // 底部弹窗材料选择器状态
   const [showPicker, setShowPicker] = useState(false);
   const [activeReqIndex, setActiveReqIndex] = useState<number | null>(null);
   const [myIdleNfts, setMyIdleNfts] = useState<any[]>([]);
   const [tempSelectedNfts, setTempSelectedNfts] = useState<string[]>([]);
   const [selectedNfts, setSelectedNfts] = useState<Record<number, string[]>>({});
 
-  // 🌟 高级弹窗状态 (替代原生的 Alert)
   const [confirmModal, setConfirmModal] = useState(false);
   const [resultModal, setResultModal] = useState<{title: string, msg: string} | null>(null);
   const [toastMsg, setToastMsg] = useState('');
 
   useEffect(() => { fetchDetail(); }, [id]);
+
+  // 🌟 核心动效：当数据加载完且知道操作区位置时，自动丝滑向下滚动！
+  useEffect(() => {
+    if (!loading && actionAreaY > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: actionAreaY - 20, animated: true });
+      }, 400); // 预留 0.4 秒让用户看一眼顶部图，然后自动滑到操作区
+    }
+  }, [loading, actionAreaY]);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -99,7 +110,6 @@ export default function SynthesisDetailScreen() {
     setShowPicker(false);
   };
 
-  // 🌟 点击“确认融合”时的初级拦截
   const handlePreExecute = () => {
     for (let i = 0; i < requirements.length; i++) {
       const selected = selectedNfts[i] || [];
@@ -107,11 +117,9 @@ export default function SynthesisDetailScreen() {
         return showToast('⚠️ 请填满所有要求的材料槽！');
       }
     }
-    // 弹出防坑二次确认窗
     setConfirmModal(true);
   };
 
-  // 🌟 核心：执行真正的底层融合 (物理烧卡 + 发放新卡)
   const executeSynthesis = async () => {
     let allNftsToBurn: string[] = [];
     for (let i = 0; i < requirements.length; i++) {
@@ -130,7 +138,7 @@ export default function SynthesisDetailScreen() {
       
       setConfirmModal(false);
       setResultModal({
-         title: '🧬 融合成功',
+         title: '🧬 炼金成功',
          msg: `您放入的材料已被永远粉碎，残渣凝结成了极其稀有的【${eventData.target_collection.name}】！已打入您的金库。`
       });
     } catch (err: any) {
@@ -141,19 +149,19 @@ export default function SynthesisDetailScreen() {
     }
   };
 
-  if (loading || !eventData) return <View style={styles.center}><ActivityIndicator color="#0066FF" /></View>;
+  if (loading || !eventData) return <View style={styles.center}><ActivityIndicator color="#D49A36" /></View>;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.navBar}>
         <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}><Text style={styles.iconText}>〈 </Text></TouchableOpacity>
-        <Text style={styles.navTitle}>融合配方</Text>
+        <Text style={styles.navTitle}>融合炼金炉</Text>
         <View style={styles.navBtn} />
       </View>
 
       {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
-      <ScrollView contentContainerStyle={{padding: 16, alignItems: 'center'}}>
+      <ScrollView ref={scrollViewRef} contentContainerStyle={{padding: 16, alignItems: 'center'}}>
         <View style={styles.targetStage}>
            <Image source={{ uri: eventData.target_collection?.image_url || 'https://via.placeholder.com/300' }} style={styles.targetImage} />
            <View style={styles.targetInfo}>
@@ -162,7 +170,13 @@ export default function SynthesisDetailScreen() {
            </View>
         </View>
 
-        <Text style={styles.sectionHeader}>请放入合成材料</Text>
+        {/* 🌟 记录操作区的 Y 坐标，用于自动滑行定位 */}
+        <Text 
+           style={styles.sectionHeader}
+           onLayout={(e) => setActionAreaY(e.nativeEvent.layout.y)}
+        >
+           请放入炼金材料
+        </Text>
 
         <View style={styles.materialsList}>
           {requirements.map((req, index) => {
@@ -194,7 +208,7 @@ export default function SynthesisDetailScreen() {
 
       <View style={styles.bottomBar}>
          <TouchableOpacity style={styles.cyberBtn} activeOpacity={0.8} onPress={handlePreExecute} disabled={synthesizing}>
-            {synthesizing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.cyberBtnText}>确认融合</Text>}
+            {synthesizing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.cyberBtnText}>确认炼金融合</Text>}
          </TouchableOpacity>
       </View>
 
@@ -204,7 +218,7 @@ export default function SynthesisDetailScreen() {
           <RNSafeAreaView style={styles.bottomSheet}>
              <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>选择材料</Text>
-                <TouchableOpacity onPress={() => setShowPicker(false)}><Text style={{color: '#999', fontSize: 16}}>取消</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowPicker(false)}><Text style={{color: '#8D6E63', fontSize: 16}}>取消</Text></TouchableOpacity>
              </View>
 
              {activeReqIndex !== null && (
@@ -216,9 +230,9 @@ export default function SynthesisDetailScreen() {
              <ScrollView style={{flex: 1, paddingHorizontal: 16}}>
                 {myIdleNfts.length === 0 ? (
                   <View style={{alignItems: 'center', marginTop: 50}}>
-                     <Text style={{color: '#999', marginBottom: 20}}>暂无可用的此藏品</Text>
+                     <Text style={{color: '#8D6E63', marginBottom: 20}}>金库内暂无此资产</Text>
                      <TouchableOpacity style={styles.goMarketBtn} onPress={() => { setShowPicker(false); router.push('/(tabs)/market'); }}>
-                       <Text style={{color: '#0066FF', fontWeight: '800'}}>去交易大盘扫货</Text>
+                       <Text style={{color: '#D49A36', fontWeight: '800'}}>去交易大盘扫货</Text>
                      </TouchableOpacity>
                   </View>
                 ) : (
@@ -252,11 +266,11 @@ export default function SynthesisDetailScreen() {
              {activeReqIndex !== null && myIdleNfts.length > 0 && (
                 <View style={styles.sheetFooter}>
                    <TouchableOpacity 
-                     style={[styles.confirmPickBtn, tempSelectedNfts.length < requirements[activeReqIndex].req_count ? {backgroundColor: '#CCC'} : null]} 
+                     style={[styles.confirmPickBtn, tempSelectedNfts.length < requirements[activeReqIndex].req_count ? {backgroundColor: '#EAE0D5'} : null]} 
                      onPress={confirmSelection}
                      disabled={tempSelectedNfts.length < requirements[activeReqIndex].req_count}
                    >
-                     <Text style={styles.confirmPickText}>
+                     <Text style={[styles.confirmPickText, tempSelectedNfts.length < requirements[activeReqIndex].req_count ? {color: '#A1887F'} : null]}>
                        确认放入 ({tempSelectedNfts.length}/{requirements[activeReqIndex].req_count})
                      </Text>
                    </TouchableOpacity>
@@ -266,11 +280,11 @@ export default function SynthesisDetailScreen() {
         </View>
       </Modal>
 
-      {/* 🌟 融合前防坑二次确认弹窗 */}
+      {/* 🌟 融合前防坑二次确认弹窗 (红金配色，尊贵警告) */}
       <Modal visible={confirmModal} transparent animationType="fade">
          <View style={styles.modalOverlayCenter}>
             <View style={styles.confirmBox}>
-               <Text style={styles.confirmTitle}>⚠️ 确认启动融合</Text>
+               <Text style={styles.confirmTitle}>⚠️ 启动炼金阵</Text>
                <Text style={styles.confirmDesc}>即将启动不可逆的基因融合序列。您刚才放入的所有材料卡将被<Text style={{color:'#FF3B30', fontWeight:'900'}}>永久物理销毁</Text>！是否继续执行？</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmModal(false)}><Text style={styles.cancelBtnText}>我害怕了</Text></TouchableOpacity>
@@ -285,10 +299,10 @@ export default function SynthesisDetailScreen() {
       {/* 🌟 融合成功震撼弹窗 */}
       <Modal visible={!!resultModal} transparent animationType="fade">
          <View style={styles.modalOverlayCenter}>
-            <View style={[styles.confirmBox, {borderColor: '#0066FF', borderWidth: 2}]}>
-               <Text style={[styles.confirmTitle, {color: '#0066FF', fontSize: 22}]}>{resultModal?.title}</Text>
-               <Text style={[styles.confirmDesc, {fontSize: 15, color: '#111', fontWeight: '800'}]}>{resultModal?.msg}</Text>
-               <TouchableOpacity style={[styles.confirmBtn, {width: '100%', backgroundColor: '#0066FF'}]} onPress={() => { setResultModal(null); router.replace('/(tabs)/profile'); }}>
+            <View style={[styles.confirmBox, {borderColor: '#D49A36', borderWidth: 2}]}>
+               <Text style={[styles.confirmTitle, {color: '#D49A36', fontSize: 22}]}>{resultModal?.title}</Text>
+               <Text style={[styles.confirmDesc, {fontSize: 15, color: '#4E342E', fontWeight: '800'}]}>{resultModal?.msg}</Text>
+               <TouchableOpacity style={[styles.confirmBtn, {width: '100%', backgroundColor: '#D49A36'}]} onPress={() => { setResultModal(null); router.replace('/(tabs)/profile'); }}>
                   <Text style={styles.confirmBtnText}>去金库看新货</Text>
                </TouchableOpacity>
             </View>
@@ -300,65 +314,70 @@ export default function SynthesisDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F6F8' },
-  container: { flex: 1, backgroundColor: '#F5F6F8' },
-  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FFF' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' },
+  container: { flex: 1, backgroundColor: '#FDF8F0' }, // 🌟 复古米白
+  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FDF8F0', borderBottomWidth: 1, borderColor: '#EAE0D5' },
   navBtn: { width: 40, justifyContent: 'center' },
-  iconText: { fontSize: 20, color: '#333' },
-  navTitle: { fontSize: 17, fontWeight: '800', color: '#111' },
+  iconText: { fontSize: 22, color: '#4E342E', fontWeight: '900' },
+  navTitle: { fontSize: 17, fontWeight: '900', color: '#4E342E' },
   
-  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
-  toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(78, 52, 46, 0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
+  toastText: { color: '#FFF', fontSize: 14, fontWeight: '900' },
 
-  targetStage: { width: '100%', backgroundColor: '#FFF', borderRadius: 16, padding: 16, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
-  targetImage: { width: width * 0.5, height: width * 0.5, resizeMode: 'cover', borderRadius: 8, marginBottom: 16 },
+  targetStage: { width: '100%', backgroundColor: '#FFF', borderRadius: 16, padding: 16, alignItems: 'center', shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2, borderWidth: 1, borderColor: '#F0E6D2' },
+  targetImage: { width: width * 0.5, height: width * 0.5, resizeMode: 'cover', borderRadius: 8, marginBottom: 16, borderWidth: 1, borderColor: '#EAE0D5' },
   targetInfo: { alignItems: 'center' },
-  targetName: { color: '#111', fontSize: 18, fontWeight: '900', marginBottom: 6 },
-  targetSub: { color: '#666', fontSize: 12 },
+  targetName: { color: '#4E342E', fontSize: 18, fontWeight: '900', marginBottom: 6 },
+  targetSub: { color: '#8D6E63', fontSize: 12 },
   
-  sectionHeader: { width: '100%', fontSize: 14, fontWeight: '800', color: '#333', marginTop: 24, marginBottom: 12, paddingHorizontal: 4 },
+  sectionHeader: { width: '100%', fontSize: 15, fontWeight: '900', color: '#4E342E', marginTop: 24, marginBottom: 12, paddingHorizontal: 4 },
   
   materialsList: { width: '100%' },
-  reqRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFF', padding: 12, borderRadius: 12, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5 },
+  reqRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFF', padding: 12, borderRadius: 12, marginBottom: 12, shadowColor: '#4E342E', shadowOpacity: 0.03, shadowRadius: 5, borderWidth: 1, borderColor: '#F0E6D2' },
   reqInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  reqThumb: { width: 44, height: 44, borderRadius: 6, backgroundColor: '#EEE', marginRight: 12 },
-  reqName: { fontSize: 14, fontWeight: '800', color: '#111', marginBottom: 4 },
-  reqCountText: { fontSize: 11, color: '#888' },
-  addBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#0066FF', backgroundColor: '#F0F6FF' },
-  addBtnFull: { backgroundColor: '#0066FF', borderColor: '#0066FF' },
-  addBtnText: { color: '#0066FF', fontSize: 12, fontWeight: '700' },
+  reqThumb: { width: 44, height: 44, borderRadius: 6, backgroundColor: '#FDF8F0', marginRight: 12, borderWidth: 1, borderColor: '#EAE0D5' },
+  reqName: { fontSize: 14, fontWeight: '900', color: '#4E342E', marginBottom: 4 },
+  reqCountText: { fontSize: 11, color: '#8D6E63' },
+  
+  // 🌟 选材料按钮告别蓝色，拥抱琥珀金
+  addBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#D49A36', backgroundColor: '#FDF8F0' },
+  addBtnFull: { backgroundColor: '#D49A36', borderColor: '#D49A36' },
+  addBtnText: { color: '#D49A36', fontSize: 12, fontWeight: '800' },
 
-  bottomBar: { padding: 20, backgroundColor: '#FFF', borderTopWidth: 1, borderColor: '#F0F0F0', shadowColor: '#000', shadowOffset: {width:0, height:-2}, shadowOpacity: 0.05 },
-  cyberBtn: { height: 50, backgroundColor: '#0066FF', borderRadius: 25, justifyContent: 'center', alignItems: 'center', shadowColor: '#0066FF', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: {width: 0, height: 4} },
-  cyberBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
+  bottomBar: { padding: 20, backgroundColor: '#FFF', borderTopWidth: 1, borderColor: '#F0E6D2', shadowColor: '#4E342E', shadowOffset: {width:0, height:-2}, shadowOpacity: 0.05 },
+  cyberBtn: { height: 50, backgroundColor: '#D49A36', borderRadius: 25, justifyContent: 'center', alignItems: 'center', shadowColor: '#D49A36', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: {width: 0, height: 4} },
+  cyberBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
 
-  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  bottomSheet: { backgroundColor: '#FFF', height: height * 0.7, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderColor: '#F0F0F0' },
-  sheetTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
-  sheetSubTitle: { fontSize: 13, color: '#666', textAlign: 'center', marginVertical: 12 },
-  goMarketBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, backgroundColor: '#F0F6FF' },
+  // 🌟 底部抽屉样式重构
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.6)', justifyContent: 'flex-end' },
+  bottomSheet: { backgroundColor: '#FDF8F0', height: height * 0.7, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderColor: '#EAE0D5', backgroundColor: '#FFF' },
+  sheetTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E' },
+  sheetSubTitle: { fontSize: 13, color: '#8D6E63', textAlign: 'center', marginVertical: 12 },
+  
+  goMarketBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#D49A36' },
   
   nftGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingBottom: 20 },
-  nftGridItem: { width: '31%', backgroundColor: '#F9F9F9', borderRadius: 8, padding: 8, marginBottom: 12, borderWidth: 2, borderColor: 'transparent' },
-  nftGridItemSelected: { borderColor: '#0066FF', backgroundColor: '#F0F6FF' },
+  nftGridItem: { width: '31%', backgroundColor: '#FFF', borderRadius: 8, padding: 8, marginBottom: 12, borderWidth: 2, borderColor: 'transparent', shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
+  nftGridItemSelected: { borderColor: '#D49A36', backgroundColor: '#FDF8F0' }, // 🌟 选中框换成金色
   checkbox: { position: 'absolute', top: 4, left: 4, width: 20, height: 20, borderRadius: 10, borderWidth: 1, borderColor: '#CCC', backgroundColor: '#FFF', zIndex: 10, justifyContent: 'center', alignItems: 'center' },
-  checkboxChecked: { backgroundColor: '#0066FF', borderColor: '#0066FF' },
-  gridImg: { width: '100%', aspectRatio: 1, borderRadius: 4, marginBottom: 8 },
+  checkboxChecked: { backgroundColor: '#D49A36', borderColor: '#D49A36' },
+  gridImg: { width: '100%', aspectRatio: 1, borderRadius: 4, marginBottom: 8, backgroundColor: '#FDF8F0' },
   gridInfo: { alignItems: 'center' },
-  gridSerial: { fontSize: 11, fontWeight: '700', color: '#333', fontFamily: 'monospace' },
+  gridSerial: { fontSize: 11, fontWeight: '800', color: '#4E342E', fontFamily: 'monospace' },
   
-  sheetFooter: { padding: 20, borderTopWidth: 1, borderColor: '#F0F0F0', backgroundColor: '#FFF' },
-  confirmPickBtn: { height: 50, backgroundColor: '#0066FF', borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
+  sheetFooter: { padding: 20, borderTopWidth: 1, borderColor: '#EAE0D5', backgroundColor: '#FFF' },
+  confirmPickBtn: { height: 50, backgroundColor: '#D49A36', borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
   confirmPickText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
 
-  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
-  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 16 },
-  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  // 弹窗
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(44,30,22,0.7)', justifyContent: 'center', alignItems: 'center' },
+  confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
+  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E', marginBottom: 16 },
+  confirmDesc: { fontSize: 14, color: '#8D6E63', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
   confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#F5F5F5', alignItems: 'center' },
-  cancelBtnText: { color: '#666', fontSize: 15, fontWeight: '800' },
+  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FDF8F0', alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
+  cancelBtnText: { color: '#8D6E63', fontSize: 15, fontWeight: '800' },
   confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FF3B30', alignItems: 'center' },
   confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });

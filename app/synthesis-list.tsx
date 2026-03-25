@@ -42,8 +42,8 @@ export default function SynthesisListScreen() {
       >
         <View style={styles.cardHeader}>
            <Text style={styles.cardTitle}>{item.name}</Text>
-           <View style={[styles.statusTag, isEnded ? {backgroundColor: '#CCC'} : {backgroundColor: '#FF3B30'}]}>
-              <Text style={styles.statusText}>{isEnded ? '已结束' : '进行中'}</Text>
+           <View style={[styles.statusTag, isEnded ? {backgroundColor: '#EAE0D5'} : {backgroundColor: '#D49A36'}]}>
+              <Text style={[styles.statusText, isEnded && {color: '#8D6E63'}]}>{isEnded ? '已结束' : '进行中'}</Text>
            </View>
         </View>
 
@@ -60,7 +60,7 @@ export default function SynthesisListScreen() {
                  </View>
                  {!isUnlimited && (
                    <View style={styles.progressBarBg}>
-                      <View style={[styles.progressBarFill, {width: `${progress}%`}, isEnded && {backgroundColor: '#999'}]} />
+                      <View style={[styles.progressBarFill, {width: `${progress}%`}, isEnded && {backgroundColor: '#CCC'}]} />
                    </View>
                  )}
               </View>
@@ -81,7 +81,7 @@ export default function SynthesisListScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#0066FF" style={{marginTop: 50}} />
+        <ActivityIndicator size="large" color="#D49A36" style={{marginTop: 50}} />
       ) : (
         <FlatList
           data={events}
@@ -89,7 +89,7 @@ export default function SynthesisListScreen() {
           keyExtractor={item => item.id}
           contentContainerStyle={{ padding: 16, paddingBottom: 50 }}
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<Text style={{textAlign: 'center', color: '#999', marginTop: 50}}>暂无合成变异活动</Text>}
+          ListEmptyComponent={<Text style={{textAlign: 'center', color: '#8D6E63', marginTop: 50}}>暂无合成变异活动</Text>}
         />
       )}
     </SafeAreaView>
@@ -97,32 +97,32 @@ export default function SynthesisListScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6F8' },
-  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FFF' },
+  container: { flex: 1, backgroundColor: '#FDF8F0' }, // 🌟 复古米白
+  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FDF8F0', borderBottomWidth: 1, borderColor: '#EAE0D5' },
   navBtn: { width: 40, justifyContent: 'center' },
-  iconText: { fontSize: 20, color: '#111' },
-  navTitle: { fontSize: 17, fontWeight: '900', color: '#111' },
+  iconText: { fontSize: 22, color: '#4E342E', fontWeight: '900' },
+  navTitle: { fontSize: 17, fontWeight: '900', color: '#4E342E' },
 
-  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 3, overflow: 'hidden' },
-  cardEnded: { opacity: 0.8 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottomWidth: 1, borderColor: '#F0F0F0', paddingBottom: 12 },
-  cardTitle: { fontSize: 16, fontWeight: '900', color: '#111' },
+  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 10, elevation: 3, overflow: 'hidden', borderWidth: 1, borderColor: '#F0E6D2' },
+  cardEnded: { opacity: 0.7 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottomWidth: 1, borderColor: '#F5EFE6', paddingBottom: 12 },
+  cardTitle: { fontSize: 16, fontWeight: '900', color: '#4E342E' },
   statusTag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   statusText: { color: '#FFF', fontSize: 10, fontWeight: '900' },
 
   cardBody: { flexDirection: 'row' },
-  targetImg: { width: 80, height: 80, borderRadius: 8, backgroundColor: '#F5F5F5', marginRight: 16, borderWidth: 1, borderColor: '#EEE' },
+  targetImg: { width: 80, height: 80, borderRadius: 8, backgroundColor: '#FDF8F0', marginRight: 16, borderWidth: 1, borderColor: '#EAE0D5' },
   cardInfo: { flex: 1, justifyContent: 'center' },
-  targetName: { fontSize: 14, fontWeight: '800', color: '#333', marginBottom: 6 },
-  timeText: { fontSize: 11, color: '#888', marginBottom: 12 },
+  targetName: { fontSize: 14, fontWeight: '800', color: '#4E342E', marginBottom: 6 },
+  timeText: { fontSize: 11, color: '#8D6E63', marginBottom: 12 },
   
   progressBox: { width: '100%' },
   progressLabels: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  progressLabelText: { fontSize: 11, color: '#666' },
-  progressLabelTextHighlight: { fontSize: 11, color: '#FF3B30', fontWeight: '800' },
-  progressBarBg: { width: '100%', height: 6, backgroundColor: '#F0F0F0', borderRadius: 3, overflow: 'hidden' },
-  progressBarFill: { height: '100%', backgroundColor: '#FF3B30', borderRadius: 3 },
+  progressLabelText: { fontSize: 11, color: '#8D6E63' },
+  progressLabelTextHighlight: { fontSize: 11, color: '#D49A36', fontWeight: '900' },
+  progressBarBg: { width: '100%', height: 6, backgroundColor: '#F5EFE6', borderRadius: 3, overflow: 'hidden' },
+  progressBarFill: { height: '100%', backgroundColor: '#D49A36', borderRadius: 3 }, // 🌟 进度条改琥珀金
 
-  endedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.4)', justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-  endedOverlayText: { transform: [{rotate: '-15deg'}], fontSize: 30, fontWeight: '900', color: '#CCC', letterSpacing: 4, opacity: 0.7, borderWidth: 4, borderColor: '#CCC', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 }
+  endedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(253, 248, 240, 0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+  endedOverlayText: { transform: [{rotate: '-15deg'}], fontSize: 30, fontWeight: '900', color: '#A1887F', letterSpacing: 4, opacity: 0.7, borderWidth: 4, borderColor: '#A1887F', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 }
 });
