@@ -10,12 +10,10 @@ export default function BlackholeScreen() {
   const router = useRouter();
   const [processing, setProcessing] = useState(false);
   
-  // 选卡逻辑状态
   const [showPicker, setShowPicker] = useState(false);
   const [myNfts, setMyNfts] = useState<any[]>([]);
   const [selectedNft, setSelectedNft] = useState<any>(null);
 
-  // 🌟 高级弹窗状态
   const [confirmModal, setConfirmModal] = useState(false);
   const [resultModal, setResultModal] = useState<{title: string, msg: string} | null>(null);
   const [toastMsg, setToastMsg] = useState('');
@@ -25,7 +23,6 @@ export default function BlackholeScreen() {
     setTimeout(() => setToastMsg(''), 2500);
   };
 
-  // 🌟 核心防白屏：极限容错的数据解析函数
   const getColName = (nft: any) => {
      if (!nft || !nft.collections) return '未知藏品';
      return Array.isArray(nft.collections) ? (nft.collections[0]?.name || '未知') : (nft.collections.name || '未知');
@@ -40,13 +37,11 @@ export default function BlackholeScreen() {
     setShowPicker(true);
     try {
        const { data: { user } } = await supabase.auth.getUser();
-       // 去真实仓库里翻出所有闲置的数字藏品
        const { data } = await supabase.from('nfts')
          .select('*, collections(name, image_url)')
          .eq('owner_id', user?.id)
          .eq('status', 'idle');
        
-       // 🌟 核心拦截：不允许投入 Potato卡！
        if (data) {
           const validNfts = data.filter((nft: any) => {
              return getColName(nft) !== 'Potato卡';
@@ -69,21 +64,17 @@ export default function BlackholeScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('未登录');
       
-      // 1. 物理燃烧掉你丢进来的垃圾卡
       await supabase.from('nfts').update({ status: 'burned' }).eq('id', selectedNft.id);
 
-      // 2. 获取大盘里的 Potato卡 和 万能土豆卡 的系列 ID，用来给你印真实的新钞票！
       const { data: cols } = await supabase.from('collections').select('id, name, total_minted').in('name', ['Potato卡', '万能土豆卡']);
       const potatoCol = cols?.find(c => c.name === 'Potato卡');
       const universalCol = cols?.find(c => c.name === '万能土豆卡');
 
-      // 3. 99% 与 1% 真实判定
       const roll = Math.floor(Math.random() * 100); 
       let resTitle = '';
       let resMsg = '';
       
       if (roll === 99) { 
-         // 🌟 1% 极品：铸造 1 张真实的【万能土豆卡】NFT 给玩家
          if (universalCol) {
             const newSerial = (universalCol.total_minted || 0) + 1;
             await supabase.from('nfts').insert([{ collection_id: universalCol.id, owner_id: user.id, serial_number: newSerial.toString(), status: 'idle' }]);
@@ -92,13 +83,12 @@ export default function BlackholeScreen() {
          resTitle = '🌟 神迹显现！';
          resMsg = '废墟中凝结出了一张【万能土豆卡】，已打入您的金库！';
       } else { 
-         // 🌟 99% 保底：铸造 1 张真实的【Potato卡】NFT 给玩家
          if (potatoCol) {
             const newSerial = (potatoCol.total_minted || 0) + 1;
             await supabase.from('nfts').insert([{ collection_id: potatoCol.id, owner_id: user.id, serial_number: newSerial.toString(), status: 'idle' }]);
             await supabase.from('collections').update({ total_minted: newSerial, circulating_supply: newSerial }).eq('id', potatoCol.id);
          }
-         resTitle = '💥 献祭失败！';
+         resTitle = '💥 献祭完毕！';
          resMsg = '藏品已被粉碎，残渣凝结成了 1 张【Potato卡】，已放入金库。';
       }
 
@@ -145,14 +135,14 @@ export default function BlackholeScreen() {
               </View>
             ) : (
               <View style={{alignItems: 'center'}}>
-                 <View style={styles.emptyNftIcon}><Text style={{fontSize: 30, color: '#888'}}>+</Text></View>
+                 <View style={styles.emptyNftIcon}><Text style={{fontSize: 30, color: '#D49A36'}}>+</Text></View>
                  <Text style={styles.emptyNftText}>点击选择要销毁的祭品</Text>
               </View>
             )}
          </TouchableOpacity>
 
-         <TouchableOpacity style={[styles.throwBtn, !selectedNft && {backgroundColor: '#555'}]} onPress={handleThrowClick} disabled={processing || !selectedNft}>
-            <Text style={styles.throwBtnText}>一键投入黑洞</Text>
+         <TouchableOpacity style={[styles.throwBtn, !selectedNft && {backgroundColor: '#EAE0D5'}]} onPress={handleThrowClick} disabled={processing || !selectedNft}>
+            <Text style={[styles.throwBtnText, !selectedNft && {color: '#A1887F'}]}>一键投入黑洞</Text>
          </TouchableOpacity>
       </ScrollView>
 
@@ -162,18 +152,18 @@ export default function BlackholeScreen() {
           <View style={styles.bottomSheet}>
              <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>选择祭品 (已过滤 Potato卡)</Text>
-                <TouchableOpacity onPress={() => setShowPicker(false)}><Text style={{color: '#999', fontSize: 16}}>取消</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowPicker(false)}><Text style={{color: '#8D6E63', fontSize: 16}}>取消</Text></TouchableOpacity>
              </View>
              <ScrollView style={{padding: 16}}>
                 {myNfts.length === 0 ? (
-                   <Text style={{color: '#888', textAlign: 'center', marginTop: 40}}>金库中暂无可以献祭的藏品</Text>
+                   <Text style={{color: '#8D6E63', textAlign: 'center', marginTop: 40}}>金库中暂无可以献祭的藏品</Text>
                 ) : (
                    myNfts.map(nft => (
                       <TouchableOpacity key={nft.id} style={[styles.nftPickRow, selectedNft?.id === nft.id && styles.nftPickRowActive]} onPress={() => { setSelectedNft(nft); setShowPicker(false); }}>
                          <Image source={{uri: getColImage(nft)}} style={styles.pickImg} />
                          <View style={{flex: 1}}>
-                            <Text style={{fontSize: 14, fontWeight: '800', color: '#FFF'}}>{getColName(nft)}</Text>
-                            <Text style={{fontSize: 11, color: '#888'}}>编号: #{String(nft.serial_number || 0).padStart(6, '0')}</Text>
+                            <Text style={[{fontSize: 14, fontWeight: '900', color: '#4E342E'}, selectedNft?.id === nft.id && {color: '#D49A36'}]}>{getColName(nft)}</Text>
+                            <Text style={{fontSize: 11, color: '#8D6E63'}}>编号: #{String(nft.serial_number || 0).padStart(6, '0')}</Text>
                          </View>
                       </TouchableOpacity>
                    ))
@@ -183,14 +173,13 @@ export default function BlackholeScreen() {
         </View>
       </Modal>
 
-      {/* 🌟 黑洞确认悬浮窗 */}
       <Modal visible={confirmModal} transparent animationType="fade">
-         <View style={styles.modalOverlay}>
-            <View style={[styles.confirmBox, {backgroundColor: '#222', borderColor: '#444', borderWidth: 1}]}>
-               <Text style={[styles.confirmTitle, {color: '#FFF'}]}>🕳️ 确认投入黑洞</Text>
-               <Text style={styles.confirmDesc}>您确定要将【<Text style={{color:'#FFF', fontWeight:'900'}}>{getColName(selectedNft)}</Text>】投入黑洞吗？警告：藏品将被永久销毁！</Text>
+         <View style={styles.modalOverlayCenter}>
+            <View style={styles.confirmBox}>
+               <Text style={styles.confirmTitle}>🕳️ 确认投入黑洞</Text>
+               <Text style={styles.confirmDesc}>您确定要将【<Text style={{color:'#D49A36', fontWeight:'900'}}>{getColName(selectedNft)}</Text>】投入黑洞吗？警告：藏品将被永久销毁！</Text>
                <View style={styles.confirmBtnRow}>
-                  <TouchableOpacity style={[styles.cancelBtn, {backgroundColor: '#444'}]} onPress={() => setConfirmModal(false)}><Text style={[styles.cancelBtnText, {color: '#CCC'}]}>我害怕了</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.cancelBtnOutline} onPress={() => setConfirmModal(false)}><Text style={styles.cancelBtnOutlineText}>我害怕了</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.confirmBtn} onPress={executeThrow} disabled={processing}>
                      {processing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>搏一搏！</Text>}
                   </TouchableOpacity>
@@ -199,13 +188,12 @@ export default function BlackholeScreen() {
          </View>
       </Modal>
 
-      {/* 🌟 销毁结果悬浮窗 */}
       <Modal visible={!!resultModal} transparent animationType="fade">
-         <View style={styles.modalOverlay}>
-            <View style={[styles.confirmBox, {backgroundColor: '#222', borderColor: '#FF3B30', borderWidth: 2}]}>
-               <Text style={[styles.confirmTitle, {color: '#FF3B30', fontSize: 20}]}>{resultModal?.title}</Text>
-               <Text style={[styles.confirmDesc, {fontSize: 16, color: '#FFF', fontWeight: '800'}]}>{resultModal?.msg}</Text>
-               <TouchableOpacity style={[styles.confirmBtn, {width: '100%'}]} onPress={() => { setResultModal(null); setSelectedNft(null); router.replace('/(tabs)/profile'); }}>
+         <View style={styles.modalOverlayCenter}>
+            <View style={[styles.confirmBox, {borderColor: '#D49A36', borderWidth: 2}]}>
+               <Text style={[styles.confirmTitle, {color: '#D49A36', fontSize: 20}]}>{resultModal?.title}</Text>
+               <Text style={[styles.confirmDesc, {fontSize: 16, color: '#4E342E', fontWeight: '900'}]}>{resultModal?.msg}</Text>
+               <TouchableOpacity style={[styles.confirmBtn, {width: '100%', backgroundColor: '#D49A36'}]} onPress={() => { setResultModal(null); setSelectedNft(null); router.replace('/(tabs)/profile'); }}>
                   <Text style={styles.confirmBtnText}>回金库验货</Text>
                </TouchableOpacity>
             </View>
@@ -216,48 +204,52 @@ export default function BlackholeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1A1A1A' },
-  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#1A1A1A' },
+  // 🌟 彻底干掉黑客帝国风格，换成高贵的复古米白
+  container: { flex: 1, backgroundColor: '#FDF8F0' },
+  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FDF8F0', borderBottomWidth: 1, borderColor: '#EAE0D5' },
   navBtn: { width: 40, justifyContent: 'center' },
-  iconText: { fontSize: 20, color: '#FFF' },
-  navTitle: { fontSize: 17, fontWeight: '900', color: '#FFF' },
-  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(255,255,255,0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
-  toastText: { color: '#111', fontSize: 14, fontWeight: '900' },
+  iconText: { fontSize: 22, color: '#4E342E', fontWeight: '900' },
+  navTitle: { fontSize: 17, fontWeight: '900', color: '#4E342E' },
   
-  header: { alignItems: 'center', paddingVertical: 30 },
-  title: { fontSize: 24, fontWeight: '900', color: '#FFF', marginBottom: 10 },
-  subtitle: { fontSize: 13, color: '#999', textAlign: 'center', lineHeight: 20, paddingHorizontal: 20 },
-  ruleBox: { backgroundColor: 'rgba(255,255,255,0.05)', padding: 20, borderRadius: 16, marginBottom: 30, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  ruleTitle: { fontSize: 14, fontWeight: '900', color: '#FFF', marginBottom: 12 },
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(78, 52, 46, 0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
+  toastText: { color: '#FFF', fontSize: 14, fontWeight: '900' },
+  
+  header: { alignItems: 'center', paddingVertical: 20 },
+  title: { fontSize: 24, fontWeight: '900', color: '#4E342E', marginBottom: 10 },
+  subtitle: { fontSize: 13, color: '#8D6E63', textAlign: 'center', lineHeight: 20, paddingHorizontal: 10 },
+  
+  ruleBox: { backgroundColor: '#FFF', padding: 20, borderRadius: 16, marginBottom: 30, borderWidth: 1, borderColor: '#F0E6D2', shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+  ruleTitle: { fontSize: 14, fontWeight: '900', color: '#D49A36', marginBottom: 12 },
   ruleRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
-  ruleDot: { color: '#888', marginRight: 8, fontSize: 16 },
-  ruleText: { fontSize: 13, color: '#CCC', flex: 1, lineHeight: 20 },
+  ruleDot: { color: '#D49A36', marginRight: 8, fontSize: 16 },
+  ruleText: { fontSize: 13, color: '#8D6E63', flex: 1, lineHeight: 20 },
   
-  selectNftBox: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 16, padding: 30, alignItems: 'center', marginBottom: 30, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderStyle: 'dashed' },
-  emptyNftIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  emptyNftText: { color: '#888', fontSize: 14, fontWeight: '600' },
-  selectedImg: { width: 120, height: 120, borderRadius: 12, marginBottom: 12 },
-  selectedName: { fontSize: 16, fontWeight: '900', color: '#FFF', marginBottom: 4 },
-  selectedSerial: { fontSize: 13, color: '#888', fontFamily: 'monospace' },
+  selectNftBox: { backgroundColor: '#FFF', borderRadius: 16, padding: 30, alignItems: 'center', marginBottom: 30, borderWidth: 2, borderColor: '#EAE0D5', borderStyle: 'dashed' },
+  emptyNftIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FDF8F0', justifyContent: 'center', alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: '#D49A36' },
+  emptyNftText: { color: '#D49A36', fontSize: 14, fontWeight: '800' },
+  selectedImg: { width: 120, height: 120, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#EAE0D5' },
+  selectedName: { fontSize: 16, fontWeight: '900', color: '#4E342E', marginBottom: 4 },
+  selectedSerial: { fontSize: 13, color: '#8D6E63', fontFamily: 'monospace', fontWeight: '700' },
   
-  throwBtn: { backgroundColor: '#FF3B30', paddingVertical: 16, borderRadius: 25, alignItems: 'center', shadowColor: '#FF3B30', shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: {width: 0, height: 4} },
-  throwBtnText: { color: '#FFF', fontSize: 18, fontWeight: '900', letterSpacing: 2 },
+  // 🌟 红色按钮变成贵气琥珀金
+  throwBtn: { backgroundColor: '#D49A36', paddingVertical: 16, borderRadius: 25, alignItems: 'center', shadowColor: '#D49A36', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: {width: 0, height: 4} },
+  throwBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 2 },
 
-  bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  bottomSheet: { backgroundColor: '#222', height: height * 0.6, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderColor: '#333' },
-  sheetTitle: { fontSize: 18, fontWeight: '900', color: '#FFF' },
-  nftPickRow: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#333', borderRadius: 12, marginBottom: 12 },
-  nftPickRowActive: { borderColor: '#FF3B30', borderWidth: 1, backgroundColor: '#442222' },
-  pickImg: { width: 50, height: 50, borderRadius: 8, marginRight: 12 },
+  bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.6)', justifyContent: 'flex-end' },
+  bottomSheet: { backgroundColor: '#FDF8F0', height: height * 0.6, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderColor: '#EAE0D5', backgroundColor: '#FFF' },
+  sheetTitle: { fontSize: 16, fontWeight: '900', color: '#4E342E' },
+  nftPickRow: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#FFF', borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#F0E6D2' },
+  nftPickRowActive: { borderColor: '#D49A36', borderWidth: 2, backgroundColor: '#FFFDF5' },
+  pickImg: { width: 50, height: 50, borderRadius: 8, marginRight: 12, backgroundColor: '#FDF8F0' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
-  confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
-  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 16 },
-  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(44,30,22,0.7)', justifyContent: 'center', alignItems: 'center' },
+  confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
+  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E', marginBottom: 16 },
+  confirmDesc: { fontSize: 14, color: '#8D6E63', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
   confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#F5F5F5', alignItems: 'center' },
-  cancelBtnText: { color: '#666', fontSize: 15, fontWeight: '800' },
-  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FF3B30', alignItems: 'center' },
+  cancelBtnOutline: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FDF8F0', borderWidth: 1, borderColor: '#EAE0D5', alignItems: 'center' },
+  cancelBtnOutlineText: { color: '#8D6E63', fontSize: 15, fontWeight: '800' },
+  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#D49A36', alignItems: 'center' },
   confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });
