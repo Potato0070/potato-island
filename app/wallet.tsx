@@ -61,11 +61,11 @@ export default function WalletScreen() {
            if (log.transfer_type === '好友转赠') {
                titleStr = isIncome ? `赠出藏品 (${targetName})` : `收到赠礼 (${targetName})`;
                amountStr = isIncome ? '- 1 张转赠卡' : '+ 1 件藏品';
-               amountColor = isIncome ? '#888' : '#4CD964';
+               amountColor = isIncome ? '#888' : '#D49A36';
            } else {
                titleStr = isIncome ? `出售收益 (${targetName})` : `购买支出 (${targetName})`;
                amountStr = isIncome ? `+ ¥${log.price}` : `- ¥${log.price}`;
-               amountColor = isIncome ? '#4CD964' : '#111';
+               amountColor = isIncome ? '#D49A36' : '#111';
            }
 
            allLogs.push({
@@ -105,7 +105,7 @@ export default function WalletScreen() {
                     id: 'o_r_' + order.id,
                     title: `撤销${order.order_type === 'bid' ? '竞价' : '求购'} (${targetName})`,
                     amount: `+ ¥${totalCost}`,
-                    amountColor: '#4CD964',
+                    amountColor: '#D49A36',
                     time: new Date(order.created_at).getTime() + 1000, 
                     timeStr: new Date(order.created_at).toLocaleString(),
                     type: '资金退回'
