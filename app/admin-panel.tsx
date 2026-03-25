@@ -1,3 +1,4 @@
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -134,6 +135,53 @@ export default function AdminPanelScreen() {
           const { count: nCount } = await supabase.from('nfts').select('*', { count: 'exact', head: true });
           setStats({ users: uCount || 0, transfers: tCount || 0, nfts: nCount || 0 });
       } catch (e) { console.error("Fetch Data Error: ", e); }
+  };
+
+  // 🌟 核心引擎：相册唤起与 Supabase 图床直传！
+  const pickAndUploadImage = async (setImageCallback: (url: string) => void) => {
+      try {
+          // 1. 唤起本地相册
+          let result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: true, // 允许裁剪
+              quality: 0.8, // 压缩质量，省流量
+          });
+
+          if (!result.canceled && result.assets && result.assets.length > 0) {
+              setPublishing(true); // 开启上传中的 Loading
+              showToast('⏳ 正在上传到中枢图床...');
+              
+              const asset = result.assets[0];
+              // 2. 将本地图片转换成可上传的 Blob
+              const response = await fetch(asset.uri);
+              const blob = await response.blob();
+              
+              // 3. 生成唯一文件名 (基于时间戳)
+              const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+              const fileName = `admin_${Date.now()}.${ext}`;
+
+              // 4. 直传到 Supabase 的 nft-images 存储桶
+              const { data, error } = await supabase.storage
+                  .from('nft-images') 
+                  .upload(fileName, blob, {
+                      contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+                      upsert: true
+                  });
+
+              if (error) throw error;
+
+              // 5. 获取全网公开访问链接
+              const { data: publicUrlData } = supabase.storage.from('nft-images').getPublicUrl(fileName);
+              
+              // 6. 成功！把链接塞回输入框
+              setImageCallback(publicUrlData.publicUrl);
+              showToast('✅ 图片已上传至中枢！');
+          }
+      } catch (e: any) {
+          showToast(`❌ 上传失败: ${e.message}`);
+      } finally {
+          setPublishing(false);
+      }
   };
 
   const filteredCollections = collections.filter(c => {
@@ -562,7 +610,6 @@ export default function AdminPanelScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* 🌟 复古神殿级导航栏 */}
       <View style={styles.navBar}>
         <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}><Text style={styles.iconText}>〈</Text></TouchableOpacity>
         <Text style={styles.navTitle}>👑 创世中枢</Text>
@@ -654,13 +701,28 @@ export default function AdminPanelScreen() {
                 </View>
               )}
 
+              {/* 🌟 核心改造 1：新增系列直传图床 */}
               {activeTab === '新增系列' && (
                  <View>
                     <View style={styles.cheatBox}>
                        <Text style={styles.sectionTitle}>🖼️ 铸造全新藏品母版</Text>
                        <TextInput style={styles.inputBox} placeholder="藏品名称 (例: 皇家土豆骑士)" placeholderTextColor="#A1887F" value={newColName} onChangeText={setNewColName} />
-                       <Text style={{color:'#4E342E', fontWeight:'800', marginBottom:8}}>图片链接 (网络URL)</Text>
-                       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 16}}>{newColImage ? (<Image source={{uri: newColImage}} style={{width: 50, height: 50, borderRadius: 8, marginRight: 12, backgroundColor: '#FDF8F0'}} />) : (<View style={{width: 50, height: 50, borderRadius: 8, backgroundColor: '#F5EFE6', marginRight: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5'}}><Text style={{color: '#8D6E63'}}>图</Text></View>)}<TextInput style={[styles.inputBox, {flex: 1, marginBottom: 0}]} placeholder="https://..." placeholderTextColor="#A1887F" value={newColImage} onChangeText={setNewColImage} /></View>
+                       
+                       <Text style={{color:'#4E342E', fontWeight:'800', marginBottom:8}}>图片素材 (本地直传 或 填外链)</Text>
+                       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 16}}>
+                          <TouchableOpacity onPress={() => pickAndUploadImage(setNewColImage)} disabled={publishing}>
+                              {newColImage ? (
+                                  <Image source={{uri: newColImage}} style={{width: 60, height: 60, borderRadius: 8, marginRight: 12, backgroundColor: '#FDF8F0', borderWidth: 1, borderColor: '#D49A36'}} />
+                              ) : (
+                                  <View style={{width: 60, height: 60, borderRadius: 8, backgroundColor: '#F5EFE6', marginRight: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5'}}>
+                                      <Text style={{color: '#8D6E63', fontSize: 24}}>+</Text>
+                                      <Text style={{color: '#8D6E63', fontSize: 10, marginTop: 2}}>上传</Text>
+                                  </View>
+                              )}
+                          </TouchableOpacity>
+                          <TextInput style={[styles.inputBox, {flex: 1, marginBottom: 0}]} placeholder="点击左侧直传图床，或直接粘贴外链" placeholderTextColor="#A1887F" value={newColImage} onChangeText={setNewColImage} />
+                       </View>
+
                        <Text style={{color:'#4E342E', fontWeight:'800', marginBottom:8}}>为藏品打上多个分区标签</Text>
                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 16}}>
                           {adminCategories.map(cat => {
@@ -715,12 +777,26 @@ export default function AdminPanelScreen() {
                 </View>
               )}
 
+              {/* 🌟 核心改造 2：王国公告直传配图 */}
               {activeTab === '王国公告' && (
                 <View>
                   <View style={styles.cheatBox}>
                     <Text style={styles.sectionTitle}>📣 颁布王国旨意</Text>
                     <View style={styles.switchRow}><Text style={{color: '#4E342E', fontSize: 16, fontWeight: '800'}}>🔥 设为精华置顶</Text><Switch value={announceFeatured} onValueChange={setAnnounceFeatured} trackColor={{ false: '#EAE0D5', true: '#FF3B30' }} /></View>
-                    <TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('announce')}>{announceImage ? (<Image source={{uri: announceImage}} style={{width: '100%', height: 100, borderRadius: 8, resizeMode: 'cover'}} />) : (<Text style={styles.pickerBtnText}>🖼️ 从资产库选择配图</Text>)}</TouchableOpacity>
+                    
+                    {/* 分体式配图选择 */}
+                    <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16}}>
+                        <TouchableOpacity style={[styles.pickerBtn, {flex: 0.48, marginBottom: 0}]} onPress={() => openPicker('announce')}>
+                            <Text style={styles.pickerBtnText}>🖼️ 选资产库配图</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.pickerBtn, {flex: 0.48, marginBottom: 0, borderColor: '#4E342E', backgroundColor: '#FFF'}]} onPress={() => pickAndUploadImage(setAnnounceImage)}>
+                            <Text style={[styles.pickerBtnText, {color: '#4E342E'}]}>⬆️ 上传本地新图</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {announceImage ? (<Image source={{uri: announceImage}} style={{width: '100%', height: 100, borderRadius: 8, resizeMode: 'cover', marginBottom: 16, borderWidth: 1, borderColor: '#EAE0D5'}} />) : null}
+                    
+                    <TextInput style={styles.inputBox} placeholder="图片链接 (上方选择/直传，或直接粘贴外链)" placeholderTextColor="#A1887F" value={announceImage} onChangeText={setAnnounceImage} />
                     <TextInput style={styles.inputBox} placeholder="震撼人心的标题" placeholderTextColor="#A1887F" value={announceTitle} onChangeText={setAnnounceTitle} />
                     <TextInput style={[styles.inputBox, {height: 150, textAlignVertical: 'top'}]} placeholder="输入旨意正文..." placeholderTextColor="#A1887F" multiline value={announceContent} onChangeText={setAnnounceContent} />
                     <TouchableOpacity style={styles.primaryBtn} onPress={handlePublishAnnouncement} disabled={publishing}><Text style={styles.primaryBtnText}>传达至全岛</Text></TouchableOpacity>
@@ -866,7 +942,6 @@ export default function AdminPanelScreen() {
 }
 
 const styles = StyleSheet.create({
-  // 🌟 创世神殿级 UI 规范
   container: { flex: 1, backgroundColor: '#FDF8F0' }, 
   navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 50, backgroundColor: '#FDF8F0', borderBottomWidth: 1, borderColor: '#EAE0D5' },
   navBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
@@ -902,7 +977,6 @@ const styles = StyleSheet.create({
   miniBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, flex: 1, alignItems: 'center', marginHorizontal: 4, backgroundColor: '#FDF8F0' },
 
   sectionTitle: { fontSize: 18, fontWeight: '900', color: '#D49A36', marginBottom: 10 },
-  // 🌟 原来的 inputDark 全部重构成护眼白底金边的 inputBox
   inputBox: { backgroundColor: '#FFF', color: '#4E342E', padding: 16, borderRadius: 12, fontSize: 15, marginBottom: 16, borderWidth: 1, borderColor: '#EAE0D5' },
   primaryBtn: { backgroundColor: '#D49A36', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 10, shadowColor: '#D49A36', shadowOpacity: 0.2, shadowRadius: 8, elevation: 2 },
   primaryBtnSmall: { backgroundColor: '#D49A36', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, justifyContent:'center', marginLeft:10 },
