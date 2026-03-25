@@ -119,7 +119,6 @@ export default function AdminPanelScreen() {
           const { data: sData } = await supabase.from('synthesis_events').select('*, collection:target_collection_id(name)').order('created_at', { ascending: false });
           if (sData) setSynthesisList(sData);
 
-          // 🌟 公告抓取
           const { data: aData } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
           if (aData) setAnnounceList(aData);
 
@@ -360,7 +359,6 @@ export default function AdminPanelScreen() {
       } catch (err: any) { showToast(`失败: ${err.message}`); } finally { setPublishing(false); }
   };
 
-  // ================= 📣 公告发布与管理 =================
   const handlePublishAnnouncement = () => {
     if (!announceTitle || !announceContent || !announceImage) return showToast('请填写完整');
     setConfirmAction({
@@ -377,7 +375,6 @@ export default function AdminPanelScreen() {
     });
   };
 
-  // 🌟 新增：动态切换公告置顶状态
   const toggleAnnounceFeatured = async (id: string, currentStatus: boolean) => {
       setPublishing(true);
       try {
@@ -538,23 +535,23 @@ export default function AdminPanelScreen() {
           <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
              <Text style={styles.cardName}>{item.name}</Text>
              <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                <Text style={{color: '#888', fontSize: 10, marginRight: 4}}>{item.is_tradeable ? '流通中' : '已冻结'}</Text>
-                <Switch value={!!item.is_tradeable} onValueChange={() => toggleTradeable(item)} trackColor={{ false: '#333', true: '#FFD700' }} thumbColor="#FFF" style={{transform: [{scale: 0.8}]}} />
+                <Text style={{color: '#8D6E63', fontSize: 10, marginRight: 4}}>{item.is_tradeable ? '流通中' : '已冻结'}</Text>
+                <Switch value={!!item.is_tradeable} onValueChange={() => toggleTradeable(item)} trackColor={{ false: '#EAE0D5', true: '#D49A36' }} thumbColor="#FFF" style={{transform: [{scale: 0.8}]}} />
              </View>
           </View>
-          <Text style={{color: '#888', fontSize: 11, marginTop: 4}}>大盘存量: {item.circulating_supply} | 标签: {catNames}</Text>
+          <Text style={{color: '#8D6E63', fontSize: 11, marginTop: 4}}>大盘存量: {item.circulating_supply} | 标签: {catNames}</Text>
           <View style={{flexDirection: 'row', marginTop: 12, justifyContent: 'space-between'}}>
-             <TouchableOpacity style={[styles.miniBtn, {backgroundColor: '#2C2C2E', borderColor: '#555'}]} onPress={() => { 
+             <TouchableOpacity style={[styles.miniBtn, {borderColor: '#EAE0D5'}]} onPress={() => { 
                  setSelectedCol(item); 
                  setEditCategoryIds(item.category_ids || (item.category_id ? [item.category_id] : []));
                  setShowCategoryModal(true); 
              }}>
-                <Text style={{color: '#CCC', fontSize: 11, fontWeight: '700'}}>🗂️ 标签</Text>
+                <Text style={{color: '#8D6E63', fontSize: 11, fontWeight: '700'}}>🗂️ 标签</Text>
              </TouchableOpacity>
-             <TouchableOpacity style={[styles.miniBtn, {backgroundColor: '#2C2C2E', borderColor: '#00E5FF'}]} onPress={() => { setSelectedCol(item); setEditValue(item.max_consign_price?.toString()); setShowPriceModal(true); }}>
-                <Text style={{color: '#00E5FF', fontSize: 11, fontWeight: '700'}}>¥{item.max_consign_price?.toFixed(0)} 限价</Text>
+             <TouchableOpacity style={[styles.miniBtn, {borderColor: '#D49A36'}]} onPress={() => { setSelectedCol(item); setEditValue(item.max_consign_price?.toString()); setShowPriceModal(true); }}>
+                <Text style={{color: '#D49A36', fontSize: 11, fontWeight: '700'}}>¥{item.max_consign_price?.toFixed(0)} 限价</Text>
              </TouchableOpacity>
-             <TouchableOpacity style={[styles.miniBtn, {backgroundColor: '#2C2C2E', borderColor: '#FF3B30'}]} onPress={() => { setSelectedCol(item); setBurnAmount(''); setShowBurnModal(true); }}>
+             <TouchableOpacity style={[styles.miniBtn, {borderColor: '#FF3B30'}]} onPress={() => { setSelectedCol(item); setBurnAmount(''); setShowBurnModal(true); }}>
                 <Text style={{color: '#FF3B30', fontSize: 11, fontWeight: '900'}}>🔥 废墟</Text>
              </TouchableOpacity>
           </View>
@@ -565,6 +562,7 @@ export default function AdminPanelScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* 🌟 复古神殿级导航栏 */}
       <View style={styles.navBar}>
         <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}><Text style={styles.iconText}>〈</Text></TouchableOpacity>
         <Text style={styles.navTitle}>👑 创世中枢</Text>
@@ -581,7 +579,7 @@ export default function AdminPanelScreen() {
         ))}
       </ScrollView>
 
-      {loading ? <ActivityIndicator size="large" color="#FFD700" style={{marginTop: 50}} /> : (
+      {loading ? <ActivityIndicator size="large" color="#D49A36" style={{marginTop: 50}} /> : (
         <View style={{flex: 1}}>
           
           {activeTab === '数据罗盘' && (
@@ -590,7 +588,7 @@ export default function AdminPanelScreen() {
                 <View style={{flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 10}}>
                    <View style={styles.statCard}><Text style={styles.statLabel}>总注册岛民</Text><Text style={styles.statNumber}>{stats.users}</Text></View>
                    <View style={styles.statCard}><Text style={styles.statLabel}>总交易/流转笔数</Text><Text style={styles.statNumber}>{stats.transfers}</Text></View>
-                   <View style={[styles.statCard, {width: '100%', marginTop: 16, backgroundColor: '#FFD700'}]}><Text style={[styles.statLabel, {color: '#111'}]}>全岛已铸造藏品总数</Text><Text style={[styles.statNumber, {color: '#111', fontSize: 32}]}>{stats.nfts}</Text></View>
+                   <View style={[styles.statCard, {width: '100%', marginTop: 16, backgroundColor: '#D49A36', borderColor: '#D49A36'}]}><Text style={[styles.statLabel, {color: '#FFF'}]}>全岛已铸造藏品总数</Text><Text style={[styles.statNumber, {color: '#FFF', fontSize: 32}]}>{stats.nfts}</Text></View>
                 </View>
              </ScrollView>
           )}
@@ -598,7 +596,7 @@ export default function AdminPanelScreen() {
           {activeTab === '资产调控' && (
             <View style={{flex: 1}}>
                <View style={styles.filterToolbar}>
-                  <TextInput style={styles.searchInput} placeholder="🔍 搜索藏品名称..." placeholderTextColor="#666" value={searchQuery} onChangeText={setSearchQuery} />
+                  <TextInput style={styles.searchInput} placeholder="🔍 搜索藏品名称..." placeholderTextColor="#A1887F" value={searchQuery} onChangeText={setSearchQuery} />
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterCatScroll}>
                      <TouchableOpacity style={[styles.filterCatChip, filterCategory === 'all' && styles.filterCatChipActive]} onPress={() => setFilterCategory('all')}><Text style={[styles.filterCatChipText, filterCategory === 'all' && styles.filterCatChipTextActive]}>全部</Text></TouchableOpacity>
                      {adminCategories.map(cat => (
@@ -606,7 +604,7 @@ export default function AdminPanelScreen() {
                      ))}
                   </ScrollView>
                </View>
-               <FlatList data={filteredCollections} renderItem={renderAssetCard} keyExtractor={item => item.id} contentContainerStyle={{ padding: 16, paddingBottom: 100 }} style={{flex: 1}} ListEmptyComponent={<Text style={{color: '#888', textAlign: 'center', marginTop: 50}}>没有找到符合条件的藏品</Text>} />
+               <FlatList data={filteredCollections} renderItem={renderAssetCard} keyExtractor={item => item.id} contentContainerStyle={{ padding: 16, paddingBottom: 100 }} style={{flex: 1}} ListEmptyComponent={<Text style={{color: '#8D6E63', textAlign: 'center', marginTop: 50}}>没有找到符合条件的藏品</Text>} />
             </View>
           )}
 
@@ -617,18 +615,18 @@ export default function AdminPanelScreen() {
                  <View>
                     <View style={styles.cheatBox}>
                        <Text style={styles.sectionTitle}>💰 定向空投土豆币 (补偿/发薪)</Text>
-                       <TextInput style={styles.inputDark} placeholder="目标用户的 UID" placeholderTextColor="#666" value={targetUserId} onChangeText={setTargetUserId} />
+                       <TextInput style={styles.inputBox} placeholder="目标用户的 UID" placeholderTextColor="#A1887F" value={targetUserId} onChangeText={setTargetUserId} />
                        <View style={{flexDirection: 'row'}}>
-                          <TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="下发金额 ¥" placeholderTextColor="#666" keyboardType="decimal-pad" value={targetUserCoin} onChangeText={setTargetUserCoin} />
-                          <TouchableOpacity style={[styles.goldBtnSmall, {marginLeft: 10}]} onPress={handleGrantUserCoins} disabled={publishing}><Text style={{fontWeight:'900'}}>打款</Text></TouchableOpacity>
+                          <TextInput style={[styles.inputBox, {flex: 1, marginBottom: 0}]} placeholder="下发金额 ¥" placeholderTextColor="#A1887F" keyboardType="decimal-pad" value={targetUserCoin} onChangeText={setTargetUserCoin} />
+                          <TouchableOpacity style={[styles.primaryBtnSmall, {marginLeft: 10}]} onPress={handleGrantUserCoins} disabled={publishing}><Text style={styles.primaryBtnText}>打款</Text></TouchableOpacity>
                        </View>
                     </View>
                     <View style={styles.cheatBox}>
                        <Text style={styles.sectionTitle}>📩 发送专属王国信件</Text>
-                       <TextInput style={styles.inputDark} placeholder="目标用户的 UID" placeholderTextColor="#666" value={targetUserId} onChangeText={setTargetUserId} />
-                       <TextInput style={styles.inputDark} placeholder="信件标题 (如: 违规警告 / 补偿通知)" placeholderTextColor="#666" value={targetMailTitle} onChangeText={setTargetMailTitle} />
-                       <TextInput style={[styles.inputDark, {height: 100, textAlignVertical: 'top'}]} placeholder="信件正文内容..." placeholderTextColor="#666" multiline value={targetMailContent} onChangeText={setTargetMailContent} />
-                       <TouchableOpacity style={styles.goldBtn} onPress={handleSendDirectMail} disabled={publishing}><Text style={styles.goldBtnText}>强行塞入信箱</Text></TouchableOpacity>
+                       <TextInput style={styles.inputBox} placeholder="目标用户的 UID" placeholderTextColor="#A1887F" value={targetUserId} onChangeText={setTargetUserId} />
+                       <TextInput style={styles.inputBox} placeholder="信件标题 (如: 违规警告 / 补偿通知)" placeholderTextColor="#A1887F" value={targetMailTitle} onChangeText={setTargetMailTitle} />
+                       <TextInput style={[styles.inputBox, {height: 100, textAlignVertical: 'top'}]} placeholder="信件正文内容..." placeholderTextColor="#A1887F" multiline value={targetMailContent} onChangeText={setTargetMailContent} />
+                       <TouchableOpacity style={styles.primaryBtn} onPress={handleSendDirectMail} disabled={publishing}><Text style={styles.primaryBtnText}>强行塞入信箱</Text></TouchableOpacity>
                     </View>
                  </View>
               )}
@@ -637,8 +635,8 @@ export default function AdminPanelScreen() {
                 <View>
                    <View style={styles.cheatBox}>
                       <Text style={styles.sectionTitle}>🕳️ 黑洞坍缩概率与奖池</Text>
-                      <View style={styles.reqRow}><Text style={{color:'#FFF', flex:1}}>奇迹触发概率 (0~1)</Text><TextInput style={[styles.reqCountInput, {width: 80}]} placeholder="0.01" placeholderTextColor="#666" value={configs['blackhole_success_rate']||''} onChangeText={(v)=>setConfigs({...configs, blackhole_success_rate: v})} /><TouchableOpacity style={styles.goldBtnSmall} onPress={()=>handleSaveConfig('blackhole_success_rate', configs['blackhole_success_rate'])}><Text style={{fontWeight:'900'}}>保存</Text></TouchableOpacity></View>
-                      <TouchableOpacity style={[styles.pickerBtn, {marginTop: 10, borderColor: '#9932CC'}]} onPress={() => openPicker('configBlackhole')}><Text style={[styles.pickerBtnText, {color: configs['blackhole_jackpot_col_id'] ? '#9932CC' : '#666'}]}>{configs['blackhole_jackpot_col_id'] ? `🌌 黑洞大奖已绑: ${configs['blackhole_jackpot_col_id'].substring(0,8)}...` : '+ 绑定黑洞大奖藏品'}</Text></TouchableOpacity>
+                      <View style={styles.reqRow}><Text style={{color:'#4E342E', flex:1, fontWeight:'600'}}>奇迹触发概率 (0~1)</Text><TextInput style={[styles.inputBox, {width: 80, marginBottom: 0, padding: 10, textAlign: 'center'}]} placeholder="0.01" placeholderTextColor="#A1887F" value={configs['blackhole_success_rate']||''} onChangeText={(v)=>setConfigs({...configs, blackhole_success_rate: v})} /><TouchableOpacity style={styles.primaryBtnSmall} onPress={()=>handleSaveConfig('blackhole_success_rate', configs['blackhole_success_rate'])}><Text style={styles.primaryBtnText}>保存</Text></TouchableOpacity></View>
+                      <TouchableOpacity style={[styles.pickerBtn, {marginTop: 10}]} onPress={() => openPicker('configBlackhole')}><Text style={styles.pickerBtnText}>{configs['blackhole_jackpot_col_id'] ? `🌌 黑洞大奖已绑: ${configs['blackhole_jackpot_col_id'].substring(0,8)}...` : '+ 绑定黑洞大奖藏品'}</Text></TouchableOpacity>
                    </View>
                    <View style={styles.cheatBox}>
                       <Text style={styles.sectionTitle}>📅 签到奖励配置</Text>
@@ -646,12 +644,12 @@ export default function AdminPanelScreen() {
                    </View>
                    <View style={styles.cheatBox}>
                       <Text style={styles.sectionTitle}>🔄 特权兑换消耗</Text>
-                      <View style={styles.reqRow}><Text style={{color:'#FFF', flex:1}}>转赠卡需要 Potato</Text><TextInput style={styles.reqCountInput} value={configs['exchange_transfer_cost']||''} onChangeText={(v)=>setConfigs({...configs, exchange_transfer_cost: v})} /><TouchableOpacity style={styles.goldBtnSmall} onPress={()=>handleSaveConfig('exchange_transfer_cost', configs['exchange_transfer_cost'])}><Text style={{fontWeight:'900'}}>存</Text></TouchableOpacity></View>
-                      <View style={styles.reqRow}><Text style={{color:'#FFF', flex:1}}>万能卡需要 Potato</Text><TextInput style={styles.reqCountInput} value={configs['exchange_universal_cost']||''} onChangeText={(v)=>setConfigs({...configs, exchange_universal_cost: v})} /><TouchableOpacity style={styles.goldBtnSmall} onPress={()=>handleSaveConfig('exchange_universal_cost', configs['exchange_universal_cost'])}><Text style={{fontWeight:'900'}}>存</Text></TouchableOpacity></View>
+                      <View style={styles.reqRow}><Text style={{color:'#4E342E', flex:1, fontWeight:'600'}}>转赠卡需要 Potato</Text><TextInput style={[styles.inputBox, {width: 80, marginBottom: 0, padding: 10, textAlign: 'center'}]} value={configs['exchange_transfer_cost']||''} onChangeText={(v)=>setConfigs({...configs, exchange_transfer_cost: v})} /><TouchableOpacity style={styles.primaryBtnSmall} onPress={()=>handleSaveConfig('exchange_transfer_cost', configs['exchange_transfer_cost'])}><Text style={styles.primaryBtnText}>存</Text></TouchableOpacity></View>
+                      <View style={styles.reqRow}><Text style={{color:'#4E342E', flex:1, fontWeight:'600'}}>万能卡需要 Potato</Text><TextInput style={[styles.inputBox, {width: 80, marginBottom: 0, padding: 10, textAlign: 'center'}]} value={configs['exchange_universal_cost']||''} onChangeText={(v)=>setConfigs({...configs, exchange_universal_cost: v})} /><TouchableOpacity style={styles.primaryBtnSmall} onPress={()=>handleSaveConfig('exchange_universal_cost', configs['exchange_universal_cost'])}><Text style={styles.primaryBtnText}>存</Text></TouchableOpacity></View>
                    </View>
                    <View style={styles.cheatBox}>
                       <Text style={styles.sectionTitle}>👑 VIP 升级消耗 (万能卡)</Text>
-                      {[2,3,4,5].map(level => (<View key={level} style={styles.reqRow}><Text style={{color:'#FFF', flex:1}}>升至 VIP {level}</Text><TextInput style={styles.reqCountInput} value={configs[`vip${level}_cost`]||''} onChangeText={(v)=>setConfigs({...configs, [`vip${level}_cost`]: v})} /><TouchableOpacity style={styles.goldBtnSmall} onPress={()=>handleSaveConfig(`vip${level}_cost`, configs[`vip${level}_cost`])}><Text style={{fontWeight:'900'}}>存</Text></TouchableOpacity></View>))}
+                      {[2,3,4,5].map(level => (<View key={level} style={styles.reqRow}><Text style={{color:'#4E342E', flex:1, fontWeight:'600'}}>升至 VIP {level}</Text><TextInput style={[styles.inputBox, {width: 80, marginBottom: 0, padding: 10, textAlign: 'center'}]} value={configs[`vip${level}_cost`]||''} onChangeText={(v)=>setConfigs({...configs, [`vip${level}_cost`]: v})} /><TouchableOpacity style={styles.primaryBtnSmall} onPress={()=>handleSaveConfig(`vip${level}_cost`, configs[`vip${level}_cost`])}><Text style={styles.primaryBtnText}>存</Text></TouchableOpacity></View>))}
                    </View>
                 </View>
               )}
@@ -660,18 +658,18 @@ export default function AdminPanelScreen() {
                  <View>
                     <View style={styles.cheatBox}>
                        <Text style={styles.sectionTitle}>🖼️ 铸造全新藏品母版</Text>
-                       <TextInput style={styles.inputDark} placeholder="藏品名称 (例: 皇家土豆骑士)" placeholderTextColor="#666" value={newColName} onChangeText={setNewColName} />
-                       <Text style={{color:'#FFF', fontWeight:'800', marginBottom:8}}>图片链接 (网络URL)</Text>
-                       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 16}}>{newColImage ? (<Image source={{uri: newColImage}} style={{width: 50, height: 50, borderRadius: 8, marginRight: 12, backgroundColor: '#333'}} />) : (<View style={{width: 50, height: 50, borderRadius: 8, backgroundColor: '#333', marginRight: 12, justifyContent: 'center', alignItems: 'center'}}><Text style={{color: '#666'}}>图</Text></View>)}<TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="https://..." placeholderTextColor="#666" value={newColImage} onChangeText={setNewColImage} /></View>
-                       <Text style={{color:'#FFF', fontWeight:'800', marginBottom:8}}>为藏品打上多个分区标签</Text>
+                       <TextInput style={styles.inputBox} placeholder="藏品名称 (例: 皇家土豆骑士)" placeholderTextColor="#A1887F" value={newColName} onChangeText={setNewColName} />
+                       <Text style={{color:'#4E342E', fontWeight:'800', marginBottom:8}}>图片链接 (网络URL)</Text>
+                       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 16}}>{newColImage ? (<Image source={{uri: newColImage}} style={{width: 50, height: 50, borderRadius: 8, marginRight: 12, backgroundColor: '#FDF8F0'}} />) : (<View style={{width: 50, height: 50, borderRadius: 8, backgroundColor: '#F5EFE6', marginRight: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5'}}><Text style={{color: '#8D6E63'}}>图</Text></View>)}<TextInput style={[styles.inputBox, {flex: 1, marginBottom: 0}]} placeholder="https://..." placeholderTextColor="#A1887F" value={newColImage} onChangeText={setNewColImage} /></View>
+                       <Text style={{color:'#4E342E', fontWeight:'800', marginBottom:8}}>为藏品打上多个分区标签</Text>
                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 16}}>
                           {adminCategories.map(cat => {
                              const isActive = newColCategoryIds.includes(cat.id);
                              return (<TouchableOpacity key={cat.id} style={[styles.catChip, isActive && styles.catChipActive]} onPress={() => toggleNewColCat(cat.id)}><Text style={[styles.catChipText, isActive && styles.catChipTextActive]}>{cat.name}</Text></TouchableOpacity>)
                           })}
                        </ScrollView>
-                       <TextInput style={styles.inputDark} placeholder="设置最高限价 (可空)" placeholderTextColor="#666" keyboardType="decimal-pad" value={newColMaxPrice} onChangeText={setNewColMaxPrice} />
-                       <TouchableOpacity style={[styles.goldBtn, {marginTop: 10}]} onPress={handleCreateCollection} disabled={publishing}><Text style={styles.goldBtnText}>✨ 确认铸造图鉴</Text></TouchableOpacity>
+                       <TextInput style={styles.inputBox} placeholder="设置最高限价 (可空)" placeholderTextColor="#A1887F" keyboardType="decimal-pad" value={newColMaxPrice} onChangeText={setNewColMaxPrice} />
+                       <TouchableOpacity style={[styles.primaryBtn, {marginTop: 10}]} onPress={handleCreateCollection} disabled={publishing}><Text style={styles.primaryBtnText}>✨ 确认铸造图鉴</Text></TouchableOpacity>
                     </View>
                  </View>
               )}
@@ -680,12 +678,12 @@ export default function AdminPanelScreen() {
                 <View>
                    <View style={styles.cheatBox}>
                       <Text style={styles.sectionTitle}>🎁 全服快照与精准空投</Text>
-                      <Text style={{color:'#FFF', fontWeight:'800', marginBottom:10}}>1. 设定快照条件组合</Text>
-                      {airdropReqs.map((req, i) => (<View key={i} style={[styles.reqRow, {backgroundColor:'#222', padding:10, borderRadius:8}]}><Text style={{color:'#00E5FF', flex:1, fontWeight:'800'}}>👉 {req.name}</Text><TouchableOpacity onPress={() => setAirdropReqs(airdropReqs.filter((_, idx)=>idx!==i))}><Text style={{color:'#FF3B30'}}>移除</Text></TouchableOpacity></View>))}
+                      <Text style={{color:'#4E342E', fontWeight:'800', marginBottom:10}}>1. 设定快照条件组合</Text>
+                      {airdropReqs.map((req, i) => (<View key={i} style={[styles.reqRow, {backgroundColor:'#FDF8F0', padding:10, borderRadius:8, borderWidth: 1, borderColor: '#EAE0D5'}]}><Text style={{color:'#D49A36', flex:1, fontWeight:'900'}}>👉 {req.name}</Text><TouchableOpacity onPress={() => setAirdropReqs(airdropReqs.filter((_, idx)=>idx!==i))}><Text style={{color:'#FF3B30', fontWeight: '800'}}>移除</Text></TouchableOpacity></View>))}
                       <TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('airdropReq')}><Text style={styles.pickerBtnText}>+ 添加要求持有的藏品</Text></TouchableOpacity>
-                      <Text style={{color:'#FFF', fontWeight:'800', marginBottom:10, marginTop:10}}>2. 设定空投奖励目标</Text>
-                      <TouchableOpacity style={[styles.pickerBtn, {borderColor:'#FFD700'}]} onPress={() => openPicker('airdropTarget')}><Text style={[styles.pickerBtnText, {color: airdropTargetName ? '#FFD700' : '#888'}]}>{airdropTargetName ? `🎁 空投物: ${airdropTargetName}` : '+ 选择要派发的空投藏品'}</Text></TouchableOpacity>
-                      <TouchableOpacity style={[styles.goldBtn, {marginTop: 20}]} onPress={executeAirdrop} disabled={publishing}><Text style={styles.goldBtnText}>⚡ 立即执行全岛空投</Text></TouchableOpacity>
+                      <Text style={{color:'#4E342E', fontWeight:'800', marginBottom:10, marginTop:10}}>2. 设定空投奖励目标</Text>
+                      <TouchableOpacity style={[styles.pickerBtn, {borderColor:'#D49A36'}]} onPress={() => openPicker('airdropTarget')}><Text style={[styles.pickerBtnText, {color: airdropTargetName ? '#D49A36' : '#8D6E63'}]}>{airdropTargetName ? `🎁 空投物: ${airdropTargetName}` : '+ 选择要派发的空投藏品'}</Text></TouchableOpacity>
+                      <TouchableOpacity style={[styles.primaryBtn, {marginTop: 20}]} onPress={executeAirdrop} disabled={publishing}><Text style={styles.primaryBtnText}>⚡ 立即执行全岛空投</Text></TouchableOpacity>
                    </View>
                 </View>
               )}
@@ -695,11 +693,11 @@ export default function AdminPanelScreen() {
                   <View style={styles.cheatBox}>
                     <Text style={styles.sectionTitle}>🚀 部署创世发新</Text>
                     <TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('launch')}><Text style={styles.pickerBtnText}>{launchColName ? `📍 已选发售物: ${launchColName}` : '+ 从图库选择发售藏品'}</Text></TouchableOpacity>
-                    <View style={{flexDirection: 'row', justifyContent: 'space-between'}}><TextInput style={[styles.inputDark, {flex: 0.48}]} placeholder="首发价 ¥" placeholderTextColor="#666" keyboardType="decimal-pad" value={launchPrice} onChangeText={setLaunchPrice} /><TextInput style={[styles.inputDark, {flex: 0.48}]} placeholder="释放数量" placeholderTextColor="#666" keyboardType="number-pad" value={launchSupply} onChangeText={setLaunchSupply} /></View>
-                    <TouchableOpacity style={[styles.pickerBtn, {borderColor: '#00E5FF', minHeight: 50}]} onPress={() => setShowTimePicker(true)}><Text style={[styles.pickerBtnText, {color: launchStartTime ? '#00E5FF' : '#666'}]}>{launchStartTime ? `⏰ 开售: ${new Date(launchStartTime).toLocaleString()}` : '⏱️ 点击设定开售时间'}</Text></TouchableOpacity>
-                    <TouchableOpacity style={styles.goldBtn} onPress={handleCreateLaunch} disabled={publishing}><Text style={styles.goldBtnText}>⚡ 锁定发售排期</Text></TouchableOpacity>
+                    <View style={{flexDirection: 'row', justifyContent: 'space-between'}}><TextInput style={[styles.inputBox, {flex: 0.48}]} placeholder="首发价 ¥" placeholderTextColor="#A1887F" keyboardType="decimal-pad" value={launchPrice} onChangeText={setLaunchPrice} /><TextInput style={[styles.inputBox, {flex: 0.48}]} placeholder="释放数量" placeholderTextColor="#A1887F" keyboardType="number-pad" value={launchSupply} onChangeText={setLaunchSupply} /></View>
+                    <TouchableOpacity style={[styles.pickerBtn, {borderColor: '#D49A36', minHeight: 50}]} onPress={() => setShowTimePicker(true)}><Text style={[styles.pickerBtnText, {color: launchStartTime ? '#D49A36' : '#8D6E63'}]}>{launchStartTime ? `⏰ 开售: ${new Date(launchStartTime).toLocaleString()}` : '⏱️ 点击设定开售时间'}</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.primaryBtn} onPress={handleCreateLaunch} disabled={publishing}><Text style={styles.primaryBtnText}>⚡ 锁定发售排期</Text></TouchableOpacity>
                   </View>
-                  {launchList.map(item => (<View key={item.id} style={styles.manageCard}><View style={{flex: 1}}><Text style={{color: '#FFF', fontWeight: '800'}}>{item.collection?.name}</Text><Text style={{color: '#888', fontSize: 12}}>剩余: {item.remaining_supply}/{item.total_supply}</Text></View><TouchableOpacity style={styles.delBtn} onPress={() => handleDeleteLaunch(item.id)}><Text style={{color:'#FFF'}}>🗑️</Text></TouchableOpacity></View>))}
+                  {launchList.map(item => (<View key={item.id} style={styles.manageCard}><View style={{flex: 1}}><Text style={{color: '#4E342E', fontWeight: '800'}}>{item.collection?.name}</Text><Text style={{color: '#8D6E63', fontSize: 12}}>剩余: {item.remaining_supply}/{item.total_supply}</Text></View><TouchableOpacity style={styles.delBtn} onPress={() => handleDeleteLaunch(item.id)}><Text style={{color:'#FFF', fontWeight: '800'}}>🗑️</Text></TouchableOpacity></View>))}
                 </View>
               )}
 
@@ -707,53 +705,51 @@ export default function AdminPanelScreen() {
                 <View>
                   <View style={styles.cheatBox}>
                     <Text style={styles.sectionTitle}>🧬 部署变异配方</Text>
-                    <TextInput style={styles.inputDark} placeholder="活动名称" placeholderTextColor="#666" value={synName} onChangeText={setSynName} />
-                    <View style={{flexDirection: 'row', justifyContent: 'space-between'}}><TouchableOpacity style={[styles.pickerBtn, {flex: 0.7, borderColor: '#00E5FF'}]} onPress={() => openPicker('synTarget')}><Text style={[styles.pickerBtnText, {color: targetColName ? '#00E5FF' : '#666'}]}>{targetColName ? `🏆 ${targetColName}` : '+ 选目标产物'}</Text></TouchableOpacity><TextInput style={[styles.inputDark, {flex: 0.25}]} placeholder="限量" placeholderTextColor="#666" keyboardType="number-pad" value={synMaxCount} onChangeText={setSynMaxCount} /></View>
-                    {requirements.map((req, index) => (<View key={index} style={styles.reqRow}><TouchableOpacity style={[styles.pickerBtn, {flex: 1, borderColor: '#FF3B30', marginBottom: 0}]} onPress={() => openPicker('synReq', index)}><Text style={[styles.pickerBtnText, {color: req.name ? '#FF3B30' : '#666', fontSize: 12}]} numberOfLines={1}>{req.name ? `🔥 材料 ${index+1}: ${req.name}` : '+ 选材料'}</Text></TouchableOpacity><TextInput style={styles.reqCountInput} placeholder="数量" keyboardType="number-pad" value={req.count} onChangeText={(val) => updateReqCount(index, val)} />{requirements.length > 1 && (<TouchableOpacity style={styles.removeBtn} onPress={() => removeRequirement(index)}><Text style={{color: '#FFF'}}>🗑️</Text></TouchableOpacity>)}</View>))}
-                    <TouchableOpacity style={styles.addReqBtn} onPress={addRequirement}><Text style={{color: '#FFD700', fontWeight: '800'}}>+ 增加材料维度</Text></TouchableOpacity>
-                    <TouchableOpacity style={[styles.goldBtn, {marginTop: 20}]} onPress={handleCreateSynthesis}><Text style={styles.goldBtnText}>下发配方</Text></TouchableOpacity>
+                    <TextInput style={styles.inputBox} placeholder="活动名称" placeholderTextColor="#A1887F" value={synName} onChangeText={setSynName} />
+                    <View style={{flexDirection: 'row', justifyContent: 'space-between'}}><TouchableOpacity style={[styles.pickerBtn, {flex: 0.7}]} onPress={() => openPicker('synTarget')}><Text style={styles.pickerBtnText}>{targetColName ? `🏆 ${targetColName}` : '+ 选目标产物'}</Text></TouchableOpacity><TextInput style={[styles.inputBox, {flex: 0.25}]} placeholder="限量" placeholderTextColor="#A1887F" keyboardType="number-pad" value={synMaxCount} onChangeText={setSynMaxCount} /></View>
+                    {requirements.map((req, index) => (<View key={index} style={styles.reqRow}><TouchableOpacity style={[styles.pickerBtn, {flex: 1, borderColor: '#D49A36', marginBottom: 0}]} onPress={() => openPicker('synReq', index)}><Text style={[styles.pickerBtnText, {color: req.name ? '#D49A36' : '#8D6E63', fontSize: 12}]} numberOfLines={1}>{req.name ? `🔥 材料 ${index+1}: ${req.name}` : '+ 选材料'}</Text></TouchableOpacity><TextInput style={[styles.inputBox, {width: 60, marginBottom: 0, padding: 10, textAlign: 'center', marginLeft: 10}]} placeholder="数量" placeholderTextColor="#A1887F" keyboardType="number-pad" value={req.count} onChangeText={(val) => updateReqCount(index, val)} />{requirements.length > 1 && (<TouchableOpacity style={styles.removeBtn} onPress={() => removeRequirement(index)}><Text style={{color: '#FFF'}}>🗑️</Text></TouchableOpacity>)}</View>))}
+                    <TouchableOpacity style={styles.addReqBtn} onPress={addRequirement}><Text style={{color: '#D49A36', fontWeight: '800'}}>+ 增加材料维度</Text></TouchableOpacity>
+                    <TouchableOpacity style={[styles.primaryBtn, {marginTop: 20}]} onPress={handleCreateSynthesis}><Text style={styles.primaryBtnText}>下发配方</Text></TouchableOpacity>
                   </View>
-                  {synthesisList.map(item => (<View key={item.id} style={styles.manageCard}><View style={{flex: 1}}><Text style={{color: '#FFF', fontWeight: '800'}}>{item.name}</Text><Text style={{color: '#888', fontSize: 12}}>目标: {item.collection?.name}</Text></View><TouchableOpacity style={styles.delBtn} onPress={() => handleDeleteSynthesis(item.id)}><Text style={{color:'#FFF'}}>🗑️</Text></TouchableOpacity></View>))}
+                  {synthesisList.map(item => (<View key={item.id} style={styles.manageCard}><View style={{flex: 1}}><Text style={{color: '#4E342E', fontWeight: '800'}}>{item.name}</Text><Text style={{color: '#8D6E63', fontSize: 12}}>目标: {item.collection?.name}</Text></View><TouchableOpacity style={styles.delBtn} onPress={() => handleDeleteSynthesis(item.id)}><Text style={{color:'#FFF', fontWeight: '800'}}>🗑️</Text></TouchableOpacity></View>))}
                 </View>
               )}
 
-              {/* 🌟 核心升级：公告管理支持【置顶开关】 */}
               {activeTab === '王国公告' && (
                 <View>
                   <View style={styles.cheatBox}>
                     <Text style={styles.sectionTitle}>📣 颁布王国旨意</Text>
-                    <View style={styles.switchRow}><Text style={{color: '#FFF', fontSize: 16, fontWeight: '700'}}>🔥 设为精华置顶</Text><Switch value={announceFeatured} onValueChange={setAnnounceFeatured} trackColor={{ false: '#333', true: '#FF3B30' }} /></View>
+                    <View style={styles.switchRow}><Text style={{color: '#4E342E', fontSize: 16, fontWeight: '800'}}>🔥 设为精华置顶</Text><Switch value={announceFeatured} onValueChange={setAnnounceFeatured} trackColor={{ false: '#EAE0D5', true: '#FF3B30' }} /></View>
                     <TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('announce')}>{announceImage ? (<Image source={{uri: announceImage}} style={{width: '100%', height: 100, borderRadius: 8, resizeMode: 'cover'}} />) : (<Text style={styles.pickerBtnText}>🖼️ 从资产库选择配图</Text>)}</TouchableOpacity>
-                    <TextInput style={styles.inputDark} placeholder="震撼人心的标题" placeholderTextColor="#666" value={announceTitle} onChangeText={setAnnounceTitle} />
-                    <TextInput style={[styles.inputDark, {height: 150, textAlignVertical: 'top'}]} placeholder="输入旨意正文..." placeholderTextColor="#666" multiline value={announceContent} onChangeText={setAnnounceContent} />
-                    <TouchableOpacity style={styles.goldBtn} onPress={handlePublishAnnouncement} disabled={publishing}><Text style={styles.goldBtnText}>传达至全岛</Text></TouchableOpacity>
+                    <TextInput style={styles.inputBox} placeholder="震撼人心的标题" placeholderTextColor="#A1887F" value={announceTitle} onChangeText={setAnnounceTitle} />
+                    <TextInput style={[styles.inputBox, {height: 150, textAlignVertical: 'top'}]} placeholder="输入旨意正文..." placeholderTextColor="#A1887F" multiline value={announceContent} onChangeText={setAnnounceContent} />
+                    <TouchableOpacity style={styles.primaryBtn} onPress={handlePublishAnnouncement} disabled={publishing}><Text style={styles.primaryBtnText}>传达至全岛</Text></TouchableOpacity>
                   </View>
                   
-                  <Text style={{color: '#888', fontSize: 12, marginBottom: 10}}>历史旨意大盘 (点击按钮可切换置顶状态)</Text>
+                  <Text style={{color: '#8D6E63', fontSize: 12, marginBottom: 10}}>历史旨意大盘 (点击按钮可切换置顶状态)</Text>
                   {announceList.map(item => (
                     <View key={item.id} style={styles.manageCard}>
                       <View style={{flex: 1}}>
-                         <Text style={{color: item.author_name === '土豆清道夫' ? '#FF3B30' : '#FFF', fontWeight: '800'}} numberOfLines={1}>
+                         <Text style={{color: item.author_name === '土豆清道夫' ? '#FF3B30' : '#4E342E', fontWeight: '900'}} numberOfLines={1}>
                             {item.is_featured ? '🔥 ' : ''}{item.title}
                          </Text>
-                         <Text style={{color: '#888', fontSize: 11, marginTop: 4}} numberOfLines={1}>
+                         <Text style={{color: '#8D6E63', fontSize: 11, marginTop: 4}} numberOfLines={1}>
                             {item.author_name} | {new Date(item.created_at).toLocaleString()}
                          </Text>
                       </View>
                       
-                      {/* 🌟 独立的置顶切换按钮 */}
                       <TouchableOpacity 
-                         style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: item.is_featured ? '#FFD700' : '#555', marginRight: 10 }}
+                         style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: item.is_featured ? '#D49A36' : '#EAE0D5', marginRight: 10, backgroundColor: item.is_featured ? '#FDF8F0' : '#FFF' }}
                          onPress={() => toggleAnnounceFeatured(item.id, item.is_featured)}
                          disabled={publishing}
                       >
-                         <Text style={{ color: item.is_featured ? '#FFD700' : '#CCC', fontSize: 11, fontWeight: '700' }}>
+                         <Text style={{ color: item.is_featured ? '#D49A36' : '#A1887F', fontSize: 11, fontWeight: '800' }}>
                             {item.is_featured ? '已置顶' : '设为置顶'}
                          </Text>
                       </TouchableOpacity>
                       
                       <TouchableOpacity style={[styles.delBtn, {marginLeft: 0}]} onPress={() => handleDeleteAnnouncement(item.id)}>
-                         <Text style={{color:'#FFF'}}>🗑️</Text>
+                         <Text style={{color:'#FFF', fontWeight: '800'}}>🗑️</Text>
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -762,33 +758,33 @@ export default function AdminPanelScreen() {
 
               {activeTab === '神之手' && (
                 <View>
-                  <View style={styles.cheatBox}><Text style={styles.sectionTitle}>🖨️ 虚空印钞 (派发给自己)</Text><TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('mint')}><Text style={styles.pickerBtnText}>{mintColName ? `📍 选定: ${mintColName}` : '+ 选择要印制的藏品'}</Text></TouchableOpacity><View style={{flexDirection: 'row', marginTop: 10}}><TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="数量" placeholderTextColor="#666" keyboardType="number-pad" value={mintAmount} onChangeText={setMintAmount} /><TouchableOpacity style={[styles.goldBtn, {width: 100, marginLeft: 10, marginTop: 0}]} onPress={handleMintCustom}><Text style={styles.goldBtnText}>印发</Text></TouchableOpacity></View></View>
-                  <View style={styles.cheatBox}><Text style={styles.sectionTitle}>💰 篡改个人资金</Text><View style={{flexDirection: 'row', marginTop: 10}}><TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="覆盖当前余额" placeholderTextColor="#666" keyboardType="decimal-pad" value={newBalance} onChangeText={setNewBalance} /><TouchableOpacity style={[styles.goldBtn, {width: 80, marginLeft: 10, marginTop: 0}]} onPress={handleTamperBalance}><Text style={styles.goldBtnText}>注入</Text></TouchableOpacity></View></View>
+                  <View style={styles.cheatBox}><Text style={styles.sectionTitle}>🖨️ 虚空印钞 (派发给自己)</Text><TouchableOpacity style={styles.pickerBtn} onPress={() => openPicker('mint')}><Text style={styles.pickerBtnText}>{mintColName ? `📍 选定: ${mintColName}` : '+ 选择要印制的藏品'}</Text></TouchableOpacity><View style={{flexDirection: 'row', marginTop: 10}}><TextInput style={[styles.inputBox, {flex: 1, marginBottom: 0}]} placeholder="数量" placeholderTextColor="#A1887F" keyboardType="number-pad" value={mintAmount} onChangeText={setMintAmount} /><TouchableOpacity style={[styles.primaryBtn, {width: 100, marginLeft: 10, marginTop: 0}]} onPress={handleMintCustom}><Text style={styles.primaryBtnText}>印发</Text></TouchableOpacity></View></View>
+                  <View style={styles.cheatBox}><Text style={styles.sectionTitle}>💰 篡改个人资金</Text><View style={{flexDirection: 'row', marginTop: 10}}><TextInput style={[styles.inputBox, {flex: 1, marginBottom: 0}]} placeholder="覆盖当前余额" placeholderTextColor="#A1887F" keyboardType="decimal-pad" value={newBalance} onChangeText={setNewBalance} /><TouchableOpacity style={[styles.primaryBtn, {width: 80, marginLeft: 10, marginTop: 0}]} onPress={handleTamperBalance}><Text style={styles.primaryBtnText}>注入</Text></TouchableOpacity></View></View>
                   
                   <View style={styles.cheatBox}>
                      <Text style={styles.sectionTitle}>🗂️ 大盘分区管理</Text>
                      <View style={{flexDirection: 'row', marginTop: 10, marginBottom: 20}}>
-                        <TextInput style={[styles.inputDark, {flex: 1, marginBottom: 0}]} placeholder="新分类名称..." placeholderTextColor="#666" value={newCategoryName} onChangeText={setNewCategoryName} />
-                        <TouchableOpacity style={[styles.goldBtn, {width: 80, marginLeft: 10, marginTop: 0}]} onPress={handleCreateCategory}><Text style={styles.goldBtnText}>新增</Text></TouchableOpacity>
+                        <TextInput style={[styles.inputBox, {flex: 1, marginBottom: 0}]} placeholder="新分类名称..." placeholderTextColor="#A1887F" value={newCategoryName} onChangeText={setNewCategoryName} />
+                        <TouchableOpacity style={[styles.primaryBtn, {width: 80, marginLeft: 10, marginTop: 0}]} onPress={handleCreateCategory}><Text style={styles.primaryBtnText}>新增</Text></TouchableOpacity>
                      </View>
-                     <Text style={{color: '#888', fontSize: 12, marginBottom: 10}}>当前大盘分区排序 (越靠上越靠前展示)</Text>
+                     <Text style={{color: '#8D6E63', fontSize: 12, marginBottom: 10}}>当前大盘分区排序 (越靠上越靠前展示)</Text>
                      {adminCategories.map((cat, index) => (
                         <View key={cat.id} style={styles.categoryManageRow}>
                            {editingCatId === cat.id ? (
-                              <View style={{flex: 1, flexDirection: 'row'}}>
+                              <View style={{flex: 1, flexDirection: 'row', alignItems: 'center'}}>
                                  <TextInput style={styles.catEditInput} value={editingCatName} onChangeText={setEditingCatName} autoFocus />
-                                 <TouchableOpacity style={styles.catSaveBtn} onPress={() => handleUpdateCategoryName(cat.id)}><Text style={{color:'#111', fontWeight:'900'}}>保存</Text></TouchableOpacity>
-                                 <TouchableOpacity style={styles.catCancelBtn} onPress={() => setEditingCatId(null)}><Text style={{color:'#888'}}>取消</Text></TouchableOpacity>
+                                 <TouchableOpacity style={styles.catSaveBtn} onPress={() => handleUpdateCategoryName(cat.id)}><Text style={{color:'#FFF', fontWeight:'900'}}>保存</Text></TouchableOpacity>
+                                 <TouchableOpacity style={styles.catCancelBtn} onPress={() => setEditingCatId(null)}><Text style={{color:'#8D6E63', fontWeight: '800'}}>取消</Text></TouchableOpacity>
                               </View>
                            ) : (
                               <>
                                  <TouchableOpacity style={{flex: 1}} onPress={() => {setEditingCatId(cat.id); setEditingCatName(cat.name);}}>
-                                    <Text style={{color: '#FFF', fontSize: 15, fontWeight: '800'}}>{cat.name} <Text style={{fontSize: 10, color: '#666'}}>✏️</Text></Text>
+                                    <Text style={{color: '#4E342E', fontSize: 15, fontWeight: '900'}}>{cat.name} <Text style={{fontSize: 10, color: '#A1887F'}}>✏️</Text></Text>
                                  </TouchableOpacity>
                                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                                    <TouchableOpacity style={[styles.orderBtn, index === 0 && {opacity: 0.2}]} onPress={() => handleMoveCategory(index, 'up')} disabled={index === 0}><Text style={{color:'#FFF'}}>↑</Text></TouchableOpacity>
-                                    <TouchableOpacity style={[styles.orderBtn, index === adminCategories.length - 1 && {opacity: 0.2}]} onPress={() => handleMoveCategory(index, 'down')} disabled={index === adminCategories.length - 1}><Text style={{color:'#FFF'}}>↓</Text></TouchableOpacity>
-                                    <TouchableOpacity style={styles.catDelBtn} onPress={() => handleDeleteCategory(cat.id, cat.name)}><Text style={{color:'#FFF'}}>🗑️</Text></TouchableOpacity>
+                                    <TouchableOpacity style={[styles.orderBtn, index === 0 && {opacity: 0.3}]} onPress={() => handleMoveCategory(index, 'up')} disabled={index === 0}><Text style={{color:'#4E342E', fontWeight: '900'}}>↑</Text></TouchableOpacity>
+                                    <TouchableOpacity style={[styles.orderBtn, index === adminCategories.length - 1 && {opacity: 0.3}]} onPress={() => handleMoveCategory(index, 'down')} disabled={index === adminCategories.length - 1}><Text style={{color:'#4E342E', fontWeight: '900'}}>↓</Text></TouchableOpacity>
+                                    <TouchableOpacity style={styles.catDelBtn} onPress={() => handleDeleteCategory(cat.id, cat.name)}><Text style={{color:'#FFF', fontWeight: '800'}}>🗑️</Text></TouchableOpacity>
                                  </View>
                               </>
                            )}
@@ -806,7 +802,7 @@ export default function AdminPanelScreen() {
       {/* ================= 💎 专属业务模态框 ================= */}
       <Modal visible={showPriceModal} transparent animationType="fade">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayFull}>
-          <View style={[styles.timePickerBox, {marginBottom: 100}]}><Text style={styles.modalTitle}>修改最高限价</Text><TextInput style={[styles.inputDark, {fontSize: 24, textAlign: 'center', color: '#00E5FF', fontWeight: '900', borderColor: '#00E5FF'}]} keyboardType="decimal-pad" value={editValue} onChangeText={setEditValue} autoFocus /><View style={{flexDirection: 'row', marginTop: 20}}><TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowPriceModal(false)}><Text style={{color: '#CCC'}}>取消</Text></TouchableOpacity><TouchableOpacity style={[styles.goldBtn, {flex: 1, marginTop: 0}]} onPress={executeUpdatePrice} disabled={publishing}><Text style={styles.goldBtnText}>确认修改</Text></TouchableOpacity></View></View>
+          <View style={[styles.timePickerBox, {marginBottom: 100}]}><Text style={styles.modalTitle}>修改最高限价</Text><TextInput style={[styles.inputBox, {fontSize: 24, textAlign: 'center', color: '#D49A36', fontWeight: '900', borderColor: '#D49A36'}]} keyboardType="decimal-pad" value={editValue} onChangeText={setEditValue} autoFocus /><View style={{flexDirection: 'row', marginTop: 20}}><TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowPriceModal(false)}><Text style={{color: '#8D6E63', fontWeight: '800'}}>取消</Text></TouchableOpacity><TouchableOpacity style={[styles.primaryBtn, {flex: 1, marginTop: 0}]} onPress={executeUpdatePrice} disabled={publishing}><Text style={styles.primaryBtnText}>确认修改</Text></TouchableOpacity></View></View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -818,33 +814,33 @@ export default function AdminPanelScreen() {
                 {adminCategories.map(cat => {
                     const isActive = editCategoryIds.includes(cat.id);
                     return (
-                        <TouchableOpacity key={cat.id} style={[styles.inputDark, {padding: 12, alignItems: 'center', marginBottom: 8, borderColor: isActive ? '#00E5FF' : '#333', borderWidth: isActive ? 2 : 1}]} onPress={() => toggleEditCat(cat.id)} disabled={publishing}>
-                            <Text style={{color: isActive ? '#00E5FF' : '#FFF', fontWeight: '800'}}>{cat.name}</Text>
+                        <TouchableOpacity key={cat.id} style={[styles.inputBox, {padding: 12, alignItems: 'center', marginBottom: 8, borderColor: isActive ? '#D49A36' : '#EAE0D5', borderWidth: isActive ? 2 : 1, backgroundColor: isActive ? '#FDF8F0' : '#FFF'}]} onPress={() => toggleEditCat(cat.id)} disabled={publishing}>
+                            <Text style={{color: isActive ? '#D49A36' : '#4E342E', fontWeight: '900'}}>{cat.name}</Text>
                         </TouchableOpacity>
                     )
                 })}
              </ScrollView>
              <View style={{flexDirection: 'row'}}>
-                <TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowCategoryModal(false)}><Text style={{color: '#CCC'}}>取消</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.goldBtn, {flex: 1, marginTop: 0, backgroundColor: '#00E5FF'}]} onPress={executeChangeCategory} disabled={publishing}><Text style={{color: '#111', fontWeight: '900'}}>确认打标</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowCategoryModal(false)}><Text style={{color: '#8D6E63', fontWeight: '800'}}>取消</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.primaryBtn, {flex: 1, marginTop: 0}]} onPress={executeChangeCategory} disabled={publishing}><Text style={styles.primaryBtnText}>确认打标</Text></TouchableOpacity>
              </View>
           </View>
         </View>
       </Modal>
 
-      <Modal visible={showBurnModal} transparent animationType="fade"><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayFull}><View style={[styles.timePickerBox, {marginBottom: 100, borderColor: '#FF3B30', borderWidth: 2}]}><Text style={[styles.modalTitle, {color: '#FF3B30'}]}>🚨 宏观销毁：打入废墟</Text><TextInput style={[styles.inputDark, {fontSize: 20, textAlign: 'center', color: '#FF3B30', fontWeight: '900', borderColor: '#FF3B30'}]} placeholder="输入销毁数量" placeholderTextColor="#666" keyboardType="number-pad" value={burnAmount} onChangeText={setBurnAmount} autoFocus /><View style={{flexDirection: 'row', marginTop: 10}}><TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowBurnModal(false)}><Text style={{color: '#CCC'}}>取消</Text></TouchableOpacity><TouchableOpacity style={[styles.goldBtn, {flex: 1, marginTop: 0, backgroundColor: '#FF3B30'}]} onPress={executeBurnToRuins} disabled={publishing}><Text style={{color: '#FFF', fontWeight: '900'}}>🔥 确认销毁</Text></TouchableOpacity></View></View></KeyboardAvoidingView></Modal>
-      <Modal visible={showTimePicker} transparent animationType="fade"><View style={styles.modalOverlayFull}><View style={styles.timePickerBox}><Text style={styles.modalTitle}>设定时间</Text><Text style={styles.timeSectionLabel}>日期</Text><View style={styles.timeBtnRow}>{['今天', '明天', '后天'].map((label, i) => (<TouchableOpacity key={label} style={[styles.timeBtn, selectedDateOffset === i && styles.timeBtnActive]} onPress={() => setSelectedDateOffset(i)}><Text style={[styles.timeBtnText, selectedDateOffset === i && styles.timeBtnTextActive]}>{label}</Text></TouchableOpacity>))}</View><Text style={styles.timeSectionLabel}>小时</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{maxHeight: 50}}>{['00','08','10','12','14','18','20','21','22'].map(h => (<TouchableOpacity key={h} style={[styles.timeBtn, selectedHour === h && styles.timeBtnActive]} onPress={() => setSelectedHour(h)}><Text style={[styles.timeBtnText, selectedHour === h && styles.timeBtnTextActive]}>{h}:00</Text></TouchableOpacity>))}</ScrollView><Text style={styles.timeSectionLabel}>分钟</Text><View style={styles.timeBtnRow}>{['00','15','30','45'].map(m => (<TouchableOpacity key={m} style={[styles.timeBtn, selectedMinute === m && styles.timeBtnActive]} onPress={() => setSelectedMinute(m)}><Text style={[styles.timeBtnText, selectedMinute === m && styles.timeBtnTextActive]}>{m}分</Text></TouchableOpacity>))}</View><View style={{flexDirection: 'row', marginTop: 30}}><TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowTimePicker(false)}><Text style={{color: '#CCC'}}>取消</Text></TouchableOpacity><TouchableOpacity style={[styles.goldBtn, {flex: 1, marginTop: 0}]} onPress={confirmTimeSelection}><Text style={styles.goldBtnText}>确认</Text></TouchableOpacity></View></View></View></Modal>
-      <Modal visible={showColPicker} transparent animationType="slide"><View style={styles.modalOverlayFull}><View style={styles.modalContentFull}><View style={styles.pickerHeader}><Text style={styles.modalTitle}>选择藏品</Text><TouchableOpacity onPress={() => setShowColPicker(false)}><Text style={{color:'#999', fontSize: 16}}>关闭</Text></TouchableOpacity></View><FlatList data={collections} keyExtractor={item => item.id} numColumns={3} renderItem={({item}) => (<TouchableOpacity style={styles.miniCard} onPress={() => handleSelectFromPicker(item)}><Image source={{uri: item.image_url}} style={styles.miniImg} /><Text style={styles.miniName} numberOfLines={1}>{item.name}</Text></TouchableOpacity>)}/></View></View></Modal>
+      <Modal visible={showBurnModal} transparent animationType="fade"><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayFull}><View style={[styles.timePickerBox, {marginBottom: 100, borderColor: '#FF3B30', borderWidth: 2}]}><Text style={[styles.modalTitle, {color: '#FF3B30'}]}>🚨 宏观销毁：打入废墟</Text><TextInput style={[styles.inputBox, {fontSize: 20, textAlign: 'center', color: '#FF3B30', fontWeight: '900', borderColor: '#FF3B30'}]} placeholder="输入销毁数量" placeholderTextColor="#A1887F" keyboardType="number-pad" value={burnAmount} onChangeText={setBurnAmount} autoFocus /><View style={{flexDirection: 'row', marginTop: 10}}><TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowBurnModal(false)}><Text style={{color: '#8D6E63', fontWeight: '800'}}>取消</Text></TouchableOpacity><TouchableOpacity style={[styles.primaryBtn, {flex: 1, marginTop: 0, backgroundColor: '#FF3B30'}]} onPress={executeBurnToRuins} disabled={publishing}><Text style={{color: '#FFF', fontWeight: '900'}}>🔥 确认销毁</Text></TouchableOpacity></View></View></KeyboardAvoidingView></Modal>
+      <Modal visible={showTimePicker} transparent animationType="fade"><View style={styles.modalOverlayFull}><View style={styles.timePickerBox}><Text style={styles.modalTitle}>设定时间</Text><Text style={styles.timeSectionLabel}>日期</Text><View style={styles.timeBtnRow}>{['今天', '明天', '后天'].map((label, i) => (<TouchableOpacity key={label} style={[styles.timeBtn, selectedDateOffset === i && styles.timeBtnActive]} onPress={() => setSelectedDateOffset(i)}><Text style={[styles.timeBtnText, selectedDateOffset === i && styles.timeBtnTextActive]}>{label}</Text></TouchableOpacity>))}</View><Text style={styles.timeSectionLabel}>小时</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{maxHeight: 50}}>{['00','08','10','12','14','18','20','21','22'].map(h => (<TouchableOpacity key={h} style={[styles.timeBtn, selectedHour === h && styles.timeBtnActive]} onPress={() => setSelectedHour(h)}><Text style={[styles.timeBtnText, selectedHour === h && styles.timeBtnTextActive]}>{h}:00</Text></TouchableOpacity>))}</ScrollView><Text style={styles.timeSectionLabel}>分钟</Text><View style={styles.timeBtnRow}>{['00','15','30','45'].map(m => (<TouchableOpacity key={m} style={[styles.timeBtn, selectedMinute === m && styles.timeBtnActive]} onPress={() => setSelectedMinute(m)}><Text style={[styles.timeBtnText, selectedMinute === m && styles.timeBtnTextActive]}>{m}分</Text></TouchableOpacity>))}</View><View style={{flexDirection: 'row', marginTop: 30}}><TouchableOpacity style={[styles.mCancelBtn, {flex: 1, marginRight: 10}]} onPress={() => setShowTimePicker(false)}><Text style={{color: '#8D6E63', fontWeight: '800'}}>取消</Text></TouchableOpacity><TouchableOpacity style={[styles.primaryBtn, {flex: 1, marginTop: 0}]} onPress={confirmTimeSelection}><Text style={styles.primaryBtnText}>确认</Text></TouchableOpacity></View></View></View></Modal>
+      <Modal visible={showColPicker} transparent animationType="slide"><View style={styles.modalOverlayFull}><View style={styles.modalContentFull}><View style={styles.pickerHeader}><Text style={styles.modalTitle}>选择藏品</Text><TouchableOpacity onPress={() => setShowColPicker(false)}><Text style={{color:'#8D6E63', fontSize: 16, fontWeight: '800'}}>关闭</Text></TouchableOpacity></View><FlatList data={collections} keyExtractor={item => item.id} numColumns={3} renderItem={({item}) => (<TouchableOpacity style={styles.miniCard} onPress={() => handleSelectFromPicker(item)}><Image source={{uri: item.image_url}} style={styles.miniImg} /><Text style={styles.miniName} numberOfLines={1}>{item.name}</Text></TouchableOpacity>)}/></View></View></Modal>
 
       {/* ================= 🛡️ 终极防误触【二次确认】模态框 ================= */}
       <Modal visible={!!confirmAction} transparent animationType="fade">
          <View style={styles.modalOverlayCenter}>
-            <View style={styles.confirmBox}>
+            <View style={[styles.confirmBox, confirmAction?.isDanger && {borderColor: '#FF3B30'}]}>
                <Text style={[styles.confirmTitle, confirmAction?.isDanger && {color: '#FF3B30'}]}>{confirmAction?.title}</Text>
                <Text style={styles.confirmDesc}>{confirmAction?.desc}</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtnOutline} onPress={() => setConfirmAction(null)}><Text style={styles.cancelBtnOutlineText}>取消</Text></TouchableOpacity>
-                  <TouchableOpacity style={[styles.confirmBtn, confirmAction?.isDanger ? {backgroundColor: '#FF3B30'} : {backgroundColor: '#0066FF'}]} onPress={executeUnifiedAction} disabled={publishing}>
+                  <TouchableOpacity style={[styles.confirmBtn, confirmAction?.isDanger ? {backgroundColor: '#FF3B30'} : {backgroundColor: '#D49A36'}]} onPress={executeUnifiedAction} disabled={publishing}>
                      {publishing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>{confirmAction?.confirmText}</Text>}
                   </TouchableOpacity>
                </View>
@@ -855,11 +851,11 @@ export default function AdminPanelScreen() {
       {/* ================= 🎉 极客【成功反馈】模态框 ================= */}
       <Modal visible={!!successModal} transparent animationType="fade">
          <View style={styles.modalOverlayCenter}>
-            <View style={[styles.confirmBox, {borderColor: '#FFD700', borderWidth: 2}]}>
-               <Text style={[styles.confirmTitle, {color: '#FFD700', fontSize: 22}]}>{successModal?.title}</Text>
-               <Text style={[styles.confirmDesc, {fontSize: 15, color: '#CCC', fontWeight: '800', lineHeight: 22}]}>{successModal?.msg}</Text>
-               <TouchableOpacity style={[styles.confirmBtn, {width: '100%', backgroundColor: '#FFD700'}]} onPress={() => setSuccessModal(null)}>
-                  <Text style={[styles.confirmBtnText, {color: '#111'}]}>朕知道了</Text>
+            <View style={styles.confirmBox}>
+               <Text style={styles.confirmTitle}>{successModal?.title}</Text>
+               <Text style={[styles.confirmDesc, {color: '#4E342E', fontWeight: '800', lineHeight: 22}]}>{successModal?.msg}</Text>
+               <TouchableOpacity style={[styles.confirmBtn, {width: '100%'}]} onPress={() => setSuccessModal(null)}>
+                  <Text style={styles.confirmBtnText}>朕知道了</Text>
                </TouchableOpacity>
             </View>
          </View>
@@ -870,94 +866,95 @@ export default function AdminPanelScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#111' }, 
-  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 50, backgroundColor: '#111' },
+  // 🌟 创世神殿级 UI 规范
+  container: { flex: 1, backgroundColor: '#FDF8F0' }, 
+  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 50, backgroundColor: '#FDF8F0', borderBottomWidth: 1, borderColor: '#EAE0D5' },
   navBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-  iconText: { fontSize: 20, color: '#FFD700' }, 
-  navTitle: { fontSize: 18, fontWeight: '900', color: '#FFD700', letterSpacing: 1 },
-  tabRowOuter: { maxHeight: 50, backgroundColor: '#1C1C1E' },
+  iconText: { fontSize: 20, color: '#4E342E', fontWeight: '900' }, 
+  navTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E', letterSpacing: 1 },
+  
+  tabRowOuter: { maxHeight: 50, backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#EAE0D5' },
   tabRow: { flexDirection: 'row', padding: 10, minWidth: '100%', justifyContent: 'flex-start' },
-  tabBtn: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, marginRight: 8 },
-  tabBtnActive: { backgroundColor: '#FFD700' },
-  tabText: { color: '#888', fontWeight: '700', fontSize: 13 },
-  tabTextActive: { color: '#111', fontWeight: '900' },
+  tabBtn: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, marginRight: 8, backgroundColor: '#FDF8F0', borderWidth: 1, borderColor: '#EAE0D5' },
+  tabBtnActive: { backgroundColor: '#D49A36', borderColor: '#D49A36' },
+  tabText: { color: '#8D6E63', fontWeight: '700', fontSize: 13 },
+  tabTextActive: { color: '#FFF', fontWeight: '900' },
   
-  filterToolbar: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, backgroundColor: '#111' },
-  searchInput: { backgroundColor: '#1C1C1E', color: '#FFF', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, fontSize: 14, borderWidth: 1, borderColor: '#333', marginBottom: 12 },
+  filterToolbar: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, backgroundColor: '#FDF8F0' },
+  searchInput: { backgroundColor: '#FFF', color: '#4E342E', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, fontSize: 14, borderWidth: 1, borderColor: '#EAE0D5', marginBottom: 12 },
   filterCatScroll: { maxHeight: 40 },
-  filterCatChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: '#222', marginRight: 10, borderWidth: 1, borderColor: '#333', justifyContent: 'center' },
-  filterCatChipActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
-  filterCatChipText: { color: '#888', fontSize: 12, fontWeight: '800' },
-  filterCatChipTextActive: { color: '#111', fontWeight: '900' },
+  filterCatChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: '#FFF', marginRight: 10, borderWidth: 1, borderColor: '#EAE0D5', justifyContent: 'center' },
+  filterCatChipActive: { backgroundColor: '#D49A36', borderColor: '#D49A36' },
+  filterCatChipText: { color: '#8D6E63', fontSize: 12, fontWeight: '800' },
+  filterCatChipTextActive: { color: '#FFF', fontWeight: '900' },
 
-  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(255,215,0,0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100, shadowColor: '#FFD700', shadowOpacity: 0.5, shadowRadius: 10 },
-  toastText: { color: '#111', fontSize: 14, fontWeight: '900' },
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(44,30,22,0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100, shadowColor: '#4E342E', shadowOpacity: 0.15, shadowRadius: 10 },
+  toastText: { color: '#FFF', fontSize: 14, fontWeight: '900' },
 
-  statCard: { width: '48%', backgroundColor: '#1C1C1E', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#333' },
-  statLabel: { color: '#888', fontSize: 12, fontWeight: '800', marginBottom: 8 },
-  statNumber: { color: '#FFF', fontSize: 24, fontWeight: '900', fontFamily: 'monospace' },
+  statCard: { width: '48%', backgroundColor: '#FFF', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#F0E6D2', shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 8, elevation: 1 },
+  statLabel: { color: '#8D6E63', fontSize: 12, fontWeight: '800', marginBottom: 8 },
+  statNumber: { color: '#4E342E', fontSize: 24, fontWeight: '900', fontFamily: 'monospace' },
 
-  card: { backgroundColor: '#1C1C1E', borderRadius: 12, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#333', flexDirection: 'row' },
-  cardImg: { width: 70, height: 70, borderRadius: 8, marginRight: 12 },
+  card: { backgroundColor: '#FFF', borderRadius: 12, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#F0E6D2', flexDirection: 'row', shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 5, elevation: 1 },
+  cardImg: { width: 70, height: 70, borderRadius: 8, marginRight: 12, backgroundColor: '#FDF8F0', borderWidth: 1, borderColor: '#EAE0D5' },
   cardInfo: { flex: 1, justifyContent: 'space-between' },
-  cardName: { fontSize: 16, fontWeight: '900', color: '#FFF' },
-  miniBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, flex: 1, alignItems: 'center', marginHorizontal: 4 },
+  cardName: { fontSize: 16, fontWeight: '900', color: '#4E342E' },
+  miniBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, flex: 1, alignItems: 'center', marginHorizontal: 4, backgroundColor: '#FDF8F0' },
 
-  sectionTitle: { fontSize: 18, fontWeight: '900', color: '#FFD700', marginBottom: 10 },
-  inputDark: { backgroundColor: '#111', color: '#FFF', padding: 16, borderRadius: 12, fontSize: 15, marginBottom: 16, borderWidth: 1, borderColor: '#333' },
-  goldBtn: { backgroundColor: '#FFD700', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 10 },
-  goldBtnSmall: { backgroundColor: '#FFD700', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, justifyContent:'center', marginLeft:10 },
-  goldBtnText: { color: '#111', fontSize: 16, fontWeight: '900' },
-  cheatBox: { backgroundColor: '#1C1C1E', padding: 20, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: '#333' },
-  pickerBtn: { width: '100%', minHeight: 50, backgroundColor: '#111', borderRadius: 12, borderWidth: 1, borderColor: '#444', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginBottom: 16, padding: 8 },
-  pickerBtnText: { color: '#888', fontSize: 14, fontWeight: '600' },
+  sectionTitle: { fontSize: 18, fontWeight: '900', color: '#D49A36', marginBottom: 10 },
+  // 🌟 原来的 inputDark 全部重构成护眼白底金边的 inputBox
+  inputBox: { backgroundColor: '#FFF', color: '#4E342E', padding: 16, borderRadius: 12, fontSize: 15, marginBottom: 16, borderWidth: 1, borderColor: '#EAE0D5' },
+  primaryBtn: { backgroundColor: '#D49A36', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 10, shadowColor: '#D49A36', shadowOpacity: 0.2, shadowRadius: 8, elevation: 2 },
+  primaryBtnSmall: { backgroundColor: '#D49A36', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, justifyContent:'center', marginLeft:10 },
+  primaryBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
+  cheatBox: { backgroundColor: '#FFF', padding: 20, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: '#F0E6D2', shadowColor: '#4E342E', shadowOpacity: 0.03, shadowRadius: 8, elevation: 1 },
+  pickerBtn: { width: '100%', minHeight: 50, backgroundColor: '#FDF8F0', borderRadius: 12, borderWidth: 1, borderColor: '#D49A36', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginBottom: 16, padding: 8 },
+  pickerBtnText: { color: '#D49A36', fontSize: 14, fontWeight: '800' },
   
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, backgroundColor: '#111', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#333' },
-  divider: { height: 1, backgroundColor: '#333', marginVertical: 10 },
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, backgroundColor: '#FDF8F0', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#EAE0D5' },
   reqRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  reqCountInput: { width: 60, backgroundColor: '#111', color: '#FFF', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#333', textAlign: 'center', marginLeft: 10 },
-  removeBtn: { width: 40, height: 40, backgroundColor: '#FF3B30', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
-  addReqBtn: { width: '100%', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#FFD700', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginTop: 10 },
+  removeBtn: { width: 40, height: 40, backgroundColor: '#FFF', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 10, borderWidth: 1, borderColor: '#FF3B30' },
+  addReqBtn: { width: '100%', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#D49A36', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginTop: 10, backgroundColor: '#FDF8F0' },
 
-  catChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#333', marginRight: 10, marginBottom: 10 },
-  catChipActive: { backgroundColor: '#00E5FF' },
-  catChipText: { color: '#888', fontWeight: '800' },
-  catChipTextActive: { color: '#111', fontWeight: '900' },
+  catChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#FFF', marginRight: 10, marginBottom: 10, borderWidth: 1, borderColor: '#EAE0D5' },
+  catChipActive: { backgroundColor: '#D49A36', borderColor: '#D49A36' },
+  catChipText: { color: '#8D6E63', fontWeight: '800' },
+  catChipTextActive: { color: '#FFF', fontWeight: '900' },
 
-  categoryManageRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#333' },
-  catEditInput: { flex: 1, color: '#00E5FF', fontSize: 15, fontWeight: '900', borderBottomWidth: 1, borderColor: '#00E5FF', paddingVertical: 4 },
-  catSaveBtn: { backgroundColor: '#FFD700', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, marginLeft: 10 },
+  categoryManageRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#EAE0D5' },
+  catEditInput: { flex: 1, color: '#D49A36', fontSize: 15, fontWeight: '900', borderBottomWidth: 1, borderColor: '#D49A36', paddingVertical: 4, marginRight: 10 },
+  catSaveBtn: { backgroundColor: '#D49A36', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, marginLeft: 10 },
   catCancelBtn: { paddingHorizontal: 10, paddingVertical: 6, marginLeft: 5 },
-  orderBtn: { backgroundColor: '#2C2C2E', width: 30, height: 30, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginLeft: 6 },
-  catDelBtn: { backgroundColor: '#FF3B30', width: 30, height: 30, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
+  orderBtn: { backgroundColor: '#F5EFE6', width: 30, height: 30, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginLeft: 6 },
+  catDelBtn: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#FF3B30', width: 30, height: 30, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
 
-  modalOverlayFull: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
-  modalContentFull: { backgroundColor: '#1C1C1E', height: '80%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16 },
-  pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingBottom: 16, borderBottomWidth: 1, borderColor: '#333' },
-  modalTitle: { fontSize: 18, fontWeight: '900', color: '#FFF', marginBottom: 10 },
+  modalOverlayFull: { flex: 1, backgroundColor: 'rgba(44,30,22,0.7)', justifyContent: 'flex-end' },
+  modalContentFull: { backgroundColor: '#FFF', height: '80%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16 },
+  pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingBottom: 16, borderBottomWidth: 1, borderColor: '#EAE0D5' },
+  modalTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E', marginBottom: 10 },
   miniCard: { width: '30%', margin: '1.5%', alignItems: 'center', marginBottom: 16 },
-  miniImg: { width: 80, height: 80, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#333' },
-  miniName: { color: '#CCC', fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  miniImg: { width: 80, height: 80, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#EAE0D5', backgroundColor: '#FDF8F0' },
+  miniName: { color: '#4E342E', fontSize: 12, fontWeight: '800', textAlign: 'center' },
 
-  manageCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1C1C1E', padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#333' },
+  manageCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#EAE0D5' },
   delBtn: { backgroundColor: '#FF3B30', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, marginLeft: 10 },
 
-  timePickerBox: { backgroundColor: '#1C1C1E', margin: 20, marginBottom: 40, padding: 20, borderRadius: 20, borderWidth: 1, borderColor: '#444' },
-  timeSectionLabel: { color: '#888', fontSize: 12, marginTop: 16, marginBottom: 8 },
+  timePickerBox: { backgroundColor: '#FFF', margin: 20, marginBottom: 40, padding: 20, borderRadius: 20, borderWidth: 1, borderColor: '#D49A36' },
+  timeSectionLabel: { color: '#8D6E63', fontSize: 12, marginTop: 16, marginBottom: 8, fontWeight: '700' },
   timeBtnRow: { flexDirection: 'row', flexWrap: 'wrap' },
-  timeBtn: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#111', borderRadius: 8, borderWidth: 1, borderColor: '#333', marginRight: 10, marginBottom: 10 },
-  timeBtnActive: { backgroundColor: '#00E5FF', borderColor: '#00E5FF' },
-  timeBtnText: { color: '#FFF', fontSize: 14 },
-  timeBtnTextActive: { color: '#000', fontWeight: '800' },
-  mCancelBtn: { height: 50, borderRadius: 12, borderWidth: 1, borderColor: '#555', justifyContent: 'center', alignItems: 'center' },
+  timeBtn: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#FDF8F0', borderRadius: 8, borderWidth: 1, borderColor: '#EAE0D5', marginRight: 10, marginBottom: 10 },
+  timeBtnActive: { backgroundColor: '#D49A36', borderColor: '#D49A36' },
+  timeBtnText: { color: '#8D6E63', fontSize: 14, fontWeight: '700' },
+  timeBtnTextActive: { color: '#FFF', fontWeight: '900' },
+  mCancelBtn: { height: 50, borderRadius: 12, borderWidth: 1, borderColor: '#EAE0D5', backgroundColor: '#FDF8F0', justifyContent: 'center', alignItems: 'center' },
 
-  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
-  confirmBox: { width: '85%', backgroundColor: '#1C1C1E', borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#333' },
-  confirmTitle: { fontSize: 20, fontWeight: '900', color: '#FFF', marginBottom: 16 },
-  confirmDesc: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(44,30,22,0.7)', justifyContent: 'center', alignItems: 'center' },
+  confirmBox: { width: '85%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#D49A36' },
+  confirmTitle: { fontSize: 20, fontWeight: '900', color: '#D49A36', marginBottom: 16 },
+  confirmDesc: { fontSize: 14, color: '#8D6E63', textAlign: 'center', lineHeight: 22, marginBottom: 24, fontWeight: '700' },
   confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  cancelBtnOutline: { flex: 0.48, paddingVertical: 14, borderRadius: 12, backgroundColor: '#111', borderWidth: 1, borderColor: '#444', alignItems: 'center' },
-  cancelBtnOutlineText: { color: '#888', fontSize: 15, fontWeight: '800' },
-  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  cancelBtnOutline: { flex: 0.48, paddingVertical: 14, borderRadius: 12, backgroundColor: '#FDF8F0', borderWidth: 1, borderColor: '#EAE0D5', alignItems: 'center' },
+  cancelBtnOutlineText: { color: '#8D6E63', fontSize: 15, fontWeight: '800' },
+  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 12, alignItems: 'center', backgroundColor: '#D49A36' },
   confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });
