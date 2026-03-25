@@ -4,21 +4,32 @@ import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TextInpu
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
+const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
+  const [hasError, setHasError] = useState(false);
+  return (
+    <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' }]}>
+      {!hasError ? (
+        <Image source={{ uri: uri || 'invalid_url' }} style={[style, { position: 'absolute', width: '100%', height: '100%' }]} onError={() => setHasError(true)} />
+      ) : (
+        <Text style={{ fontSize: 24 }}>🥔</Text>
+      )}
+    </View>
+  );
+};
+
 export default function PublishConsignScreen() {
   const router = useRouter();
-  // 接收从 my-nft-detail 传过来的藏品专属 ID (不是系列ID)
   const { id } = useLocalSearchParams(); 
   const [nft, setNft] = useState<any>(null);
   const [price, setPrice] = useState('');
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
 
-  // 🌟 高级弹窗状态矩阵
   const [toastMsg, setToastMsg] = useState('');
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [successModal, setSuccessModal] = useState<{title: string, msg: string} | null>(null);
 
-  const PLATFORM_FEE_RATE = 0.05; // 模拟 5% 的平台创作者版税
+  const PLATFORM_FEE_RATE = 0.05; 
 
   useEffect(() => {
     supabase.from('nfts').select('*, collections(*)').eq('id', id).single().then(({data}) => {
@@ -32,22 +43,17 @@ export default function PublishConsignScreen() {
     setTimeout(() => setToastMsg(''), 2500);
   };
 
-  // 🌟 第一步：点击底部的蓝色按钮，进行严格拦截并唤起【二次确认弹窗】
   const handlePublishClick = () => {
     const p = parseFloat(price);
     if (isNaN(p) || p <= 0) return showToast('请输入有效价格');
     
-    // 强制限价阻击
     const maxPrice = nft?.collections?.max_consign_price;
     if (maxPrice && p > maxPrice) {
        return showToast(`违规拦截：全岛最高限价为 ¥${maxPrice}`);
     }
-
-    // 唤起二次确认
     setConfirmModalVisible(true);
   };
 
-  // 🌟 第二步：在弹窗中点击“确认上架”，真实执行数据库写入
   const executePublish = async () => {
     setPublishing(true);
     try {
@@ -56,8 +62,6 @@ export default function PublishConsignScreen() {
       if (error) throw error;
       
       setConfirmModalVisible(false);
-      
-      // 延迟一点点出成功弹窗，保证视觉顺滑
       setTimeout(() => {
          setSuccessModal({ title: '✅ 上架成功', msg: '您的藏品已挂入现货大盘，耐心等待老板扫货吧！' });
       }, 400);
@@ -70,7 +74,7 @@ export default function PublishConsignScreen() {
     }
   };
 
-  if (loading || !nft) return <View style={styles.center}><ActivityIndicator color="#0066FF" /></View>;
+  if (loading || !nft) return <View style={styles.center}><ActivityIndicator color="#D49A36" /></View>;
 
   const parsedPrice = parseFloat(price) || 0;
   const fee = parsedPrice * PLATFORM_FEE_RATE;
@@ -87,9 +91,8 @@ export default function PublishConsignScreen() {
       {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
       <ScrollView contentContainerStyle={{padding: 20}}>
-        {/* 顶部藏品卡片 */}
         <View style={styles.targetHeader}>
-           <Image source={{ uri: nft.collections?.image_url }} style={styles.targetImg} />
+           <FallbackImage uri={nft.collections?.image_url} style={styles.targetImg} />
            <View style={styles.targetInfo}>
               <Text style={styles.targetName} numberOfLines={1}>{nft.collections?.name}</Text>
               <Text style={styles.targetSub}>唯一编号: #{String(nft.serial_number).padStart(6, '0')}</Text>
@@ -97,12 +100,12 @@ export default function PublishConsignScreen() {
            </View>
         </View>
 
-        {/* 标价输入框 */}
         <View style={styles.inputBox}>
            <Text style={styles.inputLabel}>出售价格 (¥)</Text>
            <TextInput 
               style={styles.inputField} 
               placeholder="请输入您的挂单价" 
+              placeholderTextColor="#A1887F"
               keyboardType="decimal-pad" 
               value={price} 
               onChangeText={setPrice} 
@@ -110,7 +113,6 @@ export default function PublishConsignScreen() {
            />
         </View>
 
-        {/* 平台版税清算台 */}
         <View style={styles.feeBox}>
            <View style={styles.feeRow}>
               <Text style={styles.feeLabel}>挂单金额</Text>
@@ -128,20 +130,19 @@ export default function PublishConsignScreen() {
 
         <Text style={styles.hintText}>* 上架后资产将被冻结，直至取消挂单或被买家买走。成交后收益将自动打入您的土豆币金库。</Text>
 
-        <TouchableOpacity style={[styles.submitBtn, parsedPrice <= 0 && {backgroundColor: '#CCC'}]} onPress={handlePublishClick} disabled={publishing || parsedPrice <= 0}>
-           <Text style={styles.submitBtnText}>确认上架大盘</Text>
+        <TouchableOpacity style={[styles.submitBtn, parsedPrice <= 0 && {backgroundColor: '#EAE0D5'}]} onPress={handlePublishClick} disabled={publishing || parsedPrice <= 0}>
+           <Text style={[styles.submitBtnText, parsedPrice <= 0 && {color: '#A1887F'}]}>确认上架大盘</Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* 🌟 防坑二次确认弹窗 */}
       <Modal visible={confirmModalVisible} transparent animationType="fade">
          <View style={styles.modalOverlayCenter}>
             <View style={styles.confirmBox}>
                <Text style={styles.confirmTitle}>📝 寄售二次确认</Text>
-               <Text style={styles.confirmDesc}>您即将以 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{parsedPrice.toFixed(2)}</Text> 的价格将此藏品挂入大盘。扣除版税后，预计到手 <Text style={{color:'#4CD964', fontWeight:'900'}}>¥{income.toFixed(2)}</Text>，是否继续？</Text>
+               <Text style={styles.confirmDesc}>您即将以 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{parsedPrice.toFixed(2)}</Text> 的价格将此藏品挂入大盘。扣除版税后，预计到手 <Text style={{color:'#D49A36', fontWeight:'900'}}>¥{income.toFixed(2)}</Text>，是否继续？</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmModalVisible(false)}><Text style={styles.cancelBtnText}>再想想</Text></TouchableOpacity>
-                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#0066FF'}]} onPress={executePublish} disabled={publishing}>
+                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#D49A36'}]} onPress={executePublish} disabled={publishing}>
                      {publishing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认无误，上架</Text>}
                   </TouchableOpacity>
                </View>
@@ -149,14 +150,13 @@ export default function PublishConsignScreen() {
          </View>
       </Modal>
 
-      {/* 🌟 成功反馈高级弹窗 */}
       <Modal visible={!!successModal} transparent animationType="fade">
          <View style={styles.modalOverlayCenter}>
-            <View style={[styles.confirmBox, {borderColor: '#0066FF', borderWidth: 2}]}>
-               <Text style={[styles.confirmTitle, {color: '#0066FF', fontSize: 22}]}>{successModal?.title}</Text>
-               <Text style={[styles.confirmDesc, {fontSize: 15, color: '#111', fontWeight: '800', lineHeight: 22}]}>{successModal?.msg}</Text>
-               <TouchableOpacity style={[styles.confirmBtn, {width: '100%', backgroundColor: '#0066FF'}]} onPress={() => { setSuccessModal(null); router.replace('/(tabs)/profile'); }}>
-                  <Text style={styles.confirmBtnText}>回金库</Text>
+            <View style={[styles.confirmBox, {borderColor: '#D49A36', borderWidth: 2}]}>
+               <Text style={[styles.confirmTitle, {color: '#D49A36', fontSize: 22}]}>{successModal?.title}</Text>
+               <Text style={[styles.confirmDesc, {fontSize: 15, color: '#4E342E', fontWeight: '900', lineHeight: 22}]}>{successModal?.msg}</Text>
+               <TouchableOpacity style={[styles.confirmBtn, {width: '100%', backgroundColor: '#D49A36'}]} onPress={() => { setSuccessModal(null); router.replace('/(tabs)/profile'); }}>
+                  <Text style={styles.confirmBtnText}>回金库等待捷报</Text>
                </TouchableOpacity>
             </View>
          </View>
@@ -167,47 +167,47 @@ export default function PublishConsignScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F6F8' },
-  container: { flex: 1, backgroundColor: '#F5F6F8' },
-  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#F0F0F0' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' },
+  container: { flex: 1, backgroundColor: '#FDF8F0' },
+  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FDF8F0', borderBottomWidth: 1, borderColor: '#EAE0D5' },
   navBtn: { width: 40, justifyContent: 'center' },
-  iconText: { fontSize: 20, color: '#111' },
-  navTitle: { fontSize: 17, fontWeight: '900', color: '#111' },
+  iconText: { fontSize: 22, color: '#4E342E', fontWeight: '900' },
+  navTitle: { fontSize: 17, fontWeight: '900', color: '#4E342E' },
 
-  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
-  toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(78,52,46,0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
+  toastText: { color: '#FFF', fontSize: 14, fontWeight: '900' },
 
-  targetHeader: { flexDirection: 'row', backgroundColor: '#FFF', padding: 16, borderRadius: 16, marginBottom: 20, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 5 },
-  targetImg: { width: 70, height: 70, borderRadius: 8, backgroundColor: '#EEE', marginRight: 16 },
+  targetHeader: { flexDirection: 'row', backgroundColor: '#FFF', padding: 16, borderRadius: 16, marginBottom: 20, shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, borderWidth: 1, borderColor: '#F0E6D2' },
+  targetImg: { width: 70, height: 70, borderRadius: 8, backgroundColor: '#FDF8F0', marginRight: 16, borderWidth: 1, borderColor: '#EAE0D5' },
   targetInfo: { flex: 1, justifyContent: 'center' },
-  targetName: { fontSize: 16, fontWeight: '900', color: '#111', marginBottom: 6 },
-  targetSub: { fontSize: 12, color: '#666', fontFamily: 'monospace', marginBottom: 6 },
-  targetSubHighlight: { fontSize: 11, color: '#FF3B30', fontWeight: '800' },
+  targetName: { fontSize: 16, fontWeight: '900', color: '#4E342E', marginBottom: 6 },
+  targetSub: { fontSize: 12, color: '#8D6E63', fontFamily: 'monospace', marginBottom: 6, fontWeight: '700' },
+  targetSubHighlight: { fontSize: 11, color: '#FF3B30', fontWeight: '900' },
 
-  inputBox: { backgroundColor: '#FFF', padding: 20, borderRadius: 16, marginBottom: 20 },
-  inputLabel: { fontSize: 14, fontWeight: '800', color: '#333', marginBottom: 12 },
-  inputField: { fontSize: 32, fontWeight: '900', color: '#0066FF', borderBottomWidth: 1, borderColor: '#F0F0F0', paddingBottom: 10 },
+  inputBox: { backgroundColor: '#FFF', padding: 20, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: '#F0E6D2', shadowColor: '#4E342E', shadowOpacity: 0.02, shadowRadius: 5 },
+  inputLabel: { fontSize: 14, fontWeight: '900', color: '#4E342E', marginBottom: 12 },
+  inputField: { fontSize: 32, fontWeight: '900', color: '#D49A36', borderBottomWidth: 1, borderColor: '#EAE0D5', paddingBottom: 10 },
 
-  feeBox: { backgroundColor: '#F9F9F9', borderRadius: 12, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#EEE' },
+  feeBox: { backgroundColor: '#FFF', borderRadius: 12, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#EAE0D5' },
   feeRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  feeLabel: { fontSize: 13, color: '#666' },
-  feeValue: { fontSize: 13, fontWeight: '700', color: '#111' },
-  feeTotalRow: { borderTopWidth: 1, borderColor: '#E6E6E6', paddingTop: 12, marginBottom: 0, alignItems: 'center' },
-  feeLabelTotal: { fontSize: 14, fontWeight: '900', color: '#111' },
-  feeValueTotal: { fontSize: 20, fontWeight: '900', color: '#4CD964' },
+  feeLabel: { fontSize: 13, color: '#8D6E63', fontWeight: '700' },
+  feeValue: { fontSize: 13, fontWeight: '900', color: '#4E342E' },
+  feeTotalRow: { borderTopWidth: 1, borderColor: '#F5EFE6', paddingTop: 12, marginBottom: 0, alignItems: 'center' },
+  feeLabelTotal: { fontSize: 14, fontWeight: '900', color: '#4E342E' },
+  feeValueTotal: { fontSize: 20, fontWeight: '900', color: '#D49A36' },
 
-  hintText: { fontSize: 12, color: '#999', lineHeight: 18, marginBottom: 30 },
+  hintText: { fontSize: 12, color: '#A1887F', lineHeight: 18, marginBottom: 30, fontWeight: '600' },
 
-  submitBtn: { backgroundColor: '#0066FF', paddingVertical: 16, borderRadius: 25, alignItems: 'center', shadowColor: '#0066FF', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: {width: 0, height: 4} },
-  submitBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
+  submitBtn: { backgroundColor: '#D49A36', paddingVertical: 16, borderRadius: 25, alignItems: 'center', shadowColor: '#D49A36', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: {width: 0, height: 4} },
+  submitBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 2 },
 
-  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  confirmBox: { width: '85%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
-  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 16 },
-  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(44,30,22,0.7)', justifyContent: 'center', alignItems: 'center' },
+  confirmBox: { width: '85%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
+  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E', marginBottom: 16 },
+  confirmDesc: { fontSize: 14, color: '#8D6E63', textAlign: 'center', lineHeight: 22, marginBottom: 24, fontWeight: '700' },
   confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#F5F5F5', alignItems: 'center' },
-  cancelBtnText: { color: '#666', fontSize: 15, fontWeight: '800' },
-  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#0066FF', alignItems: 'center' },
+  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FDF8F0', alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
+  cancelBtnText: { color: '#8D6E63', fontSize: 15, fontWeight: '800' },
+  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#D49A36', alignItems: 'center' },
   confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });

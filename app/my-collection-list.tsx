@@ -7,17 +7,28 @@ import { supabase } from '../supabase';
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
 
+const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
+  const [hasError, setHasError] = useState(false);
+  return (
+    <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' }]}>
+      {!hasError ? (
+        <Image source={{ uri: uri || 'invalid_url' }} style={[style, { position: 'absolute', width: '100%', height: '100%' }]} onError={() => setHasError(true)} />
+      ) : (
+        <Text style={{ fontSize: 24 }}>🥔</Text>
+      )}
+    </View>
+  );
+};
+
 export default function MyCollectionListScreen() {
   const router = useRouter();
   const { collectionId, collectionName } = useLocalSearchParams();
   const [nfts, setNfts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 批量操作状态
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   
-  // 批量标价弹窗状态
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [batchPrice, setBatchPrice] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -95,24 +106,25 @@ export default function MyCollectionListScreen() {
       <TouchableOpacity
         style={[styles.card, isSelected && styles.cardSelected, isListed && {opacity: 0.6}]}
         activeOpacity={isBatchMode ? 0.9 : 0.8}
-        disabled={isBatchMode && isListed} // 挂单中的不能被选中
+        disabled={isBatchMode && isListed} 
         onPress={() => {
            if (isBatchMode) toggleSelect(item.id);
            else router.push({ pathname: '/my-nft-detail', params: { id: item.id } });
         }}
       >
-        <View style={[styles.badge, isListed ? {backgroundColor: '#FF3B30'} : {backgroundColor: '#4CD964'}]}>
+        <View style={[styles.badge, isListed ? {backgroundColor: '#FF3B30'} : {backgroundColor: '#D49A36'}]}>
            <Text style={styles.badgeText}>{isListed ? '寄售中' : '金库中'}</Text>
         </View>
 
-        {/* 批量模式下的复选框 */}
         {isBatchMode && !isListed && (
            <View style={[styles.checkbox, isSelected && styles.checkboxActive]}>
               {isSelected && <Text style={{color:'#FFF', fontSize: 12, fontWeight:'900'}}>✓</Text>}
            </View>
         )}
 
-        <View style={styles.imgContainer}><Image source={{ uri: coverImg }} style={styles.img} /></View>
+        <View style={styles.imgContainer}>
+           <FallbackImage uri={coverImg} style={styles.img} />
+        </View>
         
         <View style={styles.info}>
            <Text style={styles.title} numberOfLines={1}>{item.collections?.name}</Text>
@@ -138,7 +150,7 @@ export default function MyCollectionListScreen() {
       </View>
 
       {loading ? (
-         <ActivityIndicator size="large" color="#0066FF" style={{ marginTop: 50 }} />
+         <ActivityIndicator size="large" color="#D49A36" style={{ marginTop: 50 }} />
       ) : (
         <FlatList
           data={nfts}
@@ -148,34 +160,32 @@ export default function MyCollectionListScreen() {
           contentContainerStyle={styles.listContainer}
           columnWrapperStyle={styles.rowWrapper}
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 50, color: '#999' }}>该系列暂无可用藏品</Text>}
+          ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 50, color: '#8D6E63' }}>该系列暂无可用藏品</Text>}
         />
       )}
 
-      {/* 批量操作底部悬浮栏 */}
       {isBatchMode && (
          <View style={styles.batchBottomBar}>
             <Text style={styles.batchTip}>将消耗 1 张批量寄售卡</Text>
             <TouchableOpacity 
-               style={[styles.batchSubmitBtn, selectedIds.length === 0 && {backgroundColor: '#CCC'}]}
+               style={[styles.batchSubmitBtn, selectedIds.length === 0 && {backgroundColor: '#EAE0D5'}]}
                disabled={selectedIds.length === 0}
                onPress={() => setShowPriceModal(true)}
             >
-               <Text style={styles.batchSubmitText}>统一标价上架</Text>
+               <Text style={[styles.batchSubmitText, selectedIds.length === 0 && {color: '#A1887F'}]}>统一标价上架</Text>
             </TouchableOpacity>
          </View>
       )}
 
-      {/* 统一标价弹窗 */}
       <Modal visible={showPriceModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.priceModalBox}>
                <Text style={styles.modalTitle}>批量设置价格</Text>
                <Text style={styles.modalSub}>正在为 {selectedIds.length} 件藏品设置上架价格</Text>
-               <TextInput style={styles.modalInput} placeholder="输入单件寄售价格 (¥)" keyboardType="decimal-pad" value={batchPrice} onChangeText={setBatchPrice} autoFocus />
+               <TextInput style={styles.modalInput} placeholder="输入单件寄售价格 (¥)" placeholderTextColor="#A1887F" keyboardType="decimal-pad" value={batchPrice} onChangeText={setBatchPrice} autoFocus />
                
                <View style={styles.modalBtnRow}>
-                  <TouchableOpacity style={styles.modalCancel} onPress={() => setShowPriceModal(false)}><Text style={{color: '#666', fontWeight: '700'}}>取消</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.modalCancel} onPress={() => setShowPriceModal(false)}><Text style={{color: '#8D6E63', fontWeight: '900'}}>取消</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.modalConfirm} onPress={executeBatchConsign} disabled={processing}>
                      {processing ? <ActivityIndicator color="#FFF" /> : <Text style={{color: '#FFF', fontWeight: '900'}}>确认上架</Text>}
                   </TouchableOpacity>
@@ -188,41 +198,41 @@ export default function MyCollectionListScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6F8' },
-  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#F0F0F0' },
+  container: { flex: 1, backgroundColor: '#FDF8F0' },
+  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FDF8F0', borderBottomWidth: 1, borderColor: '#EAE0D5' },
   navBtn: { width: 60, justifyContent: 'center' },
-  iconText: { fontSize: 16, color: '#111', fontWeight: '700' },
-  navTitle: { fontSize: 17, fontWeight: '900', color: '#111' },
+  iconText: { fontSize: 22, color: '#4E342E', fontWeight: '900' },
+  navTitle: { fontSize: 17, fontWeight: '900', color: '#4E342E' },
   navBtnRight: { width: 60, height: 44, justifyContent: 'center', alignItems: 'flex-end' },
-  batchText: { fontSize: 14, color: '#0066FF', fontWeight: '800' },
+  batchText: { fontSize: 14, color: '#D49A36', fontWeight: '900' },
   
   listContainer: { padding: 16, paddingBottom: 120 },
   rowWrapper: { justifyContent: 'space-between', marginBottom: 16 },
   
-  card: { width: CARD_WIDTH, backgroundColor: '#FFF', borderRadius: 12, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2, padding: 8, borderWidth: 2, borderColor: 'transparent' },
-  cardSelected: { borderColor: '#0066FF', backgroundColor: '#F0F6FF' },
+  card: { width: CARD_WIDTH, backgroundColor: '#FFF', borderRadius: 12, overflow: 'hidden', shadowColor: '#4E342E', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2, padding: 8, borderWidth: 2, borderColor: '#EAE0D5' },
+  cardSelected: { borderColor: '#D49A36', backgroundColor: '#FFFDF5' },
   badge: { position: 'absolute', top: 12, left: 12, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, zIndex: 10 },
   badgeText: { color: '#FFF', fontSize: 10, fontWeight: '900' },
-  checkbox: { position: 'absolute', top: 12, right: 12, width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#CCC', backgroundColor: '#FFF', zIndex: 10, justifyContent: 'center', alignItems: 'center' },
-  checkboxActive: { backgroundColor: '#0066FF', borderColor: '#0066FF' },
+  checkbox: { position: 'absolute', top: 12, right: 12, width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#EAE0D5', backgroundColor: '#FDF8F0', zIndex: 10, justifyContent: 'center', alignItems: 'center' },
+  checkboxActive: { backgroundColor: '#D49A36', borderColor: '#D49A36' },
   
-  imgContainer: { width: '100%', aspectRatio: 1, backgroundColor: '#F5F5F5', borderRadius: 8, overflow: 'hidden', marginBottom: 8 },
+  imgContainer: { width: '100%', aspectRatio: 1, backgroundColor: '#FDF8F0', borderRadius: 8, overflow: 'hidden', marginBottom: 8, borderWidth: 1, borderColor: '#EAE0D5' },
   img: { width: '100%', height: '100%', resizeMode: 'cover' },
   info: { alignItems: 'center', paddingBottom: 4 },
-  title: { fontSize: 14, fontWeight: '900', color: '#111', marginBottom: 4 },
-  serial: { fontSize: 12, color: '#888', fontWeight: '600', fontFamily: 'monospace' },
+  title: { fontSize: 14, fontWeight: '900', color: '#4E342E', marginBottom: 4 },
+  serial: { fontSize: 12, color: '#8D6E63', fontWeight: '700', fontFamily: 'monospace' },
 
-  batchBottomBar: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', shadowColor: '#000', shadowOffset: {width: 0, height: -5}, shadowOpacity: 0.05, elevation: 10 },
-  batchTip: { fontSize: 12, color: '#FF3B30', fontWeight: '800' },
-  batchSubmitBtn: { backgroundColor: '#0066FF', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 20 },
+  batchBottomBar: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', shadowColor: '#4E342E', shadowOffset: {width: 0, height: -5}, shadowOpacity: 0.05, elevation: 10, borderTopWidth: 1, borderColor: '#EAE0D5' },
+  batchTip: { fontSize: 12, color: '#FF3B30', fontWeight: '900' },
+  batchSubmitBtn: { backgroundColor: '#D49A36', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 20 },
   batchSubmitText: { color: '#FFF', fontSize: 15, fontWeight: '900' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  priceModalBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 20, padding: 24, alignItems: 'center' },
-  modalTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 8 },
-  modalSub: { fontSize: 13, color: '#888', marginBottom: 20 },
-  modalInput: { width: '100%', backgroundColor: '#F5F5F5', padding: 16, borderRadius: 12, fontSize: 20, fontWeight: '900', color: '#FF3B30', textAlign: 'center', marginBottom: 24 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.7)', justifyContent: 'center', alignItems: 'center' },
+  priceModalBox: { width: '85%', backgroundColor: '#FFF', borderRadius: 20, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
+  modalTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E', marginBottom: 8 },
+  modalSub: { fontSize: 13, color: '#8D6E63', marginBottom: 20, fontWeight: '700' },
+  modalInput: { width: '100%', backgroundColor: '#FDF8F0', padding: 16, borderRadius: 12, fontSize: 20, fontWeight: '900', color: '#FF3B30', textAlign: 'center', marginBottom: 24, borderWidth: 1, borderColor: '#EAE0D5' },
   modalBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  modalCancel: { flex: 0.48, paddingVertical: 14, borderRadius: 12, backgroundColor: '#F5F5F5', alignItems: 'center' },
-  modalConfirm: { flex: 0.48, paddingVertical: 14, borderRadius: 12, backgroundColor: '#0066FF', alignItems: 'center' }
+  modalCancel: { flex: 0.48, paddingVertical: 14, borderRadius: 12, backgroundColor: '#FDF8F0', alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
+  modalConfirm: { flex: 0.48, paddingVertical: 14, borderRadius: 12, backgroundColor: '#D49A36', alignItems: 'center' }
 });
