@@ -5,15 +5,38 @@ import { ActivityIndicator, Alert, FlatList, Image, Modal, StyleSheet, Text, Tou
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../supabase';
 
-// 🌟 设定超级管理员的 ID，用于扣除他的卡！
 const SUPER_ADMIN_ID = '你的超级管理员UUID_在这里替换'; 
+
+// 🌟 FallbackImage 入驻公告，彻底解决配图裂开问题！
+const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
+  const [hasError, setHasError] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  return (
+    <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' }]}>
+      {loading && !hasError && <ActivityIndicator color="#D49A36" style={{ position: 'absolute' }} />}
+      {!hasError ? (
+        <Image
+          source={{ uri: uri || 'invalid_url' }}
+          style={[style, { position: 'absolute', width: '100%', height: '100%' }]}
+          onLoadEnd={() => setLoading(false)}
+          onError={() => { setHasError(true); setLoading(false); }}
+        />
+      ) : (
+        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+           <Text style={{ fontSize: 32 }}>📜</Text>
+           <Text style={{ fontSize: 12, color: '#8D6E63', marginTop: 8, fontWeight: '800' }}>皇家配图丢失</Text>
+        </View>
+      )}
+    </View>
+  );
+};
 
 export default function CommunityScreen() {
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [likedPosts, setLikedPosts] = useState<Record<string, boolean>>({});
   
-  // 高级弹窗
   const [burnModal, setBurnModal] = useState<{visible: boolean, msg: string} | null>(null);
 
   useFocusEffect(useCallback(() => {
@@ -31,37 +54,34 @@ export default function CommunityScreen() {
   const fetchAnnouncements = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('announcements')
-        .select('*'); 
+      const { data, error } = await supabase.from('announcements').select('*'); 
         
       if (error) throw error;
 
-      // 🌟 核心：前端数据清洗器！重塑身份、头像、置顶规则与绝对优先级权重
       let formattedData = (data || []).map(item => {
          let displayAuthor = item.author_name || '王国大喇叭';
          let icon = '👑';
-         let bgColor = '#111';
+         let bgColor = '#4E342E';
          let isFeatured = item.is_featured;
-         let priorityWeight = 3; // 默认最低优先级：普通国王公告
+         let priorityWeight = 3; 
 
+         // 🌟 剔除了原先刺眼的蓝色，换成尊贵的琥珀金/深咖啡配色
          if (item.author_name === '创世中枢' || item.author_name === '超级中枢') {
              displayAuthor = '超级播报'; 
              icon = '📢'; 
-             bgColor = '#0066FF'; 
-             isFeatured = false; // 强行扒掉数据库可能误标的置顶
-             priorityWeight = 2; // 第二优先级：系统播报
+             bgColor = '#D49A36'; 
+             isFeatured = false; 
+             priorityWeight = 2; 
          } else if (item.author_name === '土豆清道夫') {
              icon = '🚨';
-             bgColor = '#FF3B30';
-             isFeatured = false; // 强行扒掉置顶
-             priorityWeight = 2; // 第二优先级：清道夫播报
+             bgColor = '#8D230F'; // 深血红色
+             isFeatured = false; 
+             priorityWeight = 2; 
          } else if (item.author_name === '土豆国王') {
              icon = '🥔';
              bgColor = '#D49A36';
-             // 只有国王可以被置顶，一旦置顶，权重最高
              if (item.is_featured) {
-                 priorityWeight = 1; // 绝对霸主优先级！
+                 priorityWeight = 1; 
              }
          }
 
@@ -71,17 +91,14 @@ export default function CommunityScreen() {
              avatar_icon: icon, 
              avatar_bg: bgColor, 
              is_featured: isFeatured,
-             priority_weight: priorityWeight // 注入计算好的权重
+             priority_weight: priorityWeight
          };
       });
 
-      // 🌟 史诗级三段式排序算法
       formattedData.sort((a, b) => {
-         // 1. 优先比拼权重（数字越小越靠前：1 > 2 > 3）
          if (a.priority_weight !== b.priority_weight) {
              return a.priority_weight - b.priority_weight;
          }
-         // 2. 如果权重相同（比如同为清道夫和超级播报，或同为普通国王），则按时间倒序（最新的在上面）
          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
 
@@ -89,7 +106,6 @@ export default function CommunityScreen() {
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
-  // 🌟 核心：点赞触发全网烧卡神迹
   const handleLike = async (post: any) => {
     if (likedPosts[post.id]) {
        return Alert.alert('提示', '您已经为该旨意贡献过信仰了，不可重复点赞！');
@@ -147,7 +163,7 @@ export default function CommunityScreen() {
               </View>
               <View>
                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                    <Text style={[styles.authorName, item.display_author === '土豆清道夫' && {color: '#FF3B30'}, item.display_author === '超级播报' && {color: '#0066FF'}]}>
+                    <Text style={[styles.authorName, item.display_author === '土豆清道夫' && {color: '#8D230F'}, item.display_author === '超级播报' && {color: '#D49A36'}]}>
                        {item.display_author}
                     </Text>
                     {item.is_featured && <View style={styles.featuredTag}><Text style={styles.featuredTagText}>置顶</Text></View>}
@@ -161,10 +177,9 @@ export default function CommunityScreen() {
         <Text style={styles.postContent}>{item.content}</Text>
         
         {item.image_url && (
-           <Image source={{ uri: item.image_url }} style={styles.postImg} />
+           <FallbackImage uri={item.image_url} style={styles.postImg} />
         )}
 
-        {/* 🌟 只有正常帖子才显示点赞和评论，系统播报直接隐藏 */}
         {!isSystemBroadcast && (
           <View style={styles.cardFooter}>
              <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(item)}>
@@ -193,7 +208,7 @@ export default function CommunityScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#0066FF" style={{marginTop: 50}} />
+        <ActivityIndicator size="large" color="#D49A36" style={{marginTop: 50}} />
       ) : (
         <FlatList
           data={announcements}
@@ -201,11 +216,11 @@ export default function CommunityScreen() {
           keyExtractor={item => item.id}
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<Text style={{textAlign: 'center', color: '#999', marginTop: 40}}>暂无任何王国旨意发布</Text>}
+          ListEmptyComponent={<Text style={{textAlign: 'center', color: '#8D6E63', marginTop: 40}}>暂无任何王国旨意发布</Text>}
         />
       )}
 
-      {/* 🌟 全网烧卡神迹震动弹窗 */}
+      {/* 🌟 复古神迹降临弹窗 */}
       <Modal visible={!!burnModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
@@ -223,34 +238,34 @@ export default function CommunityScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6F8' },
-  header: { padding: 16, backgroundColor: '#FFF', alignItems: 'center', borderBottomWidth: 1, borderColor: '#F0F0F0' },
-  headerTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
+  container: { flex: 1, backgroundColor: '#FDF8F0' },
+  header: { padding: 16, backgroundColor: '#FDF8F0', alignItems: 'center', borderBottomWidth: 1, borderColor: '#EAE0D5' },
+  headerTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E' },
 
-  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
-  cardCleaner: { borderWidth: 1, borderColor: '#FFB3B0', backgroundColor: '#FFF5F5' },
-  cardBroadcast: { borderWidth: 1, borderColor: '#CCE0FF', backgroundColor: '#F0F6FF' }, // 🌟 超级播报专属蓝色皮肤
+  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, borderWidth: 1, borderColor: '#EAE0D5' },
+  cardCleaner: { borderWidth: 2, borderColor: '#8D230F', backgroundColor: '#FFF5F5' }, // 🌟 换成沉稳的深红
+  cardBroadcast: { borderWidth: 2, borderColor: '#D49A36', backgroundColor: '#FDF8F0' }, // 🌟 换成尊贵的琥珀金
   
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   avatarBox: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  authorName: { fontSize: 15, fontWeight: '900', color: '#111', marginRight: 8 },
-  featuredTag: { backgroundColor: '#FFD700', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  featuredTagText: { fontSize: 10, fontWeight: '900', color: '#111' },
-  timeText: { fontSize: 11, color: '#999', marginTop: 2 },
+  authorName: { fontSize: 15, fontWeight: '900', color: '#4E342E', marginRight: 8 },
+  featuredTag: { backgroundColor: '#D49A36', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  featuredTagText: { fontSize: 10, fontWeight: '900', color: '#FFF' },
+  timeText: { fontSize: 11, color: '#8D6E63', marginTop: 2, fontWeight: '600' },
 
-  postTitle: { fontSize: 16, fontWeight: '900', color: '#111', marginBottom: 8 },
-  postContent: { fontSize: 14, color: '#444', lineHeight: 22, marginBottom: 12 },
-  postImg: { width: '100%', height: 180, borderRadius: 12, marginBottom: 16, backgroundColor: '#F0F0F0' },
+  postTitle: { fontSize: 16, fontWeight: '900', color: '#4E342E', marginBottom: 8 },
+  postContent: { fontSize: 14, color: '#4E342E', lineHeight: 22, marginBottom: 12, fontWeight: '600' },
+  postImg: { width: '100%', height: 180, borderRadius: 12, marginBottom: 16, backgroundColor: '#FDF8F0', borderWidth: 1, borderColor: '#EAE0D5' },
 
-  cardFooter: { flexDirection: 'row', borderTopWidth: 1, borderColor: '#F5F5F5', paddingTop: 12 },
+  cardFooter: { flexDirection: 'row', borderTopWidth: 1, borderColor: '#F5EFE6', paddingTop: 12 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', marginRight: 24 },
   actionIcon: { fontSize: 16, marginRight: 6 },
-  actionText: { fontSize: 13, color: '#666', fontWeight: '600' },
+  actionText: { fontSize: 13, color: '#8D6E63', fontWeight: '800' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.8)', justifyContent: 'center', alignItems: 'center' },
   confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 2, borderColor: '#FF3B30' },
   confirmTitle: { fontSize: 22, fontWeight: '900', color: '#FF3B30', marginBottom: 16 },
-  confirmDesc: { fontSize: 15, color: '#111', textAlign: 'center', lineHeight: 24, marginBottom: 24, fontWeight: '800' },
+  confirmDesc: { fontSize: 15, color: '#4E342E', textAlign: 'center', lineHeight: 24, marginBottom: 24, fontWeight: '800' },
   confirmBtn: { width: '100%', paddingVertical: 14, borderRadius: 16, backgroundColor: '#FF3B30', alignItems: 'center' },
   confirmBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 2 }
 });
