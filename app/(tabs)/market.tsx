@@ -9,6 +9,34 @@ const CARD_WIDTH = (width - 48) / 2;
 
 type SortOption = 'latest' | 'price_asc' | 'price_desc';
 
+// 🌟 终极防御型图片组件（自动处理裂图，无缝降级，不打断心流）
+const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
+  const [hasError, setHasError] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  return (
+    <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5EFE6' }]}>
+      {loading && !hasError && <ActivityIndicator color="#D49A36" style={{ position: 'absolute' }} />}
+      {!hasError ? (
+        <Image
+          source={{ uri: uri || 'invalid_url' }}
+          style={[style, { position: 'absolute', width: '100%', height: '100%' }]}
+          onLoadEnd={() => setLoading(false)}
+          onError={() => {
+            setHasError(true);
+            setLoading(false);
+          }}
+        />
+      ) : (
+        // 🌟 优雅降级：图裂了自动变成这颗尊贵的土豆占位符
+        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+           <Text style={{ fontSize: 32 }}>🥔</Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
 export default function MarketScreen() {
   const router = useRouter();
   
@@ -33,9 +61,7 @@ export default function MarketScreen() {
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
-  // 🌟 核心引擎 1：超级复合过滤 (分类 + 搜索)
   let processedData = collections.filter(c => {
-      // 1. 分类过滤
       let matchCat = true;
       if (activeCategory !== 'all') {
           if (c.category_ids && Array.isArray(c.category_ids)) {
@@ -44,33 +70,22 @@ export default function MarketScreen() {
               matchCat = c.category_id === activeCategory;
           }
       }
-      
-      // 2. 搜索过滤
       let matchSearch = true;
       if (searchQuery.trim() !== '') {
           matchSearch = c.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
       }
-
       return matchCat && matchSearch;
   });
 
-  // 🌟 核心引擎 2：绝对精准的排序算法
   processedData.sort((a, b) => {
-      // 保证有现货的永远排在没现货(已退市)的前面
       const aHasStock = (a.on_sale_count || 0) > 0;
       const bHasStock = (b.on_sale_count || 0) > 0;
       
       if (aHasStock && !bHasStock) return -1;
       if (!aHasStock && bHasStock) return 1;
 
-      // 如果库存状态一样，再根据用户选择的规则排序
-      if (activeSort === 'price_asc') {
-          return (a.floor_price_cache || 0) - (b.floor_price_cache || 0);
-      }
-      if (activeSort === 'price_desc') {
-          return (b.floor_price_cache || 0) - (a.floor_price_cache || 0);
-      }
-      // 默认 'latest' 按创建时间倒序
+      if (activeSort === 'price_asc') return (a.floor_price_cache || 0) - (b.floor_price_cache || 0);
+      if (activeSort === 'price_desc') return (b.floor_price_cache || 0) - (a.floor_price_cache || 0);
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
@@ -79,9 +94,11 @@ export default function MarketScreen() {
     const displayPrice = isDelisted ? (item.max_consign_price || 0) : (item.floor_price_cache || 0);
 
     return (
-      <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => router.push({ pathname: '/collection', params: { id: item.id } })}>
+      <TouchableOpacity style={styles.card} activeOpacity={0.9} onPress={() => router.push({ pathname: '/collection', params: { id: item.id } })}>
         <View style={styles.imageContainer}>
-          <Image source={{ uri: item.image_url || 'https://via.placeholder.com/150' }} style={styles.image} />
+          {/* 🌟 引入防御型图片组件 */}
+          <FallbackImage uri={item.image_url} style={styles.image} />
+          
           {isDelisted && (
             <View style={styles.delistedOverlay}>
                <View style={styles.delistedStamp}><Text style={styles.delistedText}>已退市</Text></View>
@@ -98,7 +115,7 @@ export default function MarketScreen() {
           </View>
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>{isDelisted ? '求购参考价' : '地板价'}</Text>
-            <Text style={[styles.price, isDelisted && {color: '#888'}]}>¥{displayPrice.toFixed(2)}</Text>
+            <Text style={[styles.price, isDelisted && {color: '#8D6E63'}]}>¥{displayPrice.toFixed(2)}</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -122,7 +139,6 @@ export default function MarketScreen() {
         </ScrollView>
       </View>
       
-      {/* 🌟 改造后的过滤栏：左侧排序，右侧搜索 */}
       <View style={styles.filterBar}>
          <View style={styles.sortSection}>
              <TouchableOpacity onPress={() => setActiveSort('latest')}>
@@ -130,7 +146,7 @@ export default function MarketScreen() {
              </TouchableOpacity>
              <TouchableOpacity style={styles.sortPriceBtn} onPress={() => setActiveSort(activeSort === 'price_asc' ? 'price_desc' : 'price_asc')}>
                 <Text style={[styles.sortText, (activeSort === 'price_asc' || activeSort === 'price_desc') && styles.sortTextActive]}>
-                   价格排序 {activeSort === 'price_asc' ? '↑' : (activeSort === 'price_desc' ? '↓' : '')}
+                    价格排序 {activeSort === 'price_asc' ? '↑' : (activeSort === 'price_desc' ? '↓' : '')}
                 </Text>
              </TouchableOpacity>
          </View>
@@ -139,7 +155,7 @@ export default function MarketScreen() {
             <TextInput 
                style={styles.searchInput} 
                placeholder="🔍 搜索藏品..." 
-               placeholderTextColor="#999"
+               placeholderTextColor="#A1887F"
                value={searchQuery}
                onChangeText={setSearchQuery}
             />
@@ -157,9 +173,9 @@ export default function MarketScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }} 
           columnWrapperStyle={{ justifyContent: 'space-between' }} 
           ListEmptyComponent={
-             <View style={{alignItems:'center', marginTop:50}}>
-                <Text style={{fontSize: 40, marginBottom: 10}}>🔍</Text>
-                <Text style={{color:'#999'}}>没有找到相关藏品</Text>
+             <View style={{alignItems:'center', marginTop: 50}}>
+                <Text style={{fontSize: 40, marginBottom: 10}}>🪹</Text>
+                <Text style={{color:'#8D6E63', fontWeight: '600'}}>集市暂无此类藏品</Text>
              </View>
           }
         />
@@ -169,38 +185,40 @@ export default function MarketScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9F6F0' },
-  header: { padding: 16, backgroundColor: '#FFF', alignItems: 'center', borderBottomWidth: 1, borderColor: '#F0F0F0' },
-  headerTitle: { fontSize: 18, fontWeight: '900', color: '#4A2E1B' },
+  // 🌟 统一复古米白
+  container: { flex: 1, backgroundColor: '#FDF8F0' },
+  header: { padding: 16, backgroundColor: '#FDF8F0', alignItems: 'center', borderBottomWidth: 1, borderColor: '#EAE0D5' },
+  headerTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E' },
   
-  categoryWrapper: { backgroundColor: '#FFF', paddingVertical: 10 },
+  categoryWrapper: { backgroundColor: '#FDF8F0', paddingVertical: 10 },
   categoryScroll: { paddingHorizontal: 16 },
-  catTab: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, marginRight: 8, backgroundColor: '#F5F5F5' },
-  catTabActive: { backgroundColor: '#111' },
-  catText: { fontSize: 13, color: '#666', fontWeight: '600' },
-  catTextActive: { color: '#FFD700', fontWeight: '900' },
+  catTab: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, marginRight: 8, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#EAE0D5' },
+  catTabActive: { backgroundColor: '#D49A36', borderColor: '#D49A36' },
+  catText: { fontSize: 13, color: '#8D6E63', fontWeight: '700' },
+  catTextActive: { color: '#FFF', fontWeight: '900' },
 
-  // 新版过滤栏
-  filterBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFF', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderColor: '#F0F0F0' },
+  filterBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FDF8F0', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderColor: '#EAE0D5' },
   sortSection: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  sortText: { fontSize: 13, color: '#888', marginRight: 20, fontWeight: '600' },
-  sortTextActive: { color: '#FF3B30', fontWeight: '900' },
+  sortText: { fontSize: 13, color: '#8D6E63', marginRight: 20, fontWeight: '700' },
+  sortTextActive: { color: '#D49A36', fontWeight: '900' }, // 🌟 排序高亮为琥珀金
   sortPriceBtn: { flexDirection: 'row', alignItems: 'center' },
   
   searchSection: { width: 120 },
-  searchInput: { backgroundColor: '#F5F5F5', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, fontSize: 12, color: '#111' },
+  searchInput: { backgroundColor: '#FFF', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, fontSize: 12, color: '#4E342E', borderWidth: 1, borderColor: '#EAE0D5' },
 
-  card: { width: CARD_WIDTH, backgroundColor: '#FFF', borderRadius: 12, marginBottom: 16, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
-  imageContainer: { width: '100%', aspectRatio: 1, backgroundColor: '#F0F0F0' },
+  card: { width: CARD_WIDTH, backgroundColor: '#FFF', borderRadius: 16, marginBottom: 16, overflow: 'hidden', shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, borderWidth: 1, borderColor: '#F0E6D2' },
+  imageContainer: { width: '100%', aspectRatio: 1, backgroundColor: '#FDF8F0', borderBottomWidth: 1, borderColor: '#F0E6D2' },
   image: { width: '100%', height: '100%', resizeMode: 'cover' },
-  delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  delistedStamp: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: '#FFF', backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', transform: [{rotate: '-15deg'}] },
-  delistedText: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 2 },
+  
+  delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(78, 52, 46, 0.6)', justifyContent: 'center', alignItems: 'center' },
+  delistedStamp: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: '#D49A36', backgroundColor: 'rgba(44, 30, 22, 0.8)', justifyContent: 'center', alignItems: 'center', transform: [{rotate: '-15deg'}] },
+  delistedText: { color: '#D49A36', fontSize: 15, fontWeight: '900', letterSpacing: 2 },
+  
   info: { padding: 12 },
-  name: { fontSize: 14, fontWeight: '800', color: '#111', marginBottom: 6 },
+  name: { fontSize: 14, fontWeight: '900', color: '#4E342E', marginBottom: 6 },
   statsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  supplyText: { fontSize: 10, color: '#888', marginRight: 4 },
-  priceRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', borderTopWidth: 1, borderColor: '#F5F5F5', paddingTop: 8 },
-  priceLabel: { fontSize: 11, color: '#666' },
-  price: { fontSize: 16, fontWeight: '900', color: '#FF3B30' }
+  supplyText: { fontSize: 10, color: '#8D6E63', marginRight: 4, fontWeight: '600' },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', borderTopWidth: 1, borderColor: '#EAE0D5', paddingTop: 8 },
+  priceLabel: { fontSize: 11, color: '#A1887F', fontWeight: '700' },
+  price: { fontSize: 16, fontWeight: '900', color: '#D49A36' } // 🌟 价格也换成了琥珀金
 });
