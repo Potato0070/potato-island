@@ -78,8 +78,8 @@ export default function MessagesScreen() {
   const renderChatItem = ({ item }: { item: any }) => {
     return (
       <TouchableOpacity style={styles.chatRow} activeOpacity={0.7} onPress={() => {
-          // 跳转到具体聊天页面，预留参数
-          // router.push({ pathname: '/chat', params: { id: item.id, name: item.name } })
+          // 🚀 激活群聊传送门！
+          router.push({ pathname: '/chat', params: { id: item.id, name: item.name } } as any)
       }}>
          {/* 头像区 */}
          <View style={styles.avatarContainer}>
