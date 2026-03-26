@@ -1,10 +1,20 @@
+import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, Image, ImageBackground, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Dimensions, Image, ImageBackground, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../supabase';
 
 const { width } = Dimensions.get('window');
+
+// 💰 千分位金钱格式化工具
+const formatMoney = (num: number | string) => {
+  const n = Number(num);
+  if (isNaN(n)) return '0.00';
+  let parts = n.toFixed(2).split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return parts.join(".");
+};
 
 // 🌟 终极防御型图片组件（防裂图神药）
 const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
@@ -30,7 +40,32 @@ const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
   );
 };
 
-// 🌟 重新调配了 8 宫格的背景色，全部融入复古暖色系
+// 🌟 宫格缩放动效组件
+const AnimatedGridItem = ({ item, onPress }: { item: any, onPress: () => void }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, { toValue: 0.9, useNativeDriver: true }).start();
+  };
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, { toValue: 1, friction: 3, tension: 40, useNativeDriver: true }).start();
+  };
+
+  return (
+    <TouchableWithoutFeedback onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onPress();
+    }}>
+      <Animated.View style={[styles.gridItem, { transform: [{ scale: scaleAnim }] }]}>
+        <View style={[styles.iconWrapper, { backgroundColor: item.bgColor }]}>
+           <Text style={styles.iconEmoji}>{item.icon}</Text>
+        </View>
+        <Text style={styles.gridText}>{item.name}</Text>
+      </Animated.View>
+    </TouchableWithoutFeedback>
+  );
+};
+
 const MENU_ITEMS = [
   { name: '基因合成', icon: '🧬', route: '/synthesis-list', bgColor: '#F5EFE6' }, 
   { name: '领主权益', icon: '👑', route: '/vip-privilege', bgColor: '#FDF8F0' },
@@ -51,6 +86,7 @@ export default function HomeScreen() {
   const [launchEvent, setLaunchEvent] = useState<any>(null);
   const [timeLeftStr, setTimeLeftStr] = useState('计算中...');
   const [isUrgent, setIsUrgent] = useState(false);
+  const [initLoading, setInitLoading] = useState(true);
 
   const fetchHomeData = async () => {
     try {
@@ -63,7 +99,7 @@ export default function HomeScreen() {
       const { data: launchData } = await supabase.from('launch_events').select('*, collection:collection_id(name, image_url)').eq('is_active', true).order('start_time', { ascending: true }).limit(1).single();
       if (launchData) setLaunchEvent(launchData); else setLaunchEvent(null);
 
-    } catch (e) { console.error(e); } finally { setRefreshing(false); }
+    } catch (e) { console.error(e); } finally { setRefreshing(false); setInitLoading(false); }
   };
 
   useFocusEffect(useCallback(() => { fetchHomeData(); }, []));
@@ -90,54 +126,60 @@ export default function HomeScreen() {
     return () => clearInterval(timer);
   }, [launchEvent]);
 
+  const onRefresh = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setRefreshing(true);
+    fetchHomeData();
+  }, []);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
          <View style={styles.logoBox}>
             <Text style={styles.logoText}>🥔 土豆岛</Text>
          </View>
-         <TouchableOpacity style={styles.searchBox} onPress={() => router.push('/(tabs)/market')}>
+         <TouchableOpacity style={styles.searchBox} activeOpacity={0.8} onPress={() => { Haptics.selectionAsync(); router.push('/(tabs)/market'); }}>
             <Text style={{fontSize: 14, marginRight: 6}}>🔍</Text>
-            <Text style={{color: '#8D6E63', fontSize: 13, fontWeight: '700'}}>搜索基因藏品或编号...</Text>
+            <Text style={{color: '#A1887F', fontSize: 13, fontWeight: '700'}}>搜索基因藏品或编号...</Text>
          </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {setRefreshing(true); fetchHomeData();}} tintColor="#D49A36" />}>
+      <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#D49A36" />}>
         
-        <View style={styles.gridContainer}>
-          {MENU_ITEMS.map((item, index) => (
-            <TouchableOpacity key={index} style={styles.gridItem} activeOpacity={0.7} onPress={() => item.route ? router.push(item.route as any) : null}>
-              <View style={[styles.iconWrapper, { backgroundColor: item.bgColor }]}>
-                 <Text style={styles.iconEmoji}>{item.icon}</Text>
-              </View>
-              <Text style={styles.gridText}>{item.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <TouchableOpacity style={styles.marqueeBox} activeOpacity={0.8} onPress={() => router.push('/(tabs)/community')}>
-          <View style={styles.marqueeTag}><Text style={styles.marqueeTagText}>📢 播报</Text></View>
+        {/* 🌟 跑马灯播报栏 (提到了顶部导航下方) */}
+        <TouchableOpacity style={styles.marqueeBox} activeOpacity={0.8} onPress={() => { Haptics.selectionAsync(); router.push('/(tabs)/community'); }}>
+          <View style={styles.marqueeTag}><Text style={styles.marqueeTagText}>🔥 播报</Text></View>
           <Text style={styles.marqueeText} numberOfLines={1}>
-            {latestAnnounce?.is_featured ? '🔥 ' : ''}{latestAnnounce?.title || '土豆宇宙正在孕育新生命...'}
+            {latestAnnounce?.is_featured ? '【精华】' : ''}{latestAnnounce?.title || '土豆宇宙正在孕育新生命...'}
           </Text>
           <Text style={styles.marqueeArrow}>〉</Text>
         </TouchableOpacity>
 
-        {launchEvent && (
+        {/* 🌟 8 宫格重构：完美的两行四列间距 + 点击动效 */}
+        <View style={styles.gridContainer}>
+          {MENU_ITEMS.map((item, index) => (
+            <AnimatedGridItem key={index} item={item} onPress={() => item.route ? router.push(item.route as any) : null} />
+          ))}
+        </View>
+
+        {/* 创世发新 */}
+        {initLoading ? (
+           <View style={[styles.sectionContainer, {opacity: 0.5}]}><View style={{height: 160, backgroundColor: '#EAE0D5', borderRadius: 16}} /></View>
+        ) : launchEvent && (
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>精品推荐</Text>
-            <TouchableOpacity style={styles.launchCard} activeOpacity={0.9} onPress={() => { if(launchEvent.id) router.push({ pathname: '/launch-detail', params: { id: launchEvent.id } }) }}>
-              <ImageBackground source={{ uri: launchEvent.collection?.image_url }} style={styles.launchBg} blurRadius={10}>
+            <TouchableOpacity style={styles.launchCard} activeOpacity={0.9} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); if(launchEvent.id) router.push({ pathname: '/launch-detail', params: { id: launchEvent.id } }) }}>
+              <ImageBackground source={{ uri: launchEvent.collection?.image_url }} style={styles.launchBg} blurRadius={15}>
                 <View style={styles.launchOverlay}>
-                  {/* 🌟 使用 FallbackImage 替换原生 Image */}
                   <FallbackImage uri={launchEvent.collection?.image_url} style={styles.launchMainImg} />
                   <View style={styles.launchInfo}>
                     <Text style={styles.launchTitle} numberOfLines={1}>{launchEvent.collection?.name}</Text>
                     <View style={styles.launchPriceRow}>
                        <Text style={styles.launchPriceLabel}>首发价</Text>
-                       <Text style={styles.launchPrice}>¥{launchEvent.price.toFixed(2)}</Text>
+                       {/* 🌟 千分位金钱 */}
+                       <Text style={styles.launchPrice}>¥{formatMoney(launchEvent.price)}</Text>
                     </View>
-                    <Text style={styles.launchProgressText}>限量 {launchEvent.total_supply} 份</Text>
+                    <Text style={styles.launchProgressText}>限量发售 {formatMoney(launchEvent.total_supply).replace('.00', '')} 份</Text>
                   </View>
                 </View>
                 <View style={[styles.timerBar, isUrgent ? styles.timerBarUrgent : styles.timerBarNormal]}>
@@ -152,14 +194,24 @@ export default function HomeScreen() {
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>热门藏品</Text>
           <View style={styles.hotList}>
-            {hotCollections.map(col => {
+            {initLoading ? (
+               // 🌟 骨架屏占位
+               Array.from({length: 4}).map((_, i) => (
+                 <View key={i} style={[styles.hotCard, { opacity: 0.5 }]}>
+                    <View style={[styles.hotImageContainer, {backgroundColor: '#EAE0D5'}]} />
+                    <View style={{padding: 12}}>
+                       <View style={{height: 14, backgroundColor: '#EAE0D5', borderRadius: 4, marginBottom: 8, width: '80%'}} />
+                       <View style={{height: 10, backgroundColor: '#EAE0D5', borderRadius: 4, width: '50%'}} />
+                    </View>
+                 </View>
+               ))
+            ) : hotCollections.map(col => {
               const isDelisted = col.on_sale_count === 0 || col.on_sale_count == null;
               const displayPrice = isDelisted ? (col.max_consign_price || 0) : (col.floor_price_cache || 0);
 
               return (
-                <TouchableOpacity key={col.id} style={styles.hotCard} activeOpacity={0.8} onPress={() => router.push({ pathname: '/collection', params: { id: col.id } })}>
+                <TouchableOpacity key={col.id} style={styles.hotCard} activeOpacity={0.8} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push({ pathname: '/collection', params: { id: col.id } }); }}>
                   <View style={styles.hotImageContainer}>
-                    {/* 🌟 核心：引入 FallbackImage，彻底解决热门藏品图片裂开 */}
                     <FallbackImage uri={col.image_url} style={styles.hotImage} />
                     {isDelisted && (
                       <View style={styles.delistedOverlay}>
@@ -172,14 +224,15 @@ export default function HomeScreen() {
                   <View style={styles.hotInfo}>
                     <Text style={styles.hotName} numberOfLines={1}>{col.name}</Text>
                     <View style={styles.statsRow}>
-                      <Text style={styles.supplyText}>在售 {col.on_sale_count || 0}</Text>
+                      <Text style={styles.supplyText}>在售 {formatMoney(col.on_sale_count || 0).replace('.00', '')}</Text>
                       <Text style={styles.supplyText}>|</Text>
-                      <Text style={styles.supplyText}>流通 {col.circulating_supply}</Text>
+                      <Text style={styles.supplyText}>流通 {formatMoney(col.circulating_supply).replace('.00', '')}</Text>
                     </View>
                     <View style={styles.hotBottom}>
                       <View>
-                         <Text style={{fontSize: 10, color: '#8D6E63', marginBottom: 2, fontWeight: '700'}}>{isDelisted ? '求购参考价' : '地板价'}</Text>
-                         <Text style={[styles.hotPrice, isDelisted && {color: '#A1887F'}]}>¥{displayPrice.toFixed(2)}</Text>
+                         <Text style={{fontSize: 10, color: '#8D6E63', marginBottom: 2, fontWeight: '700'}}>{isDelisted ? '求购参考价' : '全网地板价'}</Text>
+                         {/* 🌟 千分位金钱 */}
+                         <Text style={[styles.hotPrice, isDelisted && {color: '#A1887F'}]}>¥{formatMoney(displayPrice)}</Text>
                       </View>
                       <Text style={styles.likeIcon}>🤍</Text>
                     </View>
@@ -202,24 +255,24 @@ const styles = StyleSheet.create({
   logoText: { fontSize: 20, fontWeight: '900', color: '#4E342E' },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#EAE0D5' },
   
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 8, paddingTop: 20, paddingBottom: 10, backgroundColor: '#FDF8F0' },
+  marqueeBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', marginHorizontal: 16, marginTop: 12, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, shadowColor: '#4E342E', shadowOffset: {width:0, height:2}, shadowOpacity: 0.05, elevation: 1, borderWidth: 1, borderColor: '#F0E6D2' },
+  marqueeTag: { backgroundColor: '#FF3B30', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginRight: 8 },
+  marqueeTagText: { color: '#FFF', fontSize: 10, fontWeight: '900' },
+  marqueeText: { flex: 1, fontSize: 13, color: '#4E342E', fontWeight: '800' },
+  marqueeArrow: { fontSize: 14, color: '#A1887F', marginLeft: 8, fontWeight: '900' },
+
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 8, paddingTop: 20, paddingBottom: 10 },
   gridItem: { width: '25%', alignItems: 'center', marginBottom: 20 },
   iconWrapper: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 8, borderWidth: 1, borderColor: '#EAE0D5' },
   iconEmoji: { fontSize: 24 },
   gridText: { fontSize: 12, color: '#4E342E', fontWeight: '800' },
 
-  marqueeBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', marginHorizontal: 16, marginTop: 12, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, shadowColor: '#4E342E', shadowOffset: {width:0, height:2}, shadowOpacity: 0.05, elevation: 1, borderWidth: 1, borderColor: '#F0E6D2' },
-  marqueeTag: { backgroundColor: '#D49A36', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
-  marqueeTagText: { color: '#FFF', fontSize: 10, fontWeight: '900' },
-  marqueeText: { flex: 1, fontSize: 13, color: '#4E342E', fontWeight: '800' },
-  marqueeArrow: { fontSize: 14, color: '#A1887F', marginLeft: 8, fontWeight: '900' },
-
-  sectionContainer: { marginTop: 24, paddingHorizontal: 16 },
+  sectionContainer: { marginTop: 10, paddingHorizontal: 16 },
   sectionTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E', marginBottom: 16 },
 
   launchCard: { width: '100%', borderRadius: 16, overflow: 'hidden', shadowColor: '#4E342E', shadowOffset: {width:0, height:4}, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5, borderWidth: 1, borderColor: '#F0E6D2' },
   launchBg: { width: '100%', minHeight: 160, backgroundColor: '#FDF8F0' },
-  launchOverlay: { flexDirection: 'row', padding: 20, backgroundColor: 'rgba(78, 52, 46, 0.7)', flex: 1 }, // 褐金色半透明遮罩
+  launchOverlay: { flexDirection: 'row', padding: 20, backgroundColor: 'rgba(78, 52, 46, 0.7)', flex: 1 }, 
   launchMainImg: { width: 80, height: 80, borderRadius: 12, borderWidth: 2, borderColor: '#D49A36' },
   launchInfo: { flex: 1, marginLeft: 16, justifyContent: 'center' },
   launchTitle: { fontSize: 18, fontWeight: '900', color: '#FFF', marginBottom: 8 },
@@ -228,7 +281,7 @@ const styles = StyleSheet.create({
   launchPrice: { color: '#D49A36', fontSize: 20, fontWeight: '900' },
   launchProgressText: { color: '#EAE0D5', fontSize: 11, fontWeight: '600' },
   timerBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10 },
-  timerBarNormal: { backgroundColor: 'rgba(253, 248, 240, 0.95)' }, // 复古米白
+  timerBarNormal: { backgroundColor: 'rgba(253, 248, 240, 0.95)' }, 
   timerBarUrgent: { backgroundColor: '#FF3B30' },
   timerText: { fontSize: 14, fontWeight: '900', color: '#4E342E', fontFamily: 'monospace' },
   timerBtn: { fontSize: 12, fontWeight: '900', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, overflow: 'hidden' },
