@@ -1,5 +1,6 @@
+import { BlurView } from 'expo-blur'; // 🌟 引入官方毛玻璃
 import { Tabs } from 'expo-router';
-import { Platform, Text } from 'react-native';
+import { Platform, StyleSheet, Text } from 'react-native';
 
 export default function TabLayout() {
   return (
@@ -7,30 +8,33 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: '#D49A36', // 土豆岛专属金
-        tabBarInactiveTintColor: '#999',
+        tabBarInactiveTintColor: '#A1887F', // 颜色微调，更复古
+        // 🌟 核心：开启透明毛玻璃沉浸式体验
+        tabBarBackground: () => (
+          <BlurView tint="light" intensity={80} style={StyleSheet.absoluteFill} />
+        ),
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          position: 'absolute', // 🌟 绝对定位，彻底解决遮挡！
+          bottom: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: 'rgba(255, 255, 255, 0.6)', // 配合毛玻璃的半透明底色
           borderTopWidth: 1,
-          borderTopColor: '#F0F0F0',
-          // 🌟 核心调整：根据平台动态调整高度
+          borderTopColor: 'rgba(234, 224, 213, 0.5)',
           height: Platform.OS === 'ios' ? 88 : 70, 
-          // 🌟 增加底部安全边距，确保文字不落地
           paddingBottom: Platform.OS === 'ios' ? 30 : 12,
           paddingTop: 8,
-          // 🌟 阴影加强，让底部栏更有悬浮感，防止底部穿透
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
+          shadowColor: '#4E342E',
+          shadowOffset: { width: 0, height: -5 },
           shadowOpacity: 0.05,
-          shadowRadius: 10,
-          elevation: 5,
+          shadowRadius: 15,
+          elevation: 0, // 安卓端关掉默认黑边阴影，用透明层
         },
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '900', // 字体加粗一点更清晰
-          // 🌟 移除可能会导致裁切的 marginTop，改用绝对居中感
+          fontWeight: '900', 
           marginBottom: 0, 
         },
-        // 🌟 强制让图标和文字在垂直方向上有更好的分布
         tabBarIconStyle: {
           marginBottom: -2,
         }
