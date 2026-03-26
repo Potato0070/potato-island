@@ -40,7 +40,7 @@ export default function AdminPanelScreen() {
   const [showColPicker, setShowColPicker] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<'announce' | 'launch' | 'synTarget' | 'synReq' | 'mint' | 'airdropReq' | 'airdropTarget' | 'configSign' | 'configBlackhole' | null>(null);
   const [activeReqIndex, setActiveReqIndex] = useState<number | null>(null);
-  const [pickerSearchQuery, setPickerSearchQuery] = useState(''); // 🌟 选品弹窗秒搜状态
+  const [pickerSearchQuery, setPickerSearchQuery] = useState('');
 
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedDateOffset, setSelectedDateOffset] = useState(0); 
@@ -138,7 +138,7 @@ export default function AdminPanelScreen() {
       } catch (e) { console.error("Fetch Data Error: ", e); }
   };
 
-  // 🌟 核心引擎升级：精准拦截 bucket not found
+  // 🌟 核心引擎升级：完美解决 React Native 本地图片 fetch 的 "Network request failed" Bug
   const pickAndUploadImage = async (setImageCallback: (url: string) => void) => {
       try {
           let result = await ImagePicker.launchImageLibraryAsync({
@@ -149,19 +149,33 @@ export default function AdminPanelScreen() {
 
           if (!result.canceled && result.assets && result.assets.length > 0) {
               setPublishing(true);
-              showToast('⏳ 正在上传到中枢图床...');
-              
+              showToast('⏳ 正在读取并上传到中枢图床...');
+
               const asset = result.assets[0];
-              const response = await fetch(asset.uri);
-              const blob = await response.blob();
-              
-              const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+
+              // 🌟 史诗级修复：抛弃 Bug 频发的 fetch，改用底层的 XMLHttpRequest
+              const blob = await new Promise<Blob>((resolve, reject) => {
+                  const xhr = new XMLHttpRequest();
+                  xhr.onload = function () {
+                      resolve(xhr.response as Blob);
+                  };
+                  xhr.onerror = function (e) {
+                      console.error('XHR 读取本地文件失败:', e);
+                      reject(new TypeError('本地文件读取失败'));
+                  };
+                  xhr.responseType = 'blob';
+                  xhr.open('GET', asset.uri, true);
+                  xhr.send(null);
+              });
+
+              const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpeg';
               const fileName = `admin_${Date.now()}.${ext}`;
+              const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
 
               const { data, error } = await supabase.storage
                   .from('nft-images') 
                   .upload(fileName, blob, {
-                      contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+                      contentType: mimeType,
                       upsert: true
                   });
 
@@ -169,11 +183,10 @@ export default function AdminPanelScreen() {
 
               const { data: publicUrlData } = supabase.storage.from('nft-images').getPublicUrl(fileName);
               setImageCallback(publicUrlData.publicUrl);
-              showToast('✅ 图片已上传至中枢！');
+              showToast('✅ 图片已成功上传至中枢！');
           }
       } catch (e: any) {
-          // 🌟 神级防呆拦截
-          if (e.message.includes('bucket') || e.message.includes('not found') || e.message.includes('The resource was not found')) {
+          if (e.message?.includes('bucket') || e.message?.includes('not found') || e.message?.includes('The resource was not found')) {
              showToast('❌ 找不到图床！请去 Supabase 创建名为 nft-images 的公开桶！');
           } else {
              showToast(`❌ 上传失败: ${e.message}`);
@@ -196,14 +209,13 @@ export default function AdminPanelScreen() {
       return matchName && matchCategory;
   });
 
-  // 🌟 弹窗内的实时搜索过滤
   const pickerFilteredCollections = collections.filter(c => 
       c.name.toLowerCase().includes(pickerSearchQuery.toLowerCase())
   );
 
   const openPicker = (target: typeof pickerTarget, index?: number) => {
     setPickerTarget(target);
-    setPickerSearchQuery(''); // 打开时清空搜索
+    setPickerSearchQuery(''); 
     if (index !== undefined) setActiveReqIndex(index);
     setShowColPicker(true);
   };
