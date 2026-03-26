@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Dimensions, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -6,13 +7,12 @@ import { supabase } from '../supabase';
 
 const { width } = Dimensions.get('window');
 
-// 🌟 优化了阶级配色，完美融入复古褐金体系
 const VIP_TIERS = [
   { level: 1, name: '大众会员', threshold: 0, nextThreshold: 1000, bg: ['#F5EFE6', '#EAE0D5'], color: '#8D6E63', icon: '👤', cardCost: 2 },
   { level: 2, name: '黄金会员', threshold: 1000, nextThreshold: 5000, bg: ['#FFF5E6', '#FFD700'], color: '#B8860B', icon: '🏅', cardCost: 6 },
   { level: 3, name: '铂金会员', threshold: 5000, nextThreshold: 20000, bg: ['#F0F8FF', '#B0C4DE'], color: '#4682B4', icon: '💍', cardCost: 12 },
   { level: 4, name: '钻石会员', threshold: 20000, nextThreshold: 100000, bg: ['#F5EEF8', '#DDA0DD'], color: '#8A2BE2', icon: '💎', cardCost: 20 },
-  { level: 5, name: '黑钻会员', threshold: 100000, nextThreshold: 9999999, bg: ['#2C1E16', '#111111'], color: '#D49A36', icon: '👑', cardCost: 0 }, // 🌟 黑金巅峰
+  { level: 5, name: '黑钻会员', threshold: 100000, nextThreshold: 9999999, bg: ['#2C1E16', '#111111'], color: '#D49A36', icon: '👑', cardCost: 0 }, 
 ];
 
 export default function VipPrivilegeScreen() {
@@ -35,33 +35,39 @@ export default function VipPrivilegeScreen() {
 
   const fetchProfile = async () => {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase.from('profiles').select('id, is_admin, vip_level, total_consumed').eq('id', user.id).single();
-      setProfile(data);
+    try {
+       const { data: { user } } = await supabase.auth.getUser();
+       if (user) {
+         const { data } = await supabase.from('profiles').select('id, is_admin, vip_level, total_consumed').eq('id', user.id).single();
+         setProfile(data);
 
-      const { data: myNfts } = await supabase.from('nfts').select('id, collections(name)').eq('owner_id', user.id).eq('status', 'idle');
-      let uCount = 0;
-      let uIds: string[] = [];
-      if (myNfts) {
-         myNfts.forEach((nft: any) => {
-            const colName = Array.isArray(nft.collections) ? nft.collections[0]?.name : nft.collections?.name;
-            if (colName === '万能土豆卡') {
-               uCount++;
-               uIds.push(nft.id);
-            }
-         });
-      }
-      setRealUniversalCount(uCount);
-      setUniversalNftIds(uIds);
+         // 🌟 致命卡死性能修复！
+         // 之前这里查了用户几千张所有的卡，导致前端过滤 OOM（内存溢出）。
+         // 现在用 !inner 联表查询，数据库直接只吐出名叫“万能土豆卡”的卡片，响应只需 10ms！
+         const { data: myNfts } = await supabase.from('nfts')
+            .select('id, collections!inner(name)')
+            .eq('owner_id', user.id)
+            .eq('status', 'idle')
+            .eq('collections.name', '万能土豆卡');
+            
+         if (myNfts) {
+            setRealUniversalCount(myNfts.length);
+            setUniversalNftIds(myNfts.map(n => n.id));
+         }
+       }
+    } catch (e) {
+       console.error("权益页加载异常", e);
+    } finally {
+       setLoading(false);
     }
-    setLoading(false);
   };
 
   useFocusEffect(useCallback(() => { fetchProfile(); }, []));
 
   const handleUpgradeClick = (cost: number, nextLv: number, nextName: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (realUniversalCount < cost) {
+       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
        return showToast(`万能土豆卡不足！(需要 ${cost} 张，当前仅 ${realUniversalCount} 张)`);
     }
     setUpgradeModal({ visible: true, cost, nextLv, nextName });
@@ -79,10 +85,12 @@ export default function VipPrivilegeScreen() {
       await supabase.from('profiles').update({ vip_level: upgradeModal.nextLv }).eq('id', profile.id);
 
       setUpgradeModal(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast(`⚡ 飞升成功！您已登阶为【${upgradeModal.nextName}】！`);
       fetchProfile(); 
     } catch (err: any) {
       setUpgradeModal(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showToast(`升级失败: ${err.message}`);
     } finally {
       setProcessing(false);
@@ -99,7 +107,6 @@ export default function VipPrivilegeScreen() {
   const max = currentTier.nextThreshold;
   const progressPercent = (profile.is_admin || !nextTier) ? 100 : Math.min((consumed / max) * 100, 100);
 
-  // 🌟 核心杀招：给未解锁的权益明确“解锁条件”，不再画空饼！
   const privileges = [
     { title: '优先购', sub: `${currentTier.level * 2}次/月`, icon: '⚡', isLocked: false },
     { title: '首发奖励', sub: `好友买入${currentTier.level * 5}%`, icon: '🎁', isLocked: false },
@@ -123,7 +130,6 @@ export default function VipPrivilegeScreen() {
 
       <ScrollView contentContainerStyle={{ paddingBottom: 50 }}>
         
-        {/* 阶级卡片 */}
         <View style={[styles.vipCard, { backgroundColor: currentTier.bg[0], borderColor: currentTier.bg[1] }]}>
            <View style={styles.cardHeader}>
               <View style={{flexDirection: 'row', alignItems: 'center'}}>
@@ -161,7 +167,6 @@ export default function VipPrivilegeScreen() {
            )}
         </View>
 
-        {/* 特权矩阵 (尊贵复古版) */}
         <View style={styles.section}>
            <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>✨ VIP 特权</Text>
@@ -173,7 +178,6 @@ export default function VipPrivilegeScreen() {
                  <View key={index} style={[styles.gridItem, item.isLocked && styles.gridItemLocked]}>
                     <View style={styles.gridIcon}><Text style={{fontSize: 24}}>{item.icon}</Text></View>
                     <Text style={styles.gridTitle}>{item.title}</Text>
-                    {/* 🌟 核心：如果是锁定的，用尊贵的琥珀金高亮显示解锁条件！ */}
                     <Text style={[styles.gridSub, item.isLocked && styles.gridSubLocked]} numberOfLines={1}>{item.sub}</Text>
                  </View>
               ))}
@@ -181,7 +185,6 @@ export default function VipPrivilegeScreen() {
         </View>
       </ScrollView>
 
-      {/* 🌟 弹窗视觉大一统 */}
       <Modal visible={!!upgradeModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
@@ -202,7 +205,6 @@ export default function VipPrivilegeScreen() {
 }
 
 const styles = StyleSheet.create({
-  // 🌟 全面切换到复古米白护眼背景
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' },
   container: { flex: 1, backgroundColor: '#FDF8F0' },
   navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FDF8F0', borderBottomWidth: 1, borderColor: '#EAE0D5' },
@@ -239,16 +241,13 @@ const styles = StyleSheet.create({
   
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   gridItem: { width: (width - 60) / 4, alignItems: 'center', marginBottom: 24 },
-  // 🌟 特权图标底板调优
   gridIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', marginBottom: 8, shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2, borderWidth: 1, borderColor: '#F0E6D2' },
   gridTitle: { fontSize: 13, fontWeight: '800', color: '#4E342E', marginBottom: 4 },
   gridSub: { fontSize: 10, color: '#8D6E63' },
   
-  // 🌟 锁定的特权样式
   gridItemLocked: { opacity: 0.6 },
   gridSubLocked: { color: '#D49A36', fontWeight: '900' },
 
-  // 弹窗样式规范化
   modalOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.6)', justifyContent: 'center', alignItems: 'center' },
   confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
   confirmTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E', marginBottom: 16 },

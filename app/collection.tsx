@@ -1,23 +1,26 @@
+import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Dimensions, FlatList, Image, ImageBackground, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, FlatList, Image, ImageBackground, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
 
+// 🌟 核心修复：强制加上 resizeMode="cover"，彻底消灭难看的白边
 const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
   const [hasError, setHasError] = useState(false);
   const [loading, setLoading] = useState(true);
 
   return (
-    <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' }]}>
+    <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0', overflow: 'hidden' }]}>
       {loading && !hasError && <ActivityIndicator color="#D49A36" style={{ position: 'absolute' }} />}
       {!hasError ? (
         <Image
           source={{ uri: uri || 'invalid_url' }}
-          style={[style, { position: 'absolute', width: '100%', height: '100%' }]}
+          style={[{ position: 'absolute', width: '100%', height: '100%' }]}
+          resizeMode="cover"
           onLoadEnd={() => setLoading(false)}
           onError={() => { setHasError(true); setLoading(false); }}
         />
@@ -41,6 +44,7 @@ export default function CollectionScreen() {
   const [myUserId, setMyUserId] = useState<string>('');
   
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false); // 🌟 新增下拉刷新状态
   
   const [activeTab, setActiveTab] = useState<'listed' | 'my_warehouse' | 'buy_orders' | 'bids'>('listed'); 
 
@@ -66,7 +70,6 @@ export default function CollectionScreen() {
 
   const fetchData = async () => {
     try {
-      setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (user) setMyUserId(user.id);
 
@@ -95,8 +98,15 @@ export default function CollectionScreen() {
            .eq('status', 'idle');
          setMyIdleNfts(myNftsData || []);
       }
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+    } catch (err) { console.error(err); } finally { setLoading(false); setRefreshing(false); }
   };
+
+  // 🌟 下拉刷新事件
+  const onRefresh = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setRefreshing(true);
+    fetchData();
+  }, []);
 
   const fetchRelatedAnnouncements = async () => {
       setShowAnnounceModal(true);
@@ -115,6 +125,7 @@ export default function CollectionScreen() {
   };
 
   const toggleSweepSelection = (nftId: string) => {
+      Haptics.selectionAsync();
       setSelectedNftIds(prev => {
           if (prev.includes(nftId)) return prev.filter(id => id !== nftId);
           if (prev.length >= 15) { showToast('单次扫货最多 15 张'); return prev; }
@@ -123,9 +134,9 @@ export default function CollectionScreen() {
   };
 
   const selectAllCheapest = () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const available = listedNfts.filter(n => n.owner_id !== myUserId); 
       if (available.length === 0) return showToast('大盘已被扫空，无货可扫！');
-      
       const toSelect = available.slice(0, 15).map(n => n.id);
       setSelectedNftIds(toSelect);
   };
@@ -152,9 +163,11 @@ export default function CollectionScreen() {
           setSweepMode(false);
           setSelectedNftIds([]);
           fetchData(); 
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setSuccessMsg({title: '🧹 扫货成功', desc: `您已成功将 ${selectedNftIds.length} 件藏品收入金库！`});
       } catch (err: any) {
           setSweepConfirmModal(false);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           showToast(`扫货失败: ${err.message}`);
       } finally {
           setProcessing(false);
@@ -186,10 +199,12 @@ export default function CollectionScreen() {
       }]);
 
       setMatchModal(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setSuccessMsg({title: '✅ 撮合成功', desc: '已将藏品卖出，土豆币已入账！'});
       fetchData(); 
     } catch (err: any) { 
        setMatchModal(null);
+       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
        showToast(`交易失败: ${err.message}`); 
     } finally { setProcessing(false); }
   };
@@ -212,6 +227,7 @@ export default function CollectionScreen() {
              if (sweepMode && isListed && !isMine) {
                  toggleSweepSelection(item.id);
              } else {
+                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                  router.push({ pathname: '/item-detail', params: { id: item.id } });
              }
          }}
@@ -272,7 +288,7 @@ export default function CollectionScreen() {
             <Text style={styles.bidPriceLabel}>单件出价</Text>
             <Text style={styles.bidPriceValue}>¥{safePrice}</Text>
             {canSellToHim && (
-               <TouchableOpacity style={styles.matchBtn} onPress={() => setMatchModal({visible: true, bid: item})}>
+               <TouchableOpacity style={styles.matchBtn} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setMatchModal({visible: true, bid: item}); }}>
                   <Text style={styles.matchBtnText}>出给TA</Text>
                </TouchableOpacity>
             )}
@@ -283,13 +299,11 @@ export default function CollectionScreen() {
 
   if (loading) return <View style={styles.center}><ActivityIndicator color="#D49A36" /></View>;
 
-  // 🌟 动态计算 PaddingBottom，防止扫货栏遮挡
   const listPaddingBottom = sweepMode ? 200 : 100;
 
   return (
     <View style={styles.container}>
       <ImageBackground source={{ uri: collection?.image_url }} style={styles.headerBg} blurRadius={20}>
-         {/* 🌟 加深遮罩，提升文字对比度 */}
          <View style={styles.headerOverlay}>
             <SafeAreaView edges={['top']} style={{width: '100%'}}>
                <View style={styles.navBar}>
@@ -306,7 +320,6 @@ export default function CollectionScreen() {
                      <Text style={styles.announceBadgeText}>📜 查看该系列相关旨意 〉</Text>
                   </TouchableOpacity>
                   
-                  {/* 🌟 优化数据面板，间距拉开，背景加深 */}
                   <View style={styles.statsMatrix}>
                      <View style={styles.statItem}><Text style={styles.statValue}>¥{collection?.floor_price_cache || 0}</Text><Text style={styles.statLabel}>全网地板价</Text></View>
                      <View style={styles.statDivider} />
@@ -322,19 +335,18 @@ export default function CollectionScreen() {
       {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
       <View style={styles.listSection}>
-         {/* 🌟 重构：高级胶囊 Tab 栏 */}
          <View style={styles.tabsContainer}>
              <View style={styles.tabsRow}>
-                <TouchableOpacity style={[styles.tabBtn, activeTab === 'listed' && styles.tabBtnActive]} onPress={() => setActiveTab('listed')}>
+                <TouchableOpacity style={[styles.tabBtn, activeTab === 'listed' && styles.tabBtnActive]} onPress={() => { Haptics.selectionAsync(); setActiveTab('listed'); }}>
                    <Text style={[styles.tabText, activeTab === 'listed' && styles.tabTextActive]}>现货</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.tabBtn, activeTab === 'my_warehouse' && styles.tabBtnActive]} onPress={() => setActiveTab('my_warehouse')}>
+                <TouchableOpacity style={[styles.tabBtn, activeTab === 'my_warehouse' && styles.tabBtnActive]} onPress={() => { Haptics.selectionAsync(); setActiveTab('my_warehouse'); }}>
                    <Text style={[styles.tabText, activeTab === 'my_warehouse' && styles.tabTextActive]}>个人仓库</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.tabBtn, activeTab === 'buy_orders' && styles.tabBtnActive]} onPress={() => setActiveTab('buy_orders')}>
+                <TouchableOpacity style={[styles.tabBtn, activeTab === 'buy_orders' && styles.tabBtnActive]} onPress={() => { Haptics.selectionAsync(); setActiveTab('buy_orders'); }}>
                    <Text style={[styles.tabText, activeTab === 'buy_orders' && styles.tabTextActive]}>求购大厅</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.tabBtn, activeTab === 'bids' && styles.tabBtnActive]} onPress={() => setActiveTab('bids')}>
+                <TouchableOpacity style={[styles.tabBtn, activeTab === 'bids' && styles.tabBtnActive]} onPress={() => { Haptics.selectionAsync(); setActiveTab('bids'); }}>
                    <Text style={[styles.tabText, activeTab === 'bids' && styles.tabTextActive]}>竞价榜单</Text>
                 </TouchableOpacity>
              </View>
@@ -347,12 +359,13 @@ export default function CollectionScreen() {
          {activeTab === 'listed' && listedNfts.length > 0 && (
              <View style={styles.sweepToolbar}>
                  <Text style={{fontSize: 12, color: '#8D6E63', fontWeight: '800'}}>在售现货明细</Text>
-                 <TouchableOpacity style={[styles.sweepToggleBtn, sweepMode && {backgroundColor: '#4E342E'}]} onPress={() => {setSweepMode(!sweepMode); setSelectedNftIds([]);}}>
+                 <TouchableOpacity style={[styles.sweepToggleBtn, sweepMode && {backgroundColor: '#4E342E'}]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSweepMode(!sweepMode); setSelectedNftIds([]);}}>
                      <Text style={[styles.sweepToggleText, sweepMode && {color: '#D49A36'}]}>{sweepMode ? '取消扫货' : '🧹 批量扫货'}</Text>
                  </TouchableOpacity>
              </View>
          )}
 
+         {/* 🌟 补充下拉刷新 RefreshControl */}
          {activeTab === 'listed' && (
             <FlatList 
                data={listedNfts} 
@@ -362,6 +375,7 @@ export default function CollectionScreen() {
                contentContainerStyle={{ padding: 16, paddingBottom: listPaddingBottom }} 
                columnWrapperStyle={{ justifyContent: 'space-between' }}
                showsVerticalScrollIndicator={false}
+               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#D49A36" />}
                ListEmptyComponent={<View style={{alignItems: 'center', marginTop: 40}}><Text style={{fontSize: 40, marginBottom: 10}}>🪹</Text><Text style={{color: '#8D6E63'}}>当前系列被大户扫空啦，快去发布求购！</Text></View>}
             />
          )}
@@ -375,6 +389,7 @@ export default function CollectionScreen() {
                contentContainerStyle={{ padding: 16, paddingBottom: listPaddingBottom }} 
                columnWrapperStyle={{ justifyContent: 'space-between' }}
                showsVerticalScrollIndicator={false}
+               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#D49A36" />}
                ListEmptyComponent={<View style={{alignItems: 'center', marginTop: 40}}><Text style={{fontSize: 40, marginBottom: 10}}>📦</Text><Text style={{color: '#8D6E63'}}>您尚未拥有该系列的藏品</Text></View>}
             />
          )}
@@ -385,6 +400,7 @@ export default function CollectionScreen() {
                keyExtractor={item => item.id}
                contentContainerStyle={{ padding: 16, paddingBottom: listPaddingBottom }}
                showsVerticalScrollIndicator={false}
+               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#D49A36" />}
                ListEmptyComponent={<View style={{alignItems: 'center', marginTop: 40}}><Text style={{fontSize: 40, marginBottom: 10}}>📉</Text><Text style={{color: '#8D6E63'}}>暂无求购单，点击上方横幅首发求购！</Text></View>}
                renderItem={renderBidItem}
             />
@@ -396,6 +412,7 @@ export default function CollectionScreen() {
                keyExtractor={item => item.id}
                contentContainerStyle={{ padding: 16, paddingBottom: listPaddingBottom }}
                showsVerticalScrollIndicator={false}
+               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#D49A36" />}
                ListEmptyComponent={<View style={{alignItems: 'center', marginTop: 40}}><Text style={{fontSize: 40, marginBottom: 10}}>📉</Text><Text style={{color: '#8D6E63'}}>暂无竞价单，点击上方发起竞拍！</Text></View>}
                renderItem={renderBidItem}
             />
@@ -493,28 +510,26 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' },
   container: { flex: 1, backgroundColor: '#FDF8F0' },
   headerBg: { width: '100%', minHeight: 340 },
-  headerOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.7)' }, // 🌟 加深遮罩颜色
+  headerOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.7)' },
   navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44 },
   navBtn: { width: 40, justifyContent: 'center' },
   iconText: { fontSize: 20 },
   navTitle: { fontSize: 17, fontWeight: '900', color: '#FFF' },
   heroContent: { alignItems: 'center', paddingVertical: 10 },
-  heroImg: { width: 100, height: 100, borderRadius: 16, borderWidth: 2, borderColor: '#D49A36', marginBottom: 12 },
+  heroImg: { width: 100, height: 100, borderRadius: 16, borderWidth: 2, borderColor: '#D49A36', marginBottom: 12, overflow: 'hidden' }, // 🌟 配合 cover 必须隐藏溢出
   heroTitle: { fontSize: 22, fontWeight: '900', color: '#FFF', marginBottom: 10 },
   
   announceBadge: { backgroundColor: 'rgba(212,154,54,0.2)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(212,154,54,0.5)', marginBottom: 20 },
   announceBadgeText: { color: '#D49A36', fontSize: 12, fontWeight: '800' },
 
-  // 🌟 优化面板背景和边距
   statsMatrix: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.4)', paddingVertical: 16, paddingHorizontal: 20, borderRadius: 16, width: '92%', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   statItem: { alignItems: 'center', flex: 1 },
-  statValue: { fontSize: 18, fontWeight: '900', color: '#D49A36', marginBottom: 6 }, // 拉开数字和标签间距
+  statValue: { fontSize: 18, fontWeight: '900', color: '#D49A36', marginBottom: 6 }, 
   statLabel: { fontSize: 11, color: '#EAE0D5', fontWeight: '700' },
   statDivider: { width: 1, height: 24, backgroundColor: 'rgba(255,255,255,0.15)' },
 
   listSection: { flex: 1, backgroundColor: '#FDF8F0', borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -20, overflow: 'hidden' },
   
-  // 🌟 全新胶囊 Tab 样式
   tabsContainer: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#F5EFE6' },
   tabsRow: { flexDirection: 'row', backgroundColor: '#F5EFE6', borderRadius: 20, padding: 4 },
   tabBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 16 },
@@ -531,7 +546,7 @@ const styles = StyleSheet.create({
 
   nftCard: { width: CARD_WIDTH, backgroundColor: '#FFF', borderRadius: 16, marginBottom: 16, padding: 8, shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 5, elevation: 1, borderWidth: 1, borderColor: '#F0E6D2' },
   imgBox: { width: '100%', aspectRatio: 1, backgroundColor: '#FDF8F0', borderRadius: 8, overflow: 'hidden', marginBottom: 8 },
-  nftImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  nftImg: { width: '100%', height: '100%' }, 
   statusBadge: { position: 'absolute', top: 6, left: 6, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   statusText: { color: '#FFF', fontSize: 9, fontWeight: '900' },
   checkboxContainer: { position: 'absolute', top: 6, right: 6 },
