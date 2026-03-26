@@ -6,6 +6,15 @@ import { supabase } from '../supabase';
 
 const { height } = Dimensions.get('window');
 
+// 💰 引入千分位金钱格式化
+const formatMoney = (num: number | string) => {
+  const n = Number(num);
+  if (isNaN(n)) return '0.00';
+  let parts = n.toFixed(2).split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return parts.join(".");
+};
+
 const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
   const [hasError, setHasError] = useState(false);
   return (
@@ -38,6 +47,7 @@ export default function CreateBuyOrderScreen() {
   const [orderMode, setOrderMode] = useState<'buy' | 'bid'>('buy'); 
 
   const [potatoIds, setPotatoIds] = useState<string[]>([]);
+  const [userBalance, setUserBalance] = useState(0); // 🌟 新增：用户真实余额
   const [confirmModal, setConfirmModal] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
@@ -48,6 +58,10 @@ export default function CreateBuyOrderScreen() {
 
     supabase.auth.getUser().then(async ({data: {user}}) => {
        if (user) {
+          // 🌟 核心拦截机制：拉取用户真实余额
+          const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
+          if (profile) setUserBalance(profile.potato_coin_balance || 0);
+
           const { data: myNfts } = await supabase.from('nfts').select('id, collections(name)').eq('owner_id', user.id).eq('status', 'idle');
           if (myNfts) {
              const pCards = myNfts.filter((nft: any) => {
@@ -109,12 +123,11 @@ export default function CreateBuyOrderScreen() {
     setPublishing(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user?.id).single();
       const totalCost = parseFloat(price) * parseInt(quantity);
       
-      if (!profile || profile.potato_coin_balance < totalCost) throw new Error('土豆币钱包余额不足！');
+      if (userBalance < totalCost) throw new Error('土豆币钱包余额不足！');
       
-      await supabase.from('profiles').update({ potato_coin_balance: profile.potato_coin_balance - totalCost }).eq('id', user?.id);
+      await supabase.from('profiles').update({ potato_coin_balance: userBalance - totalCost }).eq('id', user?.id);
       await supabase.from('nfts').update({ status: 'burned' }).eq('id', potatoIds[0]);
 
       const { error } = await supabase.from('buy_orders').insert([{ 
@@ -139,6 +152,12 @@ export default function CreateBuyOrderScreen() {
 
   if (loading) return <View style={styles.center}><ActivityIndicator color="#D49A36" /></View>;
 
+  // 🌟 实时计算成本与拦截判断
+  const currentTotalCost = (parseFloat(price) || 0) * (parseInt(quantity) || 1);
+  const isBalanceInsufficient = currentTotalCost > userBalance;
+  const isInvalidPrice = orderMode === 'buy' && (parseFloat(price) > maxPriceLimit || parseFloat(price) < minPriceLimit);
+  const isBtnDisabled = !collection || isBalanceInsufficient || isInvalidPrice || currentTotalCost <= 0;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.navBar}>
@@ -160,7 +179,7 @@ export default function CreateBuyOrderScreen() {
                        <View style={[styles.modeTag, orderMode === 'bid' ? {backgroundColor: '#FFD700'} : {backgroundColor: '#FDF8F0', borderWidth: 1, borderColor: '#D49A36'}]}>
                           <Text style={[styles.modeTagText, orderMode === 'bid' ? {color: '#111'} : {color: '#D49A36'}]}>{orderMode === 'bid' ? '竞价模式' : '求购模式'}</Text>
                        </View>
-                       <Text style={styles.targetSubHighlight}>下限: ¥{minPriceLimit.toFixed(2)}</Text>
+                       <Text style={styles.targetSubHighlight}>下限: ¥{formatMoney(minPriceLimit)}</Text>
                     </View>
                  </View>
                  <Text style={{color: '#8D6E63', fontSize: 13, fontWeight: '900'}}>更换 〉</Text>
@@ -179,13 +198,30 @@ export default function CreateBuyOrderScreen() {
         <View style={styles.inputGroup}>
            <View style={styles.inputRow}>
               <Text style={styles.inputLabel}>{orderMode === 'bid' ? '竞拍价 (¥)' : '求购价 (¥)'}</Text>
-              <TextInput style={styles.inputField} placeholder={`最低 ¥${minPriceLimit.toFixed(2)}`} placeholderTextColor="#A1887F" keyboardType="decimal-pad" value={price} onChangeText={setPrice} textAlign="right" editable={!!collection} />
+              <TextInput 
+                 style={styles.inputField} 
+                 placeholder={`最低 ¥${formatMoney(minPriceLimit)}`} 
+                 placeholderTextColor="#A1887F" 
+                 keyboardType="decimal-pad" 
+                 value={price} 
+                 onChangeText={(val) => setPrice(val.replace(/[^0-9.]/g, ''))} // 🌟 防呆：限制非法字符
+                 textAlign="right" 
+                 editable={!!collection} 
+              />
            </View>
            <View style={[styles.inputRow, {borderBottomWidth: 0}]}>
               <Text style={styles.inputLabel}>需求数量</Text>
               <View style={styles.stepper}>
                  <TouchableOpacity onPress={() => setQuantity(Math.max(1, parseInt(quantity)-1).toString())} disabled={!collection}><Text style={styles.stepperBtn}>-</Text></TouchableOpacity>
-                 <TextInput style={styles.stepperInput} value={quantity} onChangeText={setQuantity} keyboardType="number-pad" textAlign="center" editable={!!collection} />
+                 <TextInput 
+                    style={styles.stepperInput} 
+                    value={quantity} 
+                    onChangeText={(val) => setQuantity(val.replace(/[^0-9]/g, ''))} // 🌟 防呆：彻底干掉负数和小数点
+                    onEndEditing={() => setQuantity(Math.max(1, parseInt(quantity)||1).toString())}
+                    keyboardType="number-pad" 
+                    textAlign="center" 
+                    editable={!!collection} 
+                 />
                  <TouchableOpacity onPress={() => setQuantity((parseInt(quantity)+1).toString())} disabled={!collection}><Text style={styles.stepperBtn}>+</Text></TouchableOpacity>
               </View>
            </View>
@@ -201,11 +237,17 @@ export default function CreateBuyOrderScreen() {
 
       <View style={styles.bottomBar}>
          <View style={styles.payInfo}>
-            <Text style={{fontSize: 12, color: '#8D6E63', fontWeight: '800'}}>需冻结资金</Text>
-            <Text style={{fontSize: 24, fontWeight: '900', color: '#FF3B30'}}>¥ {((parseFloat(price)||0) * (parseInt(quantity)||1)).toFixed(2)}</Text>
+            <Text style={{fontSize: 12, color: '#8D6E63', fontWeight: '800'}}>需冻结资金 (当前余额: ¥{formatMoney(userBalance)})</Text>
+            {/* 🌟 钱不够时数字变红 */}
+            <Text style={{fontSize: 24, fontWeight: '900', color: isBalanceInsufficient ? '#FF3B30' : '#4E342E'}}>
+               ¥ {formatMoney(currentTotalCost)}
+            </Text>
          </View>
-         <TouchableOpacity style={[styles.payBtn, (!collection || (orderMode === 'buy' && parseFloat(price) > maxPriceLimit)) && {backgroundColor: '#EAE0D5'}]} onPress={handlePublishClick}>
-            <Text style={[styles.payBtnText, (!collection || (orderMode === 'buy' && parseFloat(price) > maxPriceLimit)) && {color: '#A1887F'}]}>{orderMode === 'bid' ? '发起竞拍' : '确认支付'}</Text>
+         {/* 🌟 终极前置拦截：钱不够直接按钮变灰并改字 */}
+         <TouchableOpacity style={[styles.payBtn, isBtnDisabled && {backgroundColor: '#EAE0D5'}]} onPress={handlePublishClick} disabled={isBtnDisabled}>
+            <Text style={[styles.payBtnText, isBtnDisabled && {color: '#A1887F'}]}>
+               {isBalanceInsufficient ? '余额不足' : (orderMode === 'bid' ? '发起竞拍' : '确认支付')}
+            </Text>
          </TouchableOpacity>
       </View>
 
@@ -224,7 +266,7 @@ export default function CreateBuyOrderScreen() {
                         <FallbackImage uri={c.image_url} style={styles.pickImg} />
                         <View style={{flex: 1}}>
                            <Text style={styles.pickTitle}>{c.name}</Text>
-                           <Text style={styles.pickSub}>在售: <Text style={{color: '#4E342E', fontWeight: '900'}}>{c.on_sale_count || 0}</Text> | {isBidMode ? `退市价: ¥${c.max_consign_price}` : `底价: ¥${c.floor_price_cache || 0}`}</Text>
+                           <Text style={styles.pickSub}>在售: <Text style={{color: '#4E342E', fontWeight: '900'}}>{formatMoney(c.on_sale_count || 0).replace('.00','')}</Text> | {isBidMode ? `退市价: ¥${formatMoney(c.max_consign_price)}` : `底价: ¥${formatMoney(c.floor_price_cache || 0)}`}</Text>
                         </View>
                         <View style={[styles.miniTag, isBidMode ? {backgroundColor: '#FFD700'} : {backgroundColor: '#FDF8F0', borderWidth: 1, borderColor: '#D49A36'}]}>
                            <Text style={[styles.miniTagText, isBidMode ? {color: '#111'} : {color: '#D49A36'}]}>{isBidMode ? '竞价' : '求购'}</Text>
@@ -241,7 +283,7 @@ export default function CreateBuyOrderScreen() {
          <View style={styles.modalOverlayCenter}>
             <View style={styles.confirmBox}>
                <Text style={styles.confirmTitle}>📝 订单确认</Text>
-               <Text style={styles.confirmDesc}>将冻结 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{((parseFloat(price)||0) * (parseInt(quantity)||1)).toFixed(2)}</Text> 资金，并强制销毁 <Text style={{fontWeight:'900', color: '#4E342E'}}>1 张 Potato卡</Text>。是否继续？</Text>
+               <Text style={styles.confirmDesc}>将冻结 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{formatMoney(currentTotalCost)}</Text> 资金，并强制销毁 <Text style={{fontWeight:'900', color: '#4E342E'}}>1 张 Potato卡</Text>。是否继续？</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmModal(false)}><Text style={styles.cancelBtnText}>取消</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.confirmBtn} onPress={executePublish} disabled={publishing}>
