@@ -1,16 +1,52 @@
+import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Modal, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 
 const TABS = ['寄售中', '求购中', '竞价中', '已买入', '已卖出'];
+
+// 💰 千分位金额格式化
+const formatMoney = (num: number | string) => {
+  const n = Number(num);
+  if (isNaN(n)) return '0.00';
+  let parts = n.toFixed(2).split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return parts.join(".");
+};
+
+// 🌟 核心图片组件：防止白边和加载失败
+const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
+  const [hasError, setHasError] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  return (
+    <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0', overflow: 'hidden' }]}>
+      {loading && !hasError && <ActivityIndicator color="#D49A36" style={{ position: 'absolute' }} />}
+      {!hasError ? (
+        <Image
+          source={{ uri: uri || 'invalid_url' }}
+          style={[{ position: 'absolute', width: '100%', height: '100%' }]}
+          resizeMode="cover"
+          onLoadEnd={() => setLoading(false)}
+          onError={() => { setHasError(true); setLoading(false); }}
+        />
+      ) : (
+        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+           <Text style={{ fontSize: 24 }}>🥔</Text>
+        </View>
+      )}
+    </View>
+  );
+};
 
 export default function MyOrdersScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState(TABS[0]);
   const [listData, setListData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [cancelModal, setCancelModal] = useState<{visible: boolean, orderId: string, amount: number} | null>(null);
   const [addPriceModal, setAddPriceModal] = useState<{visible: boolean, order: any} | null>(null);
@@ -23,24 +59,28 @@ export default function MyOrdersScreen() {
   useFocusEffect(useCallback(() => { fetchDataByTab(activeTab); }, [activeTab]));
 
   const showToast = (msg: string) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 2500);
   };
 
+  const onRefresh = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setRefreshing(true);
+    fetchDataByTab(activeTab);
+  }, [activeTab]);
+
   const fetchDataByTab = async (tab: string) => {
     try {
-      setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 🌟 核心：先手动查出所有的集合信息备用！
       const { data: cols } = await supabase.from('collections').select('id, name, image_url');
       const colMap: any = {};
       if (cols) cols.forEach(c => colMap[c.id] = c);
 
       let rawData: any[] = [];
 
-      // 🌟 纯净抓取数据，绝不连表！
       if (tab === '寄售中') {
         const { data } = await supabase.from('nfts').select('*').eq('owner_id', user.id).eq('status', 'listed').order('created_at', { ascending: false });
         rawData = data || [];
@@ -62,7 +102,6 @@ export default function MyOrdersScreen() {
         rawData = data || [];
       }
 
-      // 🌟 前端手动无敌拼表法！把图片和名字硬贴上去！
       const enrichedData = rawData.map(item => ({
          ...item,
          collections: colMap[item.collection_id] || { name: '神秘藏品', image_url: 'https://via.placeholder.com/150' }
@@ -70,8 +109,11 @@ export default function MyOrdersScreen() {
 
       setListData(enrichedData);
     } catch (err: any) { 
-       Alert.alert("渲染错误", err.message); 
-    } finally { setLoading(false); }
+       Alert.alert("加载失败", err.message); 
+    } finally { 
+       setLoading(false); 
+       setRefreshing(false);
+    }
   };
 
   const handleCancelBuyOrder = async () => {
@@ -85,7 +127,7 @@ export default function MyOrdersScreen() {
       await supabase.from('profiles').update({ potato_coin_balance: (profile?.potato_coin_balance || 0) + cancelModal.amount }).eq('id', user?.id);
 
       setCancelModal(null);
-      showToast('✅ 撤销成功，资金已退回钱包');
+      showToast('✅ 撤销成功，冻结资金已退回钱包');
       fetchDataByTab(activeTab); 
     } catch (err: any) { Alert.alert('撤回失败', err.message); } finally { setProcessing(false); }
   };
@@ -105,7 +147,10 @@ export default function MyOrdersScreen() {
     if (!addPriceModal) return;
     const order = addPriceModal.order;
     const p = parseFloat(newPrice);
-    if (isNaN(p) || p <= order.price) return showToast(`加价必须高于当前出价 ¥${order.price}`);
+    if (isNaN(p) || p <= order.price) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return showToast(`加价必须高于当前出价 ¥${formatMoney(order.price)}`);
+    }
     
     setProcessing(true);
     try {
@@ -119,7 +164,7 @@ export default function MyOrdersScreen() {
 
       setAddPriceModal(null);
       setNewPrice('');
-      showToast(`✅ 加价成功！成功抢占高位`);
+      showToast(`✅ 加价成功！您已重新抢占排队高位`);
       fetchDataByTab(activeTab);
     } catch (err: any) { Alert.alert('加价失败', err.message); } finally { setProcessing(false); }
   };
@@ -129,62 +174,63 @@ export default function MyOrdersScreen() {
     const isBuying = activeTab === '求购中' || activeTab === '竞价中'; 
     const isHistory = activeTab === '已买入' || activeTab === '已卖出';
     
-    // 我们在组装时已经处理好格式，直接读！
     const name = item.collections?.name;
     const imgUrl = item.collections?.image_url;
     
-    const serial = (isSelling || isBuying) ? (item.serial_number || '排队中') : item.nft_id?.substring(0,6);
+    const serial = (isSelling || isBuying) ? (item.serial_number || '智能排队中') : item.nft_id?.substring(0,6);
     const price = isSelling ? item.consign_price : item.price;
     const timeStr = isSelling || isBuying ? '有效挂单中...' : new Date(item.transfer_time || item.created_at).toLocaleString();
 
     let typeTag = activeTab;
-    let typeColor = '#111';
+    let typeColor = '#4E342E';
     if (isHistory) {
        switch(item.transfer_type) {
-          case 'launch_mint': typeTag = '首发抢购'; typeColor = '#FFD700'; break;
-          case 'direct_buy': typeTag = '大盘现货'; typeColor = '#0066FF'; break;
+          case 'launch_mint': typeTag = '首发抢购'; typeColor = '#D49A36'; break;
+          case 'direct_buy': typeTag = '大盘扫单'; typeColor = '#0066FF'; break;
           case 'bid_match': typeTag = '委托撮合'; typeColor = '#FF3B30'; break;
-          case '好友转赠': typeTag = '好友转赠'; typeColor = '#4CD964'; break;
-          default: typeTag = '交易流转'; typeColor = '#888';
+          case '好友转赠': typeTag = '跨区转赠'; typeColor = '#8A2BE2'; break;
+          default: typeTag = '交易流转'; typeColor = '#8D6E63';
        }
     } else {
-       typeColor = isSelling || isBuying ? '#FF3B30' : '#4CD964';
+       typeColor = '#FF3B30'; // 挂单中统一用醒目红
     }
 
     return (
       <View style={styles.card}>
+        {/* 🌟 严格复刻截图里的头部排版 */}
         <View style={styles.cardHeader}>
            <Text style={styles.timeText}>{timeStr}</Text>
            <Text style={[styles.statusText, {color: typeColor}]}>{typeTag}</Text>
         </View>
 
         <View style={styles.cardBody}>
-           <Image source={{ uri: imgUrl }} style={styles.img} />
+           <FallbackImage uri={imgUrl} style={styles.img} />
            <View style={styles.info}>
               <Text style={styles.title} numberOfLines={1}>{name}</Text>
-              <Text style={styles.serial}>{isBuying ? `${activeTab === '竞价中' ? '竞价' : '求购'}数量: ${item.quantity}` : (isHistory && item.transfer_type === 'launch_mint' ? '首发铸造' : `#${serial}`)}</Text>
+              <Text style={styles.serial}>{isBuying ? `${activeTab === '竞价中' ? '需求数量' : '求购数量'}: ${item.quantity}` : (isHistory && item.transfer_type === 'launch_mint' ? '首发原石' : `#${serial}`)}</Text>
            </View>
            <View style={styles.priceBox}>
-              <Text style={styles.priceLabel}>{isSelling || isBuying ? (isSelling ? '一口价' : '当前出价') : (item.transfer_type === '好友转赠' ? '消耗转赠卡' : '成交价')}</Text>
-              <Text style={styles.price}>{item.transfer_type === '好友转赠' ? '1 张' : `¥ ${price || 0}`}</Text>
+              <Text style={styles.priceLabel}>{isSelling || isBuying ? (isSelling ? '一口价' : '当前出价') : (item.transfer_type === '好友转赠' ? '介质消耗' : '成交价')}</Text>
+              <Text style={styles.price}>{item.transfer_type === '好友转赠' ? '1 张' : `¥ ${formatMoney(price)}`}</Text>
            </View>
         </View>
 
+        {/* 🌟 严格复刻截图里的操作按钮布局 */}
         {isSelling && (
            <View style={styles.cardFooter}>
-              <TouchableOpacity style={[styles.actionBtnOutline, {borderColor: '#888'}]} onPress={() => setCancelSaleModal({visible: true, nftId: item.id})}>
-                 <Text style={[styles.actionBtnOutlineText, {color: '#888'}]}>取消寄售</Text>
+              <TouchableOpacity style={styles.actionBtnOutline} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setCancelSaleModal({visible: true, nftId: item.id}); }}>
+                 <Text style={styles.actionBtnOutlineText}>取消寄售</Text>
               </TouchableOpacity>
            </View>
         )}
 
         {isBuying && (
            <View style={styles.cardFooter}>
-              <TouchableOpacity style={styles.actionBtnOutline} onPress={() => setAddPriceModal({visible: true, order: item})}>
-                 <Text style={styles.actionBtnOutlineText}>加价竞拍</Text>
+              <TouchableOpacity style={[styles.actionBtnOutline, {borderColor: '#D49A36', marginRight: 12}]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setAddPriceModal({visible: true, order: item}); }}>
+                 <Text style={[styles.actionBtnOutlineText, {color: '#D49A36'}]}>加价竞拍</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn} onPress={() => setCancelModal({visible: true, orderId: item.id, amount: item.price * item.quantity})}>
-                 <Text style={styles.actionBtnText}>撤销解冻</Text>
+              <TouchableOpacity style={styles.actionBtnOutline} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setCancelModal({visible: true, orderId: item.id, amount: item.price * item.quantity}); }}>
+                 <Text style={styles.actionBtnOutlineText}>撤单解冻</Text>
               </TouchableOpacity>
            </View>
         )}
@@ -202,10 +248,19 @@ export default function MyOrdersScreen() {
 
       {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
+      {/* 🌟 顶部 Tab 也融合进了复古琥珀金的主题中 */}
       <View style={styles.tabsWrapper}>
          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContainer}>
            {TABS.map(tab => (
-             <TouchableOpacity key={tab} style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]} onPress={() => setActiveTab(tab)}>
+             <TouchableOpacity 
+                key={tab} 
+                style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]} 
+                onPress={() => {
+                   Haptics.selectionAsync();
+                   setLoading(true);
+                   setActiveTab(tab);
+                }}
+             >
                 <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
              </TouchableOpacity>
            ))}
@@ -213,7 +268,7 @@ export default function MyOrdersScreen() {
       </View>
       
       {loading ? (
-        <ActivityIndicator size="large" color="#0066FF" style={{marginTop: 50}} />
+        <ActivityIndicator size="large" color="#D49A36" style={{marginTop: 50}} />
       ) : (
         <FlatList 
           data={listData} 
@@ -221,18 +276,25 @@ export default function MyOrdersScreen() {
           keyExtractor={item => item.id} 
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }} 
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<View style={styles.emptyBox}><Text style={{fontSize: 40, marginBottom: 10}}>📭</Text><Text style={{color: '#999'}}>暂无{activeTab}数据</Text></View>}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#D49A36" />}
+          ListEmptyComponent={
+             <View style={styles.emptyBox}>
+                <Text style={{fontSize: 60, marginBottom: 10}}>📭</Text>
+                <Text style={{color: '#8D6E63', fontWeight: '800'}}>未找到 {activeTab} 的大盘记录</Text>
+             </View>
+          }
         />
       )}
 
+      {/* 取消寄售模态框 */}
       <Modal visible={!!cancelSaleModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
                <Text style={styles.confirmTitle}>📦 取消寄售</Text>
-               <Text style={styles.confirmDesc}>确定要将该藏品从大盘中撤下吗？</Text>
+               <Text style={styles.confirmDesc}>确定要将该藏品从大盘中撤下吗？撤下后资产将退回至您的金库。</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setCancelSaleModal(null)}><Text style={styles.cancelBtnText}>再挂一会</Text></TouchableOpacity>
-                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#333'}]} onPress={handleCancelSale} disabled={processing}>
+                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#FF3B30'}]} onPress={handleCancelSale} disabled={processing}>
                      {processing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认撤回</Text>}
                   </TouchableOpacity>
                </View>
@@ -240,22 +302,24 @@ export default function MyOrdersScreen() {
          </View>
       </Modal>
 
+      {/* 加价竞拍模态框 */}
       <Modal visible={!!addPriceModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
-               <Text style={styles.confirmTitle}>📈 加价竞拍</Text>
-               <Text style={styles.confirmDesc}>当前出价: ¥{addPriceModal?.order?.price}</Text>
+               <Text style={styles.confirmTitle}>📈 抢占大盘排队</Text>
+               <Text style={styles.confirmDesc}>您当前排队的出价为: <Text style={{color: '#FF3B30', fontWeight: '900'}}>¥{formatMoney(addPriceModal?.order?.price)}</Text></Text>
                <TextInput 
                   style={styles.inputField} 
-                  placeholder="请输入新的单件出价" 
+                  placeholder="请输入更高的一口价" 
+                  placeholderTextColor="#A1887F"
                   keyboardType="decimal-pad" 
                   value={newPrice} 
-                  onChangeText={setNewPrice} 
+                  onChangeText={(val) => setNewPrice(val.replace(/[^0-9.]/g, ''))} 
                   textAlign="center"
                />
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => {setAddPriceModal(null); setNewPrice('');}}><Text style={styles.cancelBtnText}>取消</Text></TouchableOpacity>
-                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#0066FF'}]} onPress={handleIncreasePrice} disabled={processing}>
+                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#D49A36'}]} onPress={handleIncreasePrice} disabled={processing}>
                      {processing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认加价</Text>}
                   </TouchableOpacity>
                </View>
@@ -263,15 +327,16 @@ export default function MyOrdersScreen() {
          </View>
       </Modal>
 
+      {/* 撤回求购单模态框 */}
       <Modal visible={!!cancelModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
-               <Text style={styles.confirmTitle}>⚠️ 确认撤回订单</Text>
-               <Text style={styles.confirmDesc}>撤单后，冻结的 ¥{cancelModal?.amount} 将立即退回钱包。</Text>
+               <Text style={styles.confirmTitle}>⚠️ 确认撤回求购/竞价</Text>
+               <Text style={styles.confirmDesc}>撤单后，系统冻结的 <Text style={{color: '#FF3B30', fontWeight: '900'}}>¥{formatMoney(cancelModal?.amount)}</Text> 货款将立即原路退回至您的钱包余额。</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setCancelModal(null)}><Text style={styles.cancelBtnText}>保持排队</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.confirmBtn} onPress={handleCancelBuyOrder} disabled={processing}>
-                     {processing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认撤销</Text>}
+                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#4E342E'}]} onPress={handleCancelBuyOrder} disabled={processing}>
+                     {processing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认撤单</Text>}
                   </TouchableOpacity>
                </View>
             </View>
@@ -282,45 +347,52 @@ export default function MyOrdersScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6F8' },
-  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FFF' },
-  navBtn: { width: 40, justifyContent: 'center' },
-  iconText: { fontSize: 20, color: '#111' },
-  navTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
-  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
-  toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
-  tabsWrapper: { backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#F0F0F0' },
-  tabsContainer: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10 },
-  tabBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, backgroundColor: '#F5F5F5', marginRight: 8 },
-  tabBtnActive: { backgroundColor: '#E6F0FF' },
-  tabText: { fontSize: 13, color: '#666', fontWeight: '600' },
-  tabTextActive: { color: '#0066FF', fontWeight: '900' },
-  card: { backgroundColor: '#FFF', borderRadius: 12, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 5, elevation: 1 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderColor: '#F9F9F9' },
-  timeText: { fontSize: 12, color: '#999' },
+  container: { flex: 1, backgroundColor: '#FDF8F0' }, // 全局米白背景
+  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 50, backgroundColor: '#FDF8F0', borderBottomWidth: 1, borderColor: '#EAE0D5' },
+  navBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  iconText: { fontSize: 20, color: '#4E342E', fontWeight: '900' },
+  navTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E' },
+  
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(44,30,22,0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100, shadowColor: '#4E342E', shadowOpacity: 0.1, shadowRadius: 10 },
+  toastText: { color: '#FFF', fontSize: 14, fontWeight: '800' },
+  
+  tabsWrapper: { backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#EAE0D5' },
+  tabsContainer: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center' },
+  tabBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#FDF8F0', marginRight: 10, borderWidth: 1, borderColor: '#EAE0D5' },
+  tabBtnActive: { backgroundColor: '#FFFDF5', borderColor: '#D49A36' },
+  tabText: { fontSize: 13, color: '#8D6E63', fontWeight: '700' },
+  tabTextActive: { color: '#D49A36', fontWeight: '900' },
+  
+  // 🌟 核心卡片重构区 (像素级对照截图)
+  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, borderWidth: 1, borderColor: '#F0E6D2' },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderColor: '#F5EFE6' },
+  timeText: { fontSize: 12, color: '#A1887F', fontWeight: '600' },
   statusText: { fontSize: 13, fontWeight: '900' },
+  
   cardBody: { flexDirection: 'row', alignItems: 'center' },
-  img: { width: 60, height: 60, borderRadius: 8, backgroundColor: '#F0F0F0', marginRight: 12 },
-  info: { flex: 1 },
-  title: { fontSize: 15, fontWeight: '900', color: '#111', marginBottom: 4 },
-  serial: { fontSize: 12, color: '#666', fontFamily: 'monospace' },
-  priceBox: { alignItems: 'flex-end' },
-  priceLabel: { fontSize: 10, color: '#999', marginBottom: 4 },
-  price: { fontSize: 16, fontWeight: '900', color: '#111' },
-  cardFooter: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderColor: '#F0F0F0' },
-  actionBtnOutline: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: '#0066FF', marginRight: 12 },
-  actionBtnOutlineText: { color: '#0066FF', fontSize: 12, fontWeight: '800' },
-  actionBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16, backgroundColor: '#FF3B30' },
-  actionBtnText: { color: '#FFF', fontSize: 12, fontWeight: '900' },
-  emptyBox: { alignItems: 'center', marginTop: 100 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  confirmBox: { width: '85%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
-  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 16 },
-  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 16 },
-  inputField: { width: '100%', backgroundColor: '#F5F5F5', padding: 16, borderRadius: 12, fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 12 },
+  img: { width: 70, height: 70, borderRadius: 12, backgroundColor: '#FDF8F0', marginRight: 14, borderWidth: 1, borderColor: '#EAE0D5' },
+  info: { flex: 1, justifyContent: 'center' },
+  title: { fontSize: 16, fontWeight: '900', color: '#4E342E', marginBottom: 6 },
+  serial: { fontSize: 12, color: '#8D6E63', fontFamily: 'monospace', fontWeight: '600' },
+  
+  priceBox: { alignItems: 'flex-end', justifyContent: 'center' },
+  priceLabel: { fontSize: 11, color: '#A1887F', marginBottom: 6, fontWeight: '700' },
+  price: { fontSize: 18, fontWeight: '900', color: '#111', fontFamily: 'monospace' },
+  
+  cardFooter: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 16 },
+  actionBtnOutline: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#A1887F', backgroundColor: '#FFF' },
+  actionBtnOutlineText: { color: '#4E342E', fontSize: 13, fontWeight: '800' },
+  
+  emptyBox: { alignItems: 'center', marginTop: 120 },
+  
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.6)', justifyContent: 'center', alignItems: 'center' },
+  confirmBox: { width: '85%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
+  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E', marginBottom: 16 },
+  confirmDesc: { fontSize: 14, color: '#8D6E63', textAlign: 'center', lineHeight: 22, marginBottom: 20, fontWeight: '600' },
+  inputField: { width: '100%', backgroundColor: '#FDF8F0', padding: 16, borderRadius: 12, fontSize: 24, fontWeight: '900', color: '#D49A36', marginBottom: 20, borderWidth: 1, borderColor: '#EAE0D5' },
   confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#F5F5F5', alignItems: 'center' },
-  cancelBtnText: { color: '#666', fontSize: 15, fontWeight: '800' },
-  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FF3B30', alignItems: 'center' },
+  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FDF8F0', alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
+  cancelBtnText: { color: '#8D6E63', fontSize: 15, fontWeight: '800' },
+  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, alignItems: 'center' },
   confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });
