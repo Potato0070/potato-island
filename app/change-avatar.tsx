@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Dimensions, FlatList, Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -21,6 +22,7 @@ export default function ChangeAvatarScreen() {
   useFocusEffect(useCallback(() => { fetchMyData(); }, []));
 
   const showToast = (msg: string) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 2000);
   };
@@ -55,6 +57,7 @@ export default function ChangeAvatarScreen() {
 
   // 🌟 核心修复 1：保存档案改用 Toast 提示，防卡死
   const handleSave = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -71,6 +74,7 @@ export default function ChangeAvatarScreen() {
 
   // 🌟 核心修复 2：真实可靠的退出登录逻辑
   const executeLogout = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     try {
         await supabase.auth.signOut();
         setLogoutModal(false);
@@ -83,14 +87,18 @@ export default function ChangeAvatarScreen() {
   const renderNftItem = ({ item }: { item: any }) => {
     const isSelected = avatarUrl === item.image_url;
     return (
-      <TouchableOpacity style={[styles.nftCard, isSelected && styles.nftCardSelected]} onPress={() => setAvatarUrl(item.image_url)} activeOpacity={0.8}>
+      <TouchableOpacity 
+         style={[styles.nftCard, isSelected && styles.nftCardSelected]} 
+         onPress={() => { Haptics.selectionAsync(); setAvatarUrl(item.image_url); }} 
+         activeOpacity={0.8}
+      >
         <Image source={{ uri: item.image_url }} style={styles.nftImg} />
         {isSelected && <View style={styles.selectedBadge}><Text style={{color: '#FFF', fontSize: 10, fontWeight: '900'}}>佩戴中</Text></View>}
       </TouchableOpacity>
     );
   };
 
-  if (fetching) return <View style={styles.center}><ActivityIndicator color="#111" /></View>;
+  if (fetching) return <View style={styles.center}><ActivityIndicator color="#D49A36" /></View>;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -114,7 +122,7 @@ export default function ChangeAvatarScreen() {
                <Image source={{ uri: avatarUrl }} style={styles.previewAvatar} />
             </View>
             <Text style={styles.label}>岛民尊号</Text>
-            <TextInput style={styles.input} value={nickname} onChangeText={setNickname} />
+            <TextInput style={styles.input} value={nickname} onChangeText={setNickname} placeholderTextColor="#A1887F" />
             <Text style={styles.label}>选择身份标识 (已去重)</Text>
           </>
         }
@@ -126,25 +134,26 @@ export default function ChangeAvatarScreen() {
             </TouchableOpacity>
             
             {/* 唤起定制退出弹窗 */}
-            <TouchableOpacity style={styles.logoutBtn} onPress={() => setLogoutModal(true)}>
+            <TouchableOpacity style={styles.logoutBtn} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setLogoutModal(true); }}>
               <Text style={styles.logoutText}>退出登录</Text>
             </TouchableOpacity>
           </View>
         }
       />
 
-      {/* 🌟 核心定制：绝对能点得动的退出确认弹窗 */}
+      {/* 🌟 核心定制：绝对能点得动的退出确认弹窗，文案已专业化 */}
       <Modal visible={logoutModal} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={styles.confirmBox}>
-               <Text style={styles.confirmTitle}>退出登录</Text>
-               <Text style={styles.confirmDesc}>确定要退出土豆岛吗？退出后需要重新登录。</Text>
+               <Text style={styles.confirmTitle}>退出确认</Text>
+               <Text style={styles.confirmDesc}>确定要退出登录吗？</Text>
                <View style={styles.confirmBtnRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setLogoutModal(false)}>
                      <Text style={styles.cancelBtnText}>取消</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.confirmBtn} onPress={executeLogout}>
-                     <Text style={styles.confirmBtnText}>残忍退出</Text>
+                     {/* 🌟 痛点修复：文案改成更专业的“确认退出” */}
+                     <Text style={styles.confirmBtnText}>确认退出</Text>
                   </TouchableOpacity>
                </View>
             </View>
@@ -155,37 +164,37 @@ export default function ChangeAvatarScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9F9F9' },
-  container: { flex: 1, backgroundColor: '#F9F9F9' },
-  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FFF' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' },
+  container: { flex: 1, backgroundColor: '#FDF8F0' },
+  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FDF8F0', borderBottomWidth: 1, borderColor: '#EAE0D5' },
   navBtn: { width: 60, justifyContent: 'center' },
-  iconText: { fontSize: 20, color: '#111' },
-  navTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
+  iconText: { fontSize: 20, color: '#4E342E', fontWeight: '900' },
+  navTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E' },
   
-  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
+  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(78,52,46,0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
   toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
 
-  previewAvatar: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#EFEFEF', borderWidth: 4, borderColor: '#111' },
-  label: { width: '100%', fontSize: 16, fontWeight: '900', color: '#111', marginBottom: 12 },
-  input: { width: '100%', backgroundColor: '#FFF', padding: 16, borderRadius: 12, fontSize: 16, marginBottom: 30, borderWidth: 1, borderColor: '#E0E0E0' },
+  previewAvatar: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#F5EFE6', borderWidth: 4, borderColor: '#D49A36' },
+  label: { width: '100%', fontSize: 16, fontWeight: '900', color: '#4E342E', marginBottom: 12 },
+  input: { width: '100%', backgroundColor: '#FFF', padding: 16, borderRadius: 12, fontSize: 16, marginBottom: 30, borderWidth: 1, borderColor: '#EAE0D5', color: '#4E342E', fontWeight: '700' },
   
-  nftCard: { width: (width - 40) / 4 - 8, aspectRatio: 1, marginRight: 10, marginBottom: 10, borderRadius: 8, borderWidth: 2, borderColor: 'transparent', overflow: 'hidden' },
-  nftCardSelected: { borderColor: '#111' },
-  nftImg: { width: '100%', height: '100%', backgroundColor: '#EEE' },
-  selectedBadge: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#111', alignItems: 'center', paddingVertical: 2 },
+  nftCard: { width: (width - 40) / 4 - 8, aspectRatio: 1, marginRight: 10, marginBottom: 10, borderRadius: 8, borderWidth: 2, borderColor: 'transparent', overflow: 'hidden', backgroundColor: '#F5EFE6' },
+  nftCardSelected: { borderColor: '#D49A36' },
+  nftImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  selectedBadge: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#D49A36', alignItems: 'center', paddingVertical: 2 },
   
-  btn: { width: '100%', backgroundColor: '#111', padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
+  btn: { width: '100%', backgroundColor: '#D49A36', padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 16, shadowColor: '#D49A36', shadowOpacity: 0.3, shadowRadius: 8, elevation: 2 },
   btnText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
   logoutBtn: { width: '100%', backgroundColor: '#FFF', padding: 16, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#FF3B30' },
   logoutText: { color: '#FF3B30', fontSize: 16, fontWeight: '900' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
-  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 12 },
-  confirmDesc: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.7)', justifyContent: 'center', alignItems: 'center' },
+  confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
+  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E', marginBottom: 12 },
+  confirmDesc: { fontSize: 14, color: '#8D6E63', textAlign: 'center', lineHeight: 22, marginBottom: 24, fontWeight: '600' },
   confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#F5F5F5', alignItems: 'center' },
-  cancelBtnText: { color: '#666', fontSize: 15, fontWeight: '800' },
+  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FDF8F0', alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
+  cancelBtnText: { color: '#8D6E63', fontSize: 15, fontWeight: '800' },
   confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FF3B30', alignItems: 'center' },
   confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });
