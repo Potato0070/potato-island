@@ -7,7 +7,6 @@ import { supabase } from '../supabase';
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
 
-// 🌟 植入 FallbackImage 防裂图引擎
 const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
   const [hasError, setHasError] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -284,9 +283,13 @@ export default function CollectionScreen() {
 
   if (loading) return <View style={styles.center}><ActivityIndicator color="#D49A36" /></View>;
 
+  // 🌟 动态计算 PaddingBottom，防止扫货栏遮挡
+  const listPaddingBottom = sweepMode ? 200 : 100;
+
   return (
     <View style={styles.container}>
-      <ImageBackground source={{ uri: collection?.image_url }} style={styles.headerBg} blurRadius={15}>
+      <ImageBackground source={{ uri: collection?.image_url }} style={styles.headerBg} blurRadius={20}>
+         {/* 🌟 加深遮罩，提升文字对比度 */}
          <View style={styles.headerOverlay}>
             <SafeAreaView edges={['top']} style={{width: '100%'}}>
                <View style={styles.navBar}>
@@ -303,12 +306,13 @@ export default function CollectionScreen() {
                      <Text style={styles.announceBadgeText}>📜 查看该系列相关旨意 〉</Text>
                   </TouchableOpacity>
                   
+                  {/* 🌟 优化数据面板，间距拉开，背景加深 */}
                   <View style={styles.statsMatrix}>
-                     <View style={styles.statItem}><Text style={styles.statValue}>¥{collection?.floor_price_cache || 0}</Text><Text style={styles.statLabel}>地板价</Text></View>
+                     <View style={styles.statItem}><Text style={styles.statValue}>¥{collection?.floor_price_cache || 0}</Text><Text style={styles.statLabel}>全网地板价</Text></View>
                      <View style={styles.statDivider} />
                      <View style={styles.statItem}><Text style={styles.statValue}>{collection?.on_sale_count || 0}</Text><Text style={styles.statLabel}>在售现货</Text></View>
                      <View style={styles.statDivider} />
-                     <View style={styles.statItem}><Text style={styles.statValue}>{collection?.circulating_supply || 0}</Text><Text style={styles.statLabel}>全网流通</Text></View>
+                     <View style={styles.statItem}><Text style={styles.statValue}>{collection?.circulating_supply || 0}</Text><Text style={styles.statLabel}>全网流通量</Text></View>
                   </View>
                </View>
             </SafeAreaView>
@@ -318,19 +322,22 @@ export default function CollectionScreen() {
       {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
       <View style={styles.listSection}>
-         <View style={styles.tabsRow}>
-            <TouchableOpacity style={[styles.tabBtn, activeTab === 'listed' && styles.tabBtnActive]} onPress={() => setActiveTab('listed')}>
-               <Text style={[styles.tabText, activeTab === 'listed' && styles.tabTextActive]}>现货</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.tabBtn, activeTab === 'my_warehouse' && styles.tabBtnActive]} onPress={() => setActiveTab('my_warehouse')}>
-               <Text style={[styles.tabText, activeTab === 'my_warehouse' && styles.tabTextActive]}>个人仓库</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.tabBtn, activeTab === 'buy_orders' && styles.tabBtnActive]} onPress={() => setActiveTab('buy_orders')}>
-               <Text style={[styles.tabText, activeTab === 'buy_orders' && styles.tabTextActive]}>求购大厅</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.tabBtn, activeTab === 'bids' && styles.tabBtnActive]} onPress={() => setActiveTab('bids')}>
-               <Text style={[styles.tabText, activeTab === 'bids' && styles.tabTextActive]}>竞价榜单</Text>
-            </TouchableOpacity>
+         {/* 🌟 重构：高级胶囊 Tab 栏 */}
+         <View style={styles.tabsContainer}>
+             <View style={styles.tabsRow}>
+                <TouchableOpacity style={[styles.tabBtn, activeTab === 'listed' && styles.tabBtnActive]} onPress={() => setActiveTab('listed')}>
+                   <Text style={[styles.tabText, activeTab === 'listed' && styles.tabTextActive]}>现货</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.tabBtn, activeTab === 'my_warehouse' && styles.tabBtnActive]} onPress={() => setActiveTab('my_warehouse')}>
+                   <Text style={[styles.tabText, activeTab === 'my_warehouse' && styles.tabTextActive]}>个人仓库</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.tabBtn, activeTab === 'buy_orders' && styles.tabBtnActive]} onPress={() => setActiveTab('buy_orders')}>
+                   <Text style={[styles.tabText, activeTab === 'buy_orders' && styles.tabTextActive]}>求购大厅</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.tabBtn, activeTab === 'bids' && styles.tabBtnActive]} onPress={() => setActiveTab('bids')}>
+                   <Text style={[styles.tabText, activeTab === 'bids' && styles.tabTextActive]}>竞价榜单</Text>
+                </TouchableOpacity>
+             </View>
          </View>
 
          <TouchableOpacity style={styles.fomoBanner} activeOpacity={0.8} onPress={() => router.push({pathname: '/create-buy-order', params: {colId: collection?.id}})}>
@@ -352,7 +359,7 @@ export default function CollectionScreen() {
                renderItem={renderNft} 
                keyExtractor={item => item.id} 
                numColumns={2}
-               contentContainerStyle={{ padding: 16, paddingBottom: 150 }} 
+               contentContainerStyle={{ padding: 16, paddingBottom: listPaddingBottom }} 
                columnWrapperStyle={{ justifyContent: 'space-between' }}
                showsVerticalScrollIndicator={false}
                ListEmptyComponent={<View style={{alignItems: 'center', marginTop: 40}}><Text style={{fontSize: 40, marginBottom: 10}}>🪹</Text><Text style={{color: '#8D6E63'}}>当前系列被大户扫空啦，快去发布求购！</Text></View>}
@@ -365,7 +372,7 @@ export default function CollectionScreen() {
                renderItem={renderNft} 
                keyExtractor={item => item.id} 
                numColumns={2}
-               contentContainerStyle={{ padding: 16, paddingBottom: 100 }} 
+               contentContainerStyle={{ padding: 16, paddingBottom: listPaddingBottom }} 
                columnWrapperStyle={{ justifyContent: 'space-between' }}
                showsVerticalScrollIndicator={false}
                ListEmptyComponent={<View style={{alignItems: 'center', marginTop: 40}}><Text style={{fontSize: 40, marginBottom: 10}}>📦</Text><Text style={{color: '#8D6E63'}}>您尚未拥有该系列的藏品</Text></View>}
@@ -376,7 +383,7 @@ export default function CollectionScreen() {
             <FlatList 
                data={buyOrdersList}
                keyExtractor={item => item.id}
-               contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+               contentContainerStyle={{ padding: 16, paddingBottom: listPaddingBottom }}
                showsVerticalScrollIndicator={false}
                ListEmptyComponent={<View style={{alignItems: 'center', marginTop: 40}}><Text style={{fontSize: 40, marginBottom: 10}}>📉</Text><Text style={{color: '#8D6E63'}}>暂无求购单，点击上方横幅首发求购！</Text></View>}
                renderItem={renderBidItem}
@@ -387,7 +394,7 @@ export default function CollectionScreen() {
             <FlatList 
                data={bidOrdersList}
                keyExtractor={item => item.id}
-               contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+               contentContainerStyle={{ padding: 16, paddingBottom: listPaddingBottom }}
                showsVerticalScrollIndicator={false}
                ListEmptyComponent={<View style={{alignItems: 'center', marginTop: 40}}><Text style={{fontSize: 40, marginBottom: 10}}>📉</Text><Text style={{color: '#8D6E63'}}>暂无竞价单，点击上方发起竞拍！</Text></View>}
                renderItem={renderBidItem}
@@ -486,7 +493,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' },
   container: { flex: 1, backgroundColor: '#FDF8F0' },
   headerBg: { width: '100%', minHeight: 340 },
-  headerOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.6)' },
+  headerOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.7)' }, // 🌟 加深遮罩颜色
   navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44 },
   navBtn: { width: 40, justifyContent: 'center' },
   iconText: { fontSize: 20 },
@@ -498,17 +505,21 @@ const styles = StyleSheet.create({
   announceBadge: { backgroundColor: 'rgba(212,154,54,0.2)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(212,154,54,0.5)', marginBottom: 20 },
   announceBadgeText: { color: '#D49A36', fontSize: 12, fontWeight: '800' },
 
-  statsMatrix: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.1)', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 16, width: '90%', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  // 🌟 优化面板背景和边距
+  statsMatrix: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.4)', paddingVertical: 16, paddingHorizontal: 20, borderRadius: 16, width: '92%', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   statItem: { alignItems: 'center', flex: 1 },
-  statValue: { fontSize: 18, fontWeight: '900', color: '#D49A36', marginBottom: 4 },
-  statLabel: { fontSize: 11, color: '#EAE0D5' },
-  statDivider: { width: 1, height: 20, backgroundColor: 'rgba(255,255,255,0.2)' },
+  statValue: { fontSize: 18, fontWeight: '900', color: '#D49A36', marginBottom: 6 }, // 拉开数字和标签间距
+  statLabel: { fontSize: 11, color: '#EAE0D5', fontWeight: '700' },
+  statDivider: { width: 1, height: 24, backgroundColor: 'rgba(255,255,255,0.15)' },
 
   listSection: { flex: 1, backgroundColor: '#FDF8F0', borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -20, overflow: 'hidden' },
-  tabsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 20, paddingBottom: 10, backgroundColor: '#FFF', justifyContent: 'space-between', borderBottomWidth: 1, borderColor: '#EAE0D5' },
-  tabBtn: { paddingBottom: 8, borderBottomWidth: 2, borderColor: 'transparent', flex: 1, alignItems: 'center' },
-  tabBtnActive: { borderColor: '#D49A36' },
-  tabText: { fontSize: 13, color: '#8D6E63', fontWeight: '700' },
+  
+  // 🌟 全新胶囊 Tab 样式
+  tabsContainer: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#F5EFE6' },
+  tabsRow: { flexDirection: 'row', backgroundColor: '#F5EFE6', borderRadius: 20, padding: 4 },
+  tabBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 16 },
+  tabBtnActive: { backgroundColor: '#FFF', shadowColor: '#4E342E', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  tabText: { fontSize: 13, color: '#A1887F', fontWeight: '700' },
   tabTextActive: { color: '#D49A36', fontWeight: '900' },
   
   fomoBanner: { backgroundColor: '#FFFDF5', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: '#F0E6D2' },
@@ -570,6 +581,6 @@ const styles = StyleSheet.create({
   confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FDF8F0', alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
   cancelBtnText: { color: '#8D6E63', fontSize: 15, fontWeight: '800' },
-  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FF3B30', alignItems: 'center' },
+  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#D49A36', alignItems: 'center' },
   confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
 });
