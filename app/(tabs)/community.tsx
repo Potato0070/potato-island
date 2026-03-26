@@ -1,13 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+// 🌟 修复报错：引入 RefreshControl
+import { ActivityIndicator, Alert, FlatList, Image, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../supabase';
 
 const SUPER_ADMIN_ID = '你的超级管理员UUID_在这里替换'; 
 
-// 🌟 FallbackImage 入驻公告，彻底解决配图裂开问题！
 const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
   const [hasError, setHasError] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -35,6 +36,7 @@ const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
 export default function CommunityScreen() {
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [likedPosts, setLikedPosts] = useState<Record<string, boolean>>({});
   
   const [burnModal, setBurnModal] = useState<{visible: boolean, msg: string} | null>(null);
@@ -53,9 +55,7 @@ export default function CommunityScreen() {
 
   const fetchAnnouncements = async () => {
     try {
-      setLoading(true);
       const { data, error } = await supabase.from('announcements').select('*'); 
-        
       if (error) throw error;
 
       let formattedData = (data || []).map(item => {
@@ -65,7 +65,6 @@ export default function CommunityScreen() {
          let isFeatured = item.is_featured;
          let priorityWeight = 3; 
 
-         // 🌟 剔除了原先刺眼的蓝色，换成尊贵的琥珀金/深咖啡配色
          if (item.author_name === '创世中枢' || item.author_name === '超级中枢') {
              displayAuthor = '超级播报'; 
              icon = '📢'; 
@@ -74,7 +73,7 @@ export default function CommunityScreen() {
              priorityWeight = 2; 
          } else if (item.author_name === '土豆清道夫') {
              icon = '🚨';
-             bgColor = '#8D230F'; // 深血红色
+             bgColor = '#8D230F'; 
              isFeatured = false; 
              priorityWeight = 2; 
          } else if (item.author_name === '土豆国王') {
@@ -103,10 +102,18 @@ export default function CommunityScreen() {
       });
 
       setAnnouncements(formattedData);
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+    } catch (err) { console.error(err); } finally { setLoading(false); setRefreshing(false); }
   };
 
+  // 🌟 下拉刷新
+  const onRefresh = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setRefreshing(true);
+    fetchAnnouncements();
+  }, []);
+
   const handleLike = async (post: any) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     if (likedPosts[post.id]) {
        return Alert.alert('提示', '您已经为该旨意贡献过信仰了，不可重复点赞！');
     }
@@ -187,11 +194,11 @@ export default function CommunityScreen() {
                 <Text style={[styles.actionText, hasLiked && {color: '#FF3B30', fontWeight: '900'}]}>{item.likes_count || 0}</Text>
              </TouchableOpacity>
              
-             <TouchableOpacity style={styles.actionBtn}>
+             <TouchableOpacity style={styles.actionBtn} onPress={() => Haptics.selectionAsync()}>
                 <Text style={styles.actionIcon}>💬</Text>
                 <Text style={styles.actionText}>评论</Text>
              </TouchableOpacity>
-             <TouchableOpacity style={styles.actionBtn}>
+             <TouchableOpacity style={styles.actionBtn} onPress={() => Haptics.selectionAsync()}>
                 <Text style={styles.actionIcon}>↗️</Text>
                 <Text style={styles.actionText}>分享</Text>
              </TouchableOpacity>
@@ -216,7 +223,13 @@ export default function CommunityScreen() {
           keyExtractor={item => item.id}
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<Text style={{textAlign: 'center', color: '#8D6E63', marginTop: 40}}>暂无任何王国旨意发布</Text>}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#D49A36" />}
+          ListEmptyComponent={
+             <View style={{alignItems: 'center', marginTop: 80}}>
+                <Text style={{fontSize: 60, marginBottom: 16}}>🪧</Text>
+                <Text style={{color: '#8D6E63', fontWeight: '800', fontSize: 16}}>王国近期风平浪静，暂无旨意</Text>
+             </View>
+          }
         />
       )}
 
@@ -227,7 +240,7 @@ export default function CommunityScreen() {
                <Text style={{fontSize: 60, marginBottom: 10}}>🔥</Text>
                <Text style={styles.confirmTitle}>神迹降临</Text>
                <Text style={styles.confirmDesc}>{burnModal?.msg}</Text>
-               <TouchableOpacity style={styles.confirmBtn} onPress={() => setBurnModal(null)}>
+               <TouchableOpacity style={styles.confirmBtn} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setBurnModal(null); }}>
                   <Text style={styles.confirmBtnText}>见证通缩</Text>
                </TouchableOpacity>
             </View>
@@ -243,8 +256,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E' },
 
   card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, borderWidth: 1, borderColor: '#EAE0D5' },
-  cardCleaner: { borderWidth: 2, borderColor: '#8D230F', backgroundColor: '#FFF5F5' }, // 🌟 换成沉稳的深红
-  cardBroadcast: { borderWidth: 2, borderColor: '#D49A36', backgroundColor: '#FDF8F0' }, // 🌟 换成尊贵的琥珀金
+  cardCleaner: { borderWidth: 2, borderColor: '#8D230F', backgroundColor: '#FFF5F5' },
+  cardBroadcast: { borderWidth: 2, borderColor: '#D49A36', backgroundColor: '#FDF8F0' },
   
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   avatarBox: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
