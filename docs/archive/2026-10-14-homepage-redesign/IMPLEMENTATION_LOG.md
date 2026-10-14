@@ -50,3 +50,18 @@
 - `git diff --check`：通过。
 - `npx expo export --platform web --output-dir .expo-preview`：通过，36 条静态路由完成导出。
 - TypeScript 全量检查沿用上文记录的既有跨页面错误；本次仅修改页面样式和搜索框排布，没有改动数据逻辑。
+
+## 2026-10-14：交易集市排序与关注交互
+
+- `app/(tabs)/market.tsx`：顶部品牌区加入 Logo B；排序项调整为“最热、最新、价格排序、关注”，最热通过 `transfer_logs` 统计近 30 天正价且有卖家的流转记录，排除好友转赠与首发/创世铸造，成交数相同则按藏品创建时间排序。
+- 藏品卡片增加独立爱心按钮，关注 ID 使用 `@market_followed_collection_ids` 本地保存；“关注”筛选即时展示用户收藏的藏品，空态提示如何收藏。
+- 保持每张藏品图 1:1；退市章放大；价格排序按钮显示当前升/降方向。没有写数据库或更改交易行为。
+- `CHANGE_BOUNDARIES.md`：记录用户对集市交互追加确认，限定新增范围。
+
+### 验证
+
+- `npx eslint 'app/(tabs)/market.tsx'`：通过，无 errors、无 warnings。
+- `git diff --check`：通过。
+- `npx expo export --platform web --output-dir .expo-preview`：通过，36 条静态路由完成导出；`/(tabs)/market` 页面打包成功。
+- 推送后线上首页返回 HTTP 200；首页引用的公开 JS bundle 已包含 `@market_followed_collection_ids`、`transfer_logs`、`heart-outline` 等本轮实现标记。内置浏览器中直达 `/market` 返回 404，且线上页面截图访问超时，因此已确认部署资源更新，未能完成可视化交互验收。
+- TypeScript 全量检查未重复执行；此前已记录的既有跨页面错误不属于本轮范围。本次页面 ESLint 无 errors、无 warnings，`git diff --check` 通过。
