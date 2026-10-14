@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Dimensions, Image, ImageBackground, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { ActivityIndicator, Animated, Dimensions, Image, ImageBackground, ImageSourcePropType, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../supabase';
 
@@ -22,8 +22,8 @@ const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
   const [loading, setLoading] = useState(true);
 
   return (
-    <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' }]}>
-      {loading && !hasError && <ActivityIndicator color="#D49A36" style={{ position: 'absolute' }} />}
+    <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFDF9' }]}>
+      {loading && !hasError && <ActivityIndicator color="#8FAFC8" style={{ position: 'absolute' }} />}
       {!hasError ? (
         <Image
           source={{ uri: uri || 'invalid_url' }}
@@ -41,7 +41,7 @@ const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
 };
 
 // 🌟 宫格缩放动效组件
-const AnimatedGridItem = ({ item, onPress }: { item: any, onPress: () => void }) => {
+const AnimatedGridItem = ({ item, onPress }: { item: { name: string; icon: ImageSourcePropType; route: string }, onPress: () => void }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -57,8 +57,8 @@ const AnimatedGridItem = ({ item, onPress }: { item: any, onPress: () => void })
       onPress();
     }}>
       <Animated.View style={[styles.gridItem, { transform: [{ scale: scaleAnim }] }]}>
-        <View style={[styles.iconWrapper, { backgroundColor: item.bgColor }]}>
-           <Text style={styles.iconEmoji}>{item.icon}</Text>
+        <View style={styles.iconWrapper}>
+           <Image source={item.icon} style={styles.iconArt} resizeMode="cover" />
         </View>
         <Text style={styles.gridText}>{item.name}</Text>
       </Animated.View>
@@ -67,14 +67,14 @@ const AnimatedGridItem = ({ item, onPress }: { item: any, onPress: () => void })
 };
 
 const MENU_ITEMS = [
-  { name: '基因合成', icon: '🧬', route: '/synthesis-list', bgColor: '#F5EFE6' }, 
-  { name: '领主权益', icon: '👑', route: '/vip-privilege', bgColor: '#FDF8F0' },
-  { name: '每日朝圣', icon: '📅', route: '/daily-sign', bgColor: '#EAE0D5' },
-  { name: '命运抽签', icon: '🎰', route: '/lottery', bgColor: '#F0E6D2' },
-  { name: '创世发新', icon: '🚀', route: '/genesis-exchange', bgColor: '#FDF8F0' },
-  { name: '黑洞废墟', icon: '🕳️', route: '/blackhole', bgColor: '#EAE0D5' }, 
-  { name: '特权兑换', icon: '💳', route: '/exchange', bgColor: '#F5EFE6' }, 
-  { name: '资产转赠', icon: '🎁', route: '/transfer', bgColor: '#F0E6D2' }, 
+  { name: '基因合成', icon: require('../../assets/homepage/icons/gene.png'), route: '/synthesis-list' },
+  { name: '领主权益', icon: require('../../assets/homepage/icons/lord.png'), route: '/vip-privilege' },
+  { name: '每日朝圣', icon: require('../../assets/homepage/icons/pilgrimage.png'), route: '/daily-sign' },
+  { name: '命运抽签', icon: require('../../assets/homepage/icons/lottery.png'), route: '/lottery' },
+  { name: '创世发新', icon: require('../../assets/homepage/icons/genesis.png'), route: '/genesis-exchange' },
+  { name: '黑洞废墟', icon: require('../../assets/homepage/icons/black-hole.png'), route: '/blackhole' },
+  { name: '捐赠兑换', icon: require('../../assets/homepage/icons/exchange.png'), route: '/exchange' },
+  { name: '资产转移', icon: require('../../assets/homepage/icons/transfer.png'), route: '/transfer' },
 ];
 
 export default function HomeScreen() {
@@ -136,15 +136,16 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
          <View style={styles.logoBox}>
-            <Text style={styles.logoText}>🥔 土豆岛</Text>
+            <Image source={require('../../assets/homepage/logo-b.png')} style={styles.logoMark} resizeMode="contain" />
+            <Text style={styles.logoText}>土豆岛</Text>
          </View>
          <TouchableOpacity style={styles.searchBox} activeOpacity={0.8} onPress={() => { Haptics.selectionAsync(); router.push('/(tabs)/market'); }}>
             <Text style={{fontSize: 14, marginRight: 6}}>🔍</Text>
-            <Text style={{color: '#A1887F', fontSize: 13, fontWeight: '700'}}>搜索基因藏品或编号...</Text>
+            <Text style={{color: '#95877F', fontSize: 13, fontWeight: '600'}}>搜索基因藏品或编号...</Text>
          </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#D49A36" />}>
+      <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8FAFC8" />}>
         
         {/* 🌟 跑马灯播报栏 (提到了顶部导航下方) */}
         <TouchableOpacity style={styles.marqueeBox} activeOpacity={0.8} onPress={() => { Haptics.selectionAsync(); router.push('/(tabs)/community'); }}>
@@ -164,7 +165,7 @@ export default function HomeScreen() {
 
         {/* 创世发新 */}
         {initLoading ? (
-           <View style={[styles.sectionContainer, {opacity: 0.5}]}><View style={{height: 160, backgroundColor: '#EAE0D5', borderRadius: 16}} /></View>
+           <View style={[styles.sectionContainer, {opacity: 0.5}]}><View style={{height: 160, backgroundColor: '#F2EEE8', borderRadius: 16}} /></View>
         ) : launchEvent && (
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>精品推荐</Text>
@@ -184,7 +185,7 @@ export default function HomeScreen() {
                 </View>
                 <View style={[styles.timerBar, isUrgent ? styles.timerBarUrgent : styles.timerBarNormal]}>
                   <Text style={[styles.timerText, isUrgent && {color: '#FFF'}]}>{timeLeftStr}</Text>
-                  <Text style={[styles.timerBtn, isUrgent ? {color: '#4E342E', backgroundColor: '#FFF'} : {backgroundColor: '#D49A36', color: '#FFF'}]}>立即前往</Text>
+          <Text style={[styles.timerBtn, isUrgent ? {color: '#51443C', backgroundColor: '#FFF'} : {backgroundColor: '#8FAFC8', color: '#FFF'}]}>立即前往</Text>
                 </View>
               </ImageBackground>
             </TouchableOpacity>
@@ -198,10 +199,10 @@ export default function HomeScreen() {
                // 🌟 骨架屏占位
                Array.from({length: 4}).map((_, i) => (
                  <View key={i} style={[styles.hotCard, { opacity: 0.5 }]}>
-                    <View style={[styles.hotImageContainer, {backgroundColor: '#EAE0D5'}]} />
+                    <View style={[styles.hotImageContainer, {backgroundColor: '#F2EEE8'}]} />
                     <View style={{padding: 12}}>
-                       <View style={{height: 14, backgroundColor: '#EAE0D5', borderRadius: 4, marginBottom: 8, width: '80%'}} />
-                       <View style={{height: 10, backgroundColor: '#EAE0D5', borderRadius: 4, width: '50%'}} />
+                       <View style={{height: 14, backgroundColor: '#F2EEE8', borderRadius: 4, marginBottom: 8, width: '80%'}} />
+                       <View style={{height: 10, backgroundColor: '#F2EEE8', borderRadius: 4, width: '50%'}} />
                     </View>
                  </View>
                ))
@@ -232,7 +233,7 @@ export default function HomeScreen() {
                       <View>
                          <Text style={{fontSize: 10, color: '#8D6E63', marginBottom: 2, fontWeight: '700'}}>{isDelisted ? '求购参考价' : '全网地板价'}</Text>
                          {/* 🌟 千分位金钱 */}
-                         <Text style={[styles.hotPrice, isDelisted && {color: '#A1887F'}]}>¥{formatMoney(displayPrice)}</Text>
+                         <Text style={[styles.hotPrice, isDelisted && {color: '#95877F'}]}>¥{formatMoney(displayPrice)}</Text>
                       </View>
                       <Text style={styles.likeIcon}>🤍</Text>
                     </View>
@@ -249,55 +250,56 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FDF8F0' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, backgroundColor: '#FDF8F0' },
-  logoBox: { marginRight: 16 },
-  logoText: { fontSize: 20, fontWeight: '900', color: '#4E342E' },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#EAE0D5' },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, backgroundColor: '#FFFFFF' },
+  logoBox: { flexDirection: 'row', alignItems: 'center', marginRight: 12 },
+  logoMark: { width: 46, height: 36, marginRight: 4 },
+  logoText: { fontSize: 20, fontWeight: '900', color: '#51443C' },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#EAE6DF' },
   
-  marqueeBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', marginHorizontal: 16, marginTop: 12, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, shadowColor: '#4E342E', shadowOffset: {width:0, height:2}, shadowOpacity: 0.05, elevation: 1, borderWidth: 1, borderColor: '#F0E6D2' },
-  marqueeTag: { backgroundColor: '#FF3B30', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginRight: 8 },
+  marqueeBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', marginHorizontal: 16, marginTop: 12, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, shadowColor: '#51443C', shadowOffset: {width:0, height:2}, shadowOpacity: 0.05, elevation: 1, borderWidth: 1, borderColor: '#EAE6DF' },
+  marqueeTag: { backgroundColor: '#E85A48', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginRight: 8 },
   marqueeTagText: { color: '#FFF', fontSize: 10, fontWeight: '900' },
-  marqueeText: { flex: 1, fontSize: 13, color: '#4E342E', fontWeight: '800' },
-  marqueeArrow: { fontSize: 14, color: '#A1887F', marginLeft: 8, fontWeight: '900' },
+  marqueeText: { flex: 1, fontSize: 13, color: '#51443C', fontWeight: '800' },
+  marqueeArrow: { fontSize: 14, color: '#95877F', marginLeft: 8, fontWeight: '900' },
 
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 8, paddingTop: 20, paddingBottom: 10 },
   gridItem: { width: '25%', alignItems: 'center', marginBottom: 20 },
-  iconWrapper: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 8, borderWidth: 1, borderColor: '#EAE0D5' },
-  iconEmoji: { fontSize: 24 },
-  gridText: { fontSize: 12, color: '#4E342E', fontWeight: '800' },
+  iconWrapper: { width: 70, height: 70, borderRadius: 35, justifyContent: 'center', alignItems: 'center', marginBottom: 6, overflow: 'hidden' },
+  iconArt: { width: 70, height: 70 },
+  gridText: { fontSize: 12, color: '#51443C', fontWeight: '800' },
 
   sectionContainer: { marginTop: 10, paddingHorizontal: 16 },
-  sectionTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E', marginBottom: 16 },
+  sectionTitle: { fontSize: 18, fontWeight: '900', color: '#51443C', marginBottom: 16 },
 
-  launchCard: { width: '100%', borderRadius: 16, overflow: 'hidden', shadowColor: '#4E342E', shadowOffset: {width:0, height:4}, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5, borderWidth: 1, borderColor: '#F0E6D2' },
-  launchBg: { width: '100%', minHeight: 160, backgroundColor: '#FDF8F0' },
-  launchOverlay: { flexDirection: 'row', padding: 20, backgroundColor: 'rgba(78, 52, 46, 0.7)', flex: 1 }, 
-  launchMainImg: { width: 80, height: 80, borderRadius: 12, borderWidth: 2, borderColor: '#D49A36' },
+  launchCard: { width: '100%', borderRadius: 16, overflow: 'hidden', shadowColor: '#51443C', shadowOffset: {width:0, height:4}, shadowOpacity: 0.09, shadowRadius: 10, elevation: 4, borderWidth: 1, borderColor: '#EAE6DF' },
+  launchBg: { width: '100%', minHeight: 160, backgroundColor: '#FFFDF9' },
+  launchOverlay: { flexDirection: 'row', padding: 20, backgroundColor: 'rgba(81, 68, 60, 0.72)', flex: 1 },
+  launchMainImg: { width: 80, height: 80, borderRadius: 12, borderWidth: 2, borderColor: '#D4A64A' },
   launchInfo: { flex: 1, marginLeft: 16, justifyContent: 'center' },
   launchTitle: { fontSize: 18, fontWeight: '900', color: '#FFF', marginBottom: 8 },
   launchPriceRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 6 },
-  launchPriceLabel: { color: '#EAE0D5', fontSize: 12, marginRight: 6 },
-  launchPrice: { color: '#D49A36', fontSize: 20, fontWeight: '900' },
-  launchProgressText: { color: '#EAE0D5', fontSize: 11, fontWeight: '600' },
+  launchPriceLabel: { color: '#F1EDE7', fontSize: 12, marginRight: 6 },
+  launchPrice: { color: '#D4A64A', fontSize: 20, fontWeight: '900' },
+  launchProgressText: { color: '#F1EDE7', fontSize: 11, fontWeight: '600' },
   timerBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10 },
-  timerBarNormal: { backgroundColor: 'rgba(253, 248, 240, 0.95)' }, 
+  timerBarNormal: { backgroundColor: 'rgba(255, 255, 255, 0.96)' },
   timerBarUrgent: { backgroundColor: '#FF3B30' },
-  timerText: { fontSize: 14, fontWeight: '900', color: '#4E342E', fontFamily: 'monospace' },
+  timerText: { fontSize: 14, fontWeight: '900', color: '#51443C', fontFamily: 'monospace' },
   timerBtn: { fontSize: 12, fontWeight: '900', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, overflow: 'hidden' },
 
   hotList: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  hotCard: { width: (width - 40) / 2, backgroundColor: '#FFF', borderRadius: 12, overflow: 'hidden', marginBottom: 12, shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 5, elevation: 1, borderWidth: 1, borderColor: '#EAE0D5' },
-  hotImageContainer: { width: '100%', aspectRatio: 1, backgroundColor: '#FDF8F0' },
+  hotCard: { width: (width - 40) / 2, backgroundColor: '#FFFFFF', borderRadius: 12, overflow: 'hidden', marginBottom: 12, shadowColor: '#51443C', shadowOpacity: 0.05, shadowRadius: 5, elevation: 1, borderWidth: 1, borderColor: '#EAE6DF' },
+  hotImageContainer: { width: '100%', aspectRatio: 1, backgroundColor: '#FFFDF9' },
   hotImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(44, 30, 22, 0.5)', justifyContent: 'center', alignItems: 'center' },
-  delistedStamp: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: '#D49A36', backgroundColor: 'rgba(44, 30, 22, 0.8)', justifyContent: 'center', alignItems: 'center', transform: [{rotate: '-15deg'}] },
-  delistedText: { color: '#D49A36', fontSize: 12, fontWeight: '900' },
+  delistedStamp: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: '#D4A64A', backgroundColor: 'rgba(44, 30, 22, 0.8)', justifyContent: 'center', alignItems: 'center', transform: [{rotate: '-15deg'}] },
+  delistedText: { color: '#D4A64A', fontSize: 12, fontWeight: '900' },
   hotInfo: { padding: 12 },
-  hotName: { fontSize: 14, fontWeight: '900', color: '#4E342E', marginBottom: 6 },
+  hotName: { fontSize: 14, fontWeight: '900', color: '#51443C', marginBottom: 6 },
   statsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  supplyText: { fontSize: 10, color: '#8D6E63', marginRight: 4, fontWeight: '700' },
-  hotBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', borderTopWidth: 1, borderColor: '#F5EFE6', paddingTop: 8 },
-  hotPrice: { fontSize: 16, fontWeight: '900', color: '#D49A36' },
-  likeIcon: { fontSize: 12, color: '#D49A36' }
+  supplyText: { fontSize: 10, color: '#95877F', marginRight: 4, fontWeight: '700' },
+  hotBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', borderTopWidth: 1, borderColor: '#F2EEE8', paddingTop: 8 },
+  hotPrice: { fontSize: 16, fontWeight: '900', color: '#D4A64A' },
+  likeIcon: { fontSize: 12, color: '#D98B70' }
 });

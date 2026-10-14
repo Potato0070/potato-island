@@ -7,32 +7,38 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#D49A36', // 土豆岛专属金
-        tabBarInactiveTintColor: '#A1887F', // 颜色微调，更复古
-        // 🌟 核心：开启透明毛玻璃沉浸式体验
+        tabBarActiveTintColor: '#8FAFC8',
+        tabBarInactiveTintColor: '#95877F',
         tabBarBackground: () => (
-          <BlurView tint="light" intensity={80} style={StyleSheet.absoluteFill} />
+          <BlurView
+            tint="light"
+            intensity={72}
+            style={[StyleSheet.absoluteFill, { borderRadius: 28, overflow: 'hidden' }]}
+          />
         ),
         tabBarStyle: {
-          position: 'absolute', // 🌟 绝对定位，彻底解决遮挡！
-          bottom: 0,
-          left: 0,
-          right: 0,
-          backgroundColor: 'rgba(255, 255, 255, 0.6)', // 配合毛玻璃的半透明底色
+          position: 'absolute',
+          bottom: 10,
+          left: 12,
+          right: 12,
+          backgroundColor: 'rgba(255, 255, 255, 0.58)',
+          borderWidth: 1,
+          borderColor: 'rgba(234, 230, 223, 0.9)',
+          borderRadius: 28,
           borderTopWidth: 1,
-          borderTopColor: 'rgba(234, 224, 213, 0.5)',
-          height: Platform.OS === 'ios' ? 88 : 70, 
-          paddingBottom: Platform.OS === 'ios' ? 30 : 12,
+          borderTopColor: 'rgba(234, 230, 223, 0.9)',
+          height: Platform.OS === 'ios' ? 82 : 70,
+          paddingBottom: Platform.OS === 'ios' ? 24 : 10,
           paddingTop: 8,
-          shadowColor: '#4E342E',
-          shadowOffset: { width: 0, height: -5 },
-          shadowOpacity: 0.05,
-          shadowRadius: 15,
-          elevation: 0, // 安卓端关掉默认黑边阴影，用透明层
+          shadowColor: '#51443C',
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.09,
+          shadowRadius: 14,
+          elevation: 6,
         },
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '900', 
+          fontWeight: '800',
           marginBottom: 0, 
         },
         tabBarIconStyle: {
