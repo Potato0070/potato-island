@@ -94,3 +94,9 @@
 - `git diff --check`：通过。
 - `npx expo export --platform web --output-dir .expo-preview-market`：Metro 打包及 36 条路由渲染完成；最终复制静态资源时因 Windows `EPERM` 创建 `assets\\assets` 目录而退出，完整导出未通过。
 - `npx tsc --noEmit --pretty false`：仍有既有跨页面错误，位于未修改的 `app/my-orders.tsx`、`app/wallet.tsx` 和 `potato-app/` 模板目录；集市和导航文件没有类型错误。
+
+### 线上核验
+
+- 提交 `ede8092` 已推送到 `origin/main`。等待部署后从线上首页点击底部“集市”可进入更新页面，并看到“交易集市”、动态分类、结果数、排序控件、方形藏品图和 C 款底栏图标。
+- 直接打开 `https://www.podao.fun/market` 返回 404；站内底部导航切换可正常进入集市。
+- iPhone 16 视口复核未完成：桌面加载后临时缩放会保留已计算的桌面卡片宽度；在新移动视口里触发集市切换时浏览器超时。因此不能把本次截图当作移动端实机验收结论。
