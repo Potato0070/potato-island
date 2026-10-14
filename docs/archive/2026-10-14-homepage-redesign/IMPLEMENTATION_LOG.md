@@ -13,3 +13,17 @@
 - `npx expo export --platform web --output-dir .expo-preview`：通过，首页和资源成功打包。
 - `npx tsc --noEmit`：未通过；报错均在本轮未修改的 `app/my-orders.tsx`、`app/wallet.tsx` 和 `potato-app/` 模板文件，本轮修改文件无 TypeScript 报错。
 - 本地浏览器自动截图未完成：受限环境缺少 Playwright Chromium，Edge 自动启动也被本机管道策略中止；不影响 Expo Web bundle 成功。
+
+## 2026-10-14：底部导航二次迭代
+
+- `app/(tabs)/_layout.tsx`：Tab 标题更新为“首页、集市、旨意、消息、金库”，接入自定义底部导航组件。
+- `components/LiquidGlassTabBar.tsx`：新增漂浮玻璃底栏、A 方向岛民主题图标、触摸弹起和横向拖动跟手透镜；拖动结束后切换到命中的 Tab。维持五个既有路由。
+- 视觉实现使用 `expo-blur`、React Native `Animated` 与 `PanResponder`，未增加依赖；透镜通过局部图标放大、模糊底板、边缘高光和阴影模拟折射。
+- 未触碰 Supabase、资产、交易和页面数据逻辑。
+
+### 验证
+
+- `npx eslint 'app/(tabs)/_layout.tsx' components/LiquidGlassTabBar.tsx`：通过，0 errors、0 warnings。
+- `npx expo export --platform web --output-dir .expo-preview`：通过，36 条静态路由完成导出。
+- `npx tsc --noEmit --pretty false`：仍有既有错误，集中在未修改的 `app/my-orders.tsx`、`app/wallet.tsx` 与 `potato-app/` 模板文件；新导航组件未报告类型错误。
+- 线上验收待推送并等待 `podao.fun` 部署更新后进行。
