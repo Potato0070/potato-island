@@ -216,10 +216,6 @@ export default function MarketScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <View style={styles.brandLockup}>
-          <Image source={require('../../assets/homepage/logo-b.png')} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.brandName}>土豆岛</Text>
-        </View>
         <Text style={styles.headerTitle}>交易集市</Text>
       </View>
 
@@ -227,7 +223,7 @@ export default function MarketScreen() {
         <Text style={styles.searchIcon}>⌕</Text>
         <TextInput
           style={styles.searchInput}
-          placeholder="搜索藏品..."
+          placeholder="搜索藏品名称"
           placeholderTextColor="#98A2A8"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -249,23 +245,24 @@ export default function MarketScreen() {
       </View>
       
       <View style={styles.filterBar}>
+        <View style={styles.resultCount}>
+          <Ionicons name="albums-outline" size={14} color="#A19284" />
+          <Text style={styles.resultCountText} numberOfLines={1}>共 {processedData.length} 件</Text>
+        </View>
         <View style={styles.sortSection}>
-          <TouchableOpacity style={[styles.sortButton, activeSort === 'hot' && styles.sortButtonActive]} onPress={() => handleSortChange('hot')}>
-            <Ionicons name="flame-outline" size={14} color={activeSort === 'hot' ? '#547C96' : '#77858C'} />
+          <TouchableOpacity hitSlop={4} style={[styles.sortButton, activeSort === 'hot' && styles.sortButtonActive]} onPress={() => handleSortChange('hot')}>
             <Text style={[styles.sortText, activeSort === 'hot' && styles.sortTextActive]}>最热</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.sortButton, activeSort === 'latest' && styles.sortButtonActive]} onPress={() => handleSortChange('latest')}>
-            <Ionicons name="time-outline" size={14} color={activeSort === 'latest' ? '#547C96' : '#77858C'} />
+          <TouchableOpacity hitSlop={4} style={[styles.sortButton, activeSort === 'latest' && styles.sortButtonActive]} onPress={() => handleSortChange('latest')}>
             <Text style={[styles.sortText, activeSort === 'latest' && styles.sortTextActive]}>最新</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.sortButton, (activeSort === 'price_asc' || activeSort === 'price_desc') && styles.sortButtonActive]} onPress={() => handleSortChange(activeSort === 'price_asc' ? 'price_desc' : 'price_asc')}>
-            <Ionicons name="swap-vertical-outline" size={14} color={activeSort === 'price_asc' || activeSort === 'price_desc' ? '#547C96' : '#77858C'} />
-          <Text style={[styles.sortText, (activeSort === 'price_asc' || activeSort === 'price_desc') && styles.sortTextActive]} numberOfLines={1}>
-            价格排序{activeSort === 'price_asc' ? '↑' : activeSort === 'price_desc' ? '↓' : ''}
-          </Text>
+          <TouchableOpacity hitSlop={4} style={[styles.sortButton, (activeSort === 'price_asc' || activeSort === 'price_desc') && styles.sortButtonActive]} onPress={() => handleSortChange(activeSort === 'price_asc' ? 'price_desc' : 'price_asc')}>
+            <Text style={[styles.sortText, (activeSort === 'price_asc' || activeSort === 'price_desc') && styles.sortTextActive]} numberOfLines={1}>
+              价格排序{activeSort === 'price_asc' ? '↑' : activeSort === 'price_desc' ? '↓' : ''}
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.sortButton, activeSort === 'followed' && styles.sortButtonActive]} onPress={() => handleSortChange('followed')}>
-            <Ionicons name={activeSort === 'followed' ? 'heart' : 'heart-outline'} size={14} color={activeSort === 'followed' ? '#D87572' : '#77858C'} />
+          <TouchableOpacity hitSlop={4} style={[styles.sortButton, activeSort === 'followed' && styles.sortButtonActive]} onPress={() => handleSortChange('followed')}>
+            <Ionicons name={activeSort === 'followed' ? 'heart' : 'heart-outline'} size={12} color={activeSort === 'followed' ? '#D87572' : '#77858C'} />
             <Text style={[styles.sortText, activeSort === 'followed' && styles.sortTextActive]}>关注</Text>
           </TouchableOpacity>
         </View>
@@ -307,46 +304,45 @@ export default function MarketScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
-  header: { minHeight: 58, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  brandLockup: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  logo: { width: 48, height: 36 },
-  brandName: { fontSize: 17, lineHeight: 23, fontWeight: '900', color: '#5A493F', letterSpacing: 0.4 },
-  headerTitle: { fontSize: 22, lineHeight: 28, fontWeight: '900', color: '#3F484D', letterSpacing: 0.2 },
+  header: { minHeight: 58, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 22, lineHeight: 28, fontWeight: '800', color: '#493D35', letterSpacing: 0.2 },
   
-  searchSection: { height: 46, marginHorizontal: 16, marginTop: 4, marginBottom: 8, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: '#E5EAED' },
-  searchIcon: { width: 25, color: '#789DB4', fontSize: 24, lineHeight: 27, textAlign: 'center', marginRight: 5 },
-  searchInput: { flex: 1, minWidth: 0, height: '100%', paddingHorizontal: 2, fontSize: 14, color: '#3F484D', fontWeight: '500' },
+  searchSection: { height: 46, marginHorizontal: 16, marginTop: 4, marginBottom: 8, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FBFAF8', borderRadius: 14, borderWidth: 1, borderColor: '#ECE7E0' },
+  searchIcon: { width: 25, color: '#9A8B7D', fontSize: 24, lineHeight: 27, textAlign: 'center', marginRight: 5 },
+  searchInput: { flex: 1, minWidth: 0, height: '100%', paddingHorizontal: 2, fontSize: 14, color: '#493D35', fontWeight: '500' },
 
   categoryWrapper: { backgroundColor: '#FFFFFF', paddingTop: 8, paddingBottom: 10 },
   categoryScroll: { paddingHorizontal: 16 },
-  catTab: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 18, marginRight: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5EAED' },
-  catTabActive: { backgroundColor: '#EAF2F7', borderColor: '#D3E1E9' },
-  catText: { fontSize: 13, color: '#707D84', fontWeight: '700' },
-  catTextActive: { color: '#547C96', fontWeight: '800' },
+  catTab: { minHeight: 40, paddingHorizontal: 17, paddingVertical: 9, borderRadius: 13, marginRight: 8, backgroundColor: '#FAF7F2', borderWidth: 1, borderColor: '#F0EAE1', justifyContent: 'center' },
+  catTabActive: { backgroundColor: '#F1E3C8', borderColor: '#DFC696' },
+  catText: { fontSize: 14, lineHeight: 20, color: '#75685D', fontWeight: '600' },
+  catTextActive: { color: '#76542D', fontWeight: '700' },
 
-  filterBar: { backgroundColor: '#FFFFFF', paddingHorizontal: 12, paddingTop: 2, paddingBottom: 11, borderBottomWidth: 1, borderColor: '#EEF1F3' },
-  sortSection: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 5 },
-  sortButton: { flex: 1, minWidth: 0, minHeight: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 4, borderRadius: 11, borderWidth: 1, borderColor: '#EDF0F2', backgroundColor: '#FFFFFF' },
-  sortButtonActive: { backgroundColor: '#EEF4F8', borderColor: '#DCE8EF' },
-  sortText: { fontSize: 11, color: '#707D84', fontWeight: '700', flexShrink: 1 },
-  sortTextActive: { color: '#547C96', fontWeight: '800' },
+  filterBar: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingTop: 0, paddingBottom: 10 },
+  resultCount: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1, minWidth: 72 },
+  resultCountText: { fontSize: 12, lineHeight: 16, color: '#94877C', fontWeight: '500' },
+  sortSection: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2, flexShrink: 0 },
+  sortButton: { minHeight: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, paddingHorizontal: 6, borderRadius: 9, backgroundColor: 'transparent' },
+  sortButtonActive: { backgroundColor: '#EEF3F7' },
+  sortText: { fontSize: 12, lineHeight: 16, color: '#948A80', fontWeight: '600', flexShrink: 0 },
+  sortTextActive: { color: '#537895', fontWeight: '700' },
   
-  card: { width: CARD_WIDTH, position: 'relative', backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 14, overflow: 'hidden', shadowColor: '#34434D', shadowOpacity: 0.035, shadowRadius: 7, elevation: 1, borderWidth: 1, borderColor: '#E8ECEF' },
-  imageContainer: { width: '100%', aspectRatio: 1, backgroundColor: '#F7F9FA', borderBottomWidth: 1, borderColor: '#EEF1F3' },
+  card: { width: CARD_WIDTH, position: 'relative', backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 14, overflow: 'hidden', shadowColor: '#493D35', shadowOpacity: 0.035, shadowRadius: 7, elevation: 1, borderWidth: 1, borderColor: '#EEE9E3' },
+  imageContainer: { width: '100%', aspectRatio: 1, backgroundColor: '#FBFAF8', borderBottomWidth: 1, borderColor: '#F1ECE5' },
   image: { width: '100%', height: '100%', resizeMode: 'cover' },
   
-  delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.42)', justifyContent: 'center', alignItems: 'center' },
-  delistedStamp: { minWidth: CARD_WIDTH * 0.68, height: 48, paddingHorizontal: 14, borderRadius: 13, borderWidth: 2, borderColor: 'rgba(94,112,123,0.72)', backgroundColor: 'rgba(255,255,255,0.92)', justifyContent: 'center', alignItems: 'center', transform: [{rotate: '-8deg'}] },
-  delistedText: { color: '#697982', fontSize: 18, fontWeight: '900', letterSpacing: 2 },
+  delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,250,244,0.18)', justifyContent: 'center', alignItems: 'center' },
+  delistedStamp: { minWidth: CARD_WIDTH * 0.78, height: 50, paddingHorizontal: 14, borderRadius: 10, borderWidth: 2, borderColor: '#FFF9F1', backgroundColor: '#A84337', justifyContent: 'center', alignItems: 'center', transform: [{rotate: '-8deg'}] },
+  delistedText: { color: '#FFF9F1', fontSize: 18, fontWeight: '800', letterSpacing: 2 },
   followButton: { position: 'absolute', top: 9, right: 9, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.94)', borderWidth: 1, borderColor: 'rgba(224,230,232,0.9)', shadowColor: '#38464D', shadowOpacity: 0.12, shadowRadius: 5, elevation: 2 },
   
   info: { paddingHorizontal: 11, paddingTop: 11, paddingBottom: 12 },
-  name: { fontSize: 14, lineHeight: 19, fontWeight: '800', color: '#3F484D', marginBottom: 6 },
+  name: { fontSize: 15, lineHeight: 20, fontWeight: '700', color: '#493D35', marginBottom: 6 },
   statsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 9 },
-  supplyText: { fontSize: 10, color: '#7D898F', marginRight: 5, fontWeight: '600' },
-  priceRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', borderTopWidth: 1, borderColor: '#EEF1F3', paddingTop: 8 },
-  priceLabel: { fontSize: 10, color: '#87939A', fontWeight: '600' },
-  price: { fontSize: 15, fontWeight: '800', color: '#668FA8' },
+  supplyText: { fontSize: 11, lineHeight: 14, color: '#94877C', marginRight: 5, fontWeight: '500' },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', borderTopWidth: 1, borderColor: '#EEE9E3', paddingTop: 8 },
+  priceLabel: { fontSize: 11, lineHeight: 14, color: '#94877C', fontWeight: '500' },
+  price: { fontSize: 18, lineHeight: 24, fontWeight: '700', color: '#9A6A33' },
   emptyState: { alignItems: 'center', marginTop: 72, paddingHorizontal: 24 },
   emptyIllustration: { width: 76, height: 76, borderRadius: 38, backgroundColor: '#F3F7F9', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   emptyIcon: { fontSize: 36 },

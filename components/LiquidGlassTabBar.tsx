@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Image,
   PanResponder,
   Platform,
   Pressable,
@@ -12,11 +13,15 @@ import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
-const INK = '#756252';
-const BLUE = '#6E98B5';
-const PAPER = '#F5E9D5';
-const SAGE = '#92A985';
 const HORIZONTAL_INSET = 12;
+
+const TAB_ICON_SOURCES: Record<string, number> = {
+  index: require('../assets/navigation/set-c/home-island.png'),
+  market: require('../assets/navigation/set-c/market-stall.png'),
+  community: require('../assets/navigation/set-c/decree-map.png'),
+  messages: require('../assets/navigation/set-c/message-courier.png'),
+  profile: require('../assets/navigation/set-c/treasury-chest.png'),
+};
 
 export default function LiquidGlassTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -175,7 +180,7 @@ export default function LiquidGlassTabBar({ state, descriptors, navigation }: Bo
                     transform: [{ scale: pressedIndex === index || (focused && pressedIndex === null) ? 1.1 : 1 }],
                   }}
                 >
-                  <IslandTabIcon name={route.name} color={focused ? BLUE : INK} />
+                  <IslandTabIcon name={route.name} />
                   <Text style={[styles.label, { color: focused ? '#557D9A' : '#76695F' }]} numberOfLines={1}>
                     {label}
                   </Text>
@@ -200,7 +205,7 @@ export default function LiquidGlassTabBar({ state, descriptors, navigation }: Bo
           <View style={styles.lensTopSheen} />
           <View style={styles.lensBottomRim} />
           <View style={styles.lensContent}>
-            <IslandTabIcon name={routes[pressedIndex ?? state.index]?.name ?? 'index'} color={BLUE} />
+            <IslandTabIcon name={routes[pressedIndex ?? state.index]?.name ?? 'index'} />
             <Text style={[styles.label, styles.lensLabel]} numberOfLines={1}>
               {descriptors[routes[pressedIndex ?? state.index]?.key]?.options.title ?? '首页'}
             </Text>
@@ -211,90 +216,8 @@ export default function LiquidGlassTabBar({ state, descriptors, navigation }: Bo
   );
 }
 
-function IslandTabIcon({ name, color }: { name: string; color: string }) {
-  switch (name) {
-    case 'index':
-      return <IslandHome color={color} />;
-    case 'market':
-      return <IslandMarket color={color} />;
-    case 'community':
-      return <IslandFriends color={color} />;
-    case 'messages':
-      return <IslandMessage color={color} />;
-    default:
-      return <IslandTreasury color={color} />;
-  }
-}
-
-function IslandHome({ color }: { color: string }) {
-  return (
-    <View style={icon.canvas}>
-      <View style={[icon.leafLeft, { backgroundColor: SAGE }]} />
-      <View style={[icon.leafRight, { backgroundColor: '#A5B58D' }]} />
-      <View style={[icon.homeRoof, { borderBottomColor: color }]} />
-      <View style={[icon.homeBody, { borderColor: color }]}>
-        <View style={[icon.door, { borderColor: color }]} />
-      </View>
-      <View style={[icon.homeGround, { backgroundColor: SAGE }]} />
-    </View>
-  );
-}
-
-function IslandMarket({ color }: { color: string }) {
-  return (
-    <View style={icon.canvas}>
-      <View style={[icon.card, { borderColor: color }]}>
-        <View style={icon.cardSky} />
-        <View style={icon.cardIsland} />
-        <View style={icon.cardDot} />
-      </View>
-      <View style={[icon.bagHandle, { borderColor: color }]} />
-      <View style={[icon.bag, { borderColor: color, backgroundColor: '#F0E4D1' }]}>
-        <View style={[icon.bagSprout, { backgroundColor: SAGE }]} />
-      </View>
-    </View>
-  );
-}
-
-function IslandFriends({ color }: { color: string }) {
-  return (
-    <View style={icon.canvas}>
-      <View style={[icon.friendBack, { backgroundColor: '#E7B38F', borderColor: color }]}>
-        <View style={icon.eyeLeft} /><View style={icon.eyeRight} />
-      </View>
-      <View style={[icon.friendFront, { backgroundColor: '#E8C99D', borderColor: color }]}>
-        <View style={icon.eyeLeft} /><View style={icon.eyeRight} />
-        <View style={[icon.friendLeaf, { backgroundColor: SAGE }]} />
-      </View>
-      <View style={[icon.friendGround, { backgroundColor: SAGE }]} />
-    </View>
-  );
-}
-
-function IslandMessage({ color }: { color: string }) {
-  return (
-    <View style={icon.canvas}>
-      <View style={[icon.messageBubble, { borderColor: color, backgroundColor: '#FFF9EF' }]}>
-        <View style={icon.messageDot} /><View style={icon.messageDot} /><View style={icon.messageDot} />
-      </View>
-      <Text style={icon.sparkle}>✦</Text>
-      <View style={[icon.messageLeaf, { backgroundColor: SAGE }]} />
-    </View>
-  );
-}
-
-function IslandTreasury({ color }: { color: string }) {
-  return (
-    <View style={icon.canvas}>
-      <View style={[icon.avatarFace, { borderColor: color }]}>
-        <View style={[icon.avatarEye, { left: 6 }]} /><View style={[icon.avatarEye, { right: 6 }]} />
-        <View style={[icon.avatarSmile, { borderColor: color }]} />
-      </View>
-      <View style={[icon.avatarHat, { backgroundColor: '#A9B69A', borderColor: color }]} />
-      <View style={[icon.avatarLeaf, { backgroundColor: SAGE }]} />
-      <View style={[icon.avatarCheek, { left: 3 }]} /><View style={[icon.avatarCheek, { right: 3 }]} />
-    </View>
-  );
+function IslandTabIcon({ name }: { name: string }) {
+  return <Image source={TAB_ICON_SOURCES[name] ?? TAB_ICON_SOURCES.index} style={styles.tabIcon} resizeMode="contain" />;
 }
 
 const styles = StyleSheet.create({
@@ -364,38 +287,6 @@ const styles = StyleSheet.create({
   lensLabel: { color: '#557D9A' },
   items: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   item: { height: 76, alignItems: 'center', justifyContent: 'center', paddingTop: 5 },
-  label: { marginTop: 2, fontSize: 10, lineHeight: 13, fontWeight: '700', letterSpacing: 0.3 },
-});
-
-const icon = StyleSheet.create({
-  canvas: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
-  leafLeft: { position: 'absolute', top: 0, left: 10, width: 7, height: 4, borderRadius: 7, transform: [{ rotate: '-35deg' }] },
-  leafRight: { position: 'absolute', top: 0, left: 15, width: 7, height: 4, borderRadius: 7, transform: [{ rotate: '32deg' }] },
-  homeRoof: { position: 'absolute', top: 7, width: 0, height: 0, borderLeftWidth: 11, borderRightWidth: 11, borderBottomWidth: 10, borderLeftColor: 'transparent', borderRightColor: 'transparent' },
-  homeBody: { position: 'absolute', top: 16, width: 20, height: 11, borderWidth: 1.3, borderTopWidth: 0, borderRadius: 3, backgroundColor: '#F7EBD8', alignItems: 'center', justifyContent: 'flex-end' },
-  door: { width: 5, height: 7, borderWidth: 1, borderBottomWidth: 0, borderTopLeftRadius: 4, borderTopRightRadius: 4, backgroundColor: '#C9A982' },
-  homeGround: { position: 'absolute', bottom: 1, width: 24, height: 2, borderRadius: 3 },
-  card: { position: 'absolute', top: 1, left: 9, width: 14, height: 18, borderWidth: 1, borderRadius: 2, backgroundColor: '#FFF8EB', transform: [{ rotate: '5deg' }], overflow: 'hidden' },
-  cardSky: { position: 'absolute', top: 2, left: 2, right: 2, height: 6, borderRadius: 2, backgroundColor: '#BED4DF' },
-  cardIsland: { position: 'absolute', bottom: 3, left: 3, width: 8, height: 5, borderRadius: 5, backgroundColor: SAGE },
-  cardDot: { position: 'absolute', top: 5, right: 4, width: 2, height: 2, borderRadius: 2, backgroundColor: '#E4BD79' },
-  bagHandle: { position: 'absolute', top: 10, left: 5, width: 20, height: 14, borderWidth: 1.5, borderBottomWidth: 0, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
-  bag: { position: 'absolute', bottom: 1, width: 23, height: 15, borderWidth: 1.3, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
-  bagSprout: { width: 5, height: 3, borderRadius: 4, transform: [{ rotate: '-22deg' }] },
-  friendBack: { position: 'absolute', left: 3, top: 8, width: 16, height: 16, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  friendFront: { position: 'absolute', right: 2, top: 10, width: 17, height: 15, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  eyeLeft: { position: 'absolute', top: 5, left: 4, width: 1.7, height: 2.5, borderRadius: 2, backgroundColor: INK },
-  eyeRight: { position: 'absolute', top: 5, right: 4, width: 1.7, height: 2.5, borderRadius: 2, backgroundColor: INK },
-  friendLeaf: { position: 'absolute', top: -3, left: 7, width: 6, height: 3, borderRadius: 5, transform: [{ rotate: '-25deg' }] },
-  friendGround: { position: 'absolute', bottom: 1, width: 25, height: 2, borderRadius: 3 },
-  messageBubble: { position: 'absolute', top: 4, width: 23, height: 19, borderWidth: 1.2, borderRadius: 9, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3 },
-  messageDot: { width: 2, height: 2, borderRadius: 2, backgroundColor: INK },
-  sparkle: { position: 'absolute', right: 0, top: -3, fontSize: 10, color: '#D3A968', fontWeight: '800' },
-  messageLeaf: { position: 'absolute', bottom: 2, left: 3, width: 5, height: 3, borderRadius: 5, transform: [{ rotate: '-25deg' }] },
-  avatarFace: { position: 'absolute', top: 7, width: 23, height: 20, borderWidth: 1.2, borderRadius: 13, backgroundColor: PAPER },
-  avatarEye: { position: 'absolute', top: 8, width: 2, height: 2.5, borderRadius: 2, backgroundColor: INK },
-  avatarSmile: { position: 'absolute', top: 12, left: 9, width: 5, height: 3, borderBottomWidth: 1, borderRadius: 4 },
-  avatarHat: { position: 'absolute', top: 5, width: 21, height: 6, borderWidth: 1, borderTopLeftRadius: 12, borderTopRightRadius: 12, transform: [{ rotate: '-4deg' }] },
-  avatarLeaf: { position: 'absolute', top: 2, right: 5, width: 5, height: 3, borderRadius: 4, transform: [{ rotate: '-35deg' }] },
-  avatarCheek: { position: 'absolute', top: 20, width: 3, height: 2, borderRadius: 3, backgroundColor: '#D99A83' },
+  tabIcon: { width: 36, height: 36 },
+  label: { marginTop: 0, fontSize: 11, lineHeight: 15, fontWeight: '700', letterSpacing: 0.1 },
 });

@@ -65,3 +65,32 @@
 - `npx expo export --platform web --output-dir .expo-preview`：通过，36 条静态路由完成导出；`/(tabs)/market` 页面打包成功。
 - 推送后线上首页返回 HTTP 200；首页引用的公开 JS bundle 已包含 `@market_followed_collection_ids`、`transfer_logs`、`heart-outline` 等本轮实现标记。内置浏览器中直达 `/market` 返回 404，且线上页面截图访问超时，因此已确认部署资源更新，未能完成可视化交互验收。
 - TypeScript 全量检查未重复执行；此前已记录的既有跨页面错误不属于本轮范围。本次页面 ESLint 无 errors、无 warnings，`git diff --check` 通过。
+
+## 2026-10-14：交易集市确认稿与导航 C 款
+
+- `app/(tabs)/market.tsx`：页面标题改为居中且不显示品牌区；搜索框、动态分类、次级排序和藏品卡片按确认稿统一暖白、麦芽金与雾霾蓝层级。排序行靠右，左侧新增根据当前 `processedData` 得出的“共 N 件”。分类名称仍来自后台，不硬编码预览稿的临时分类。
+- 退市标改为更明显的陶土红章；保留现有方形图片、藏品字段、关注本地存储、近 30 日热度、导航与刷新行为。
+- `components/LiquidGlassTabBar.tsx`：将五个手绘矢量占位图替换为 C 款独立 PNG 图标；保留五个标签、液态玻璃容器、全宽布局和跟手透镜交互。
+- `docs/design-system/UI_GUIDELINES.md`：建立页面标题、正文、辅助文字字号和行高，以及间距、颜色、控件规格与预览确认流程基准。
+- 旨意、消息、金库预览稿已生成并待用户确认；本次未改对应页面代码。
+
+### 验证
+
+- `npx eslint 'app/(tabs)/market.tsx' components/LiquidGlassTabBar.tsx`：通过。
+- `npx expo export --platform web --output-dir .expo-preview`：通过，36 条静态路由导出完成。
+- `git diff --check`：通过。
+- `npx tsc --noEmit --pretty false`：全量检查仍因既有错误未通过，错误在未修改的 `app/my-orders.tsx`、`app/wallet.tsx` 与 `potato-app/` 模板目录；本次修改的集市、导航组件未报告类型错误。
+- 旨意、消息、金库仅有待确认效果稿，未改这些页面代码；效果稿中的内容和数据均为示例。
+
+## 2026-10-14：集市最终规范与金库预览归档
+
+- 集市卡片的在售量、流通量和价格说明统一到规范中的 11sp 辅助字号；保留已确认的结构、数据逻辑和动态交互。
+- 导航继续使用 `assets/navigation/set-c/` 五个图标；`app/(tabs)/_layout.tsx` 的实际标签为“首页、集市、旨意、消息、金库”，液态玻璃栏与跟手透镜交互保留。
+- 记录创世神金库预览确认：以普通玩家金库图为底稿，增加身份徽标与中枢控制台卡。本次仅归档确认稿，没有把预览数据或管理员入口写入金库代码。
+
+### 最新验证
+
+- `npx eslint 'app/(tabs)/market.tsx' components/LiquidGlassTabBar.tsx`：通过，无 errors、无 warnings。
+- `git diff --check`：通过。
+- `npx expo export --platform web --output-dir .expo-preview-market`：Metro 打包及 36 条路由渲染完成；最终复制静态资源时因 Windows `EPERM` 创建 `assets\\assets` 目录而退出，完整导出未通过。
+- `npx tsc --noEmit --pretty false`：仍有既有跨页面错误，位于未修改的 `app/my-orders.tsx`、`app/wallet.tsx` 和 `potato-app/` 模板目录；集市和导航文件没有类型错误。
