@@ -25,8 +25,8 @@ const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
   const [loading, setLoading] = useState(true);
 
   return (
-    <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' }]}>
-      {loading && !hasError && <ActivityIndicator color="#D49A36" style={{ position: 'absolute' }} />}
+      <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F7F9FA' }]}>
+      {loading && !hasError && <ActivityIndicator color="#789DB4" style={{ position: 'absolute' }} />}
       {!hasError ? (
         <Image
           source={{ uri: uri || 'invalid_url' }}
@@ -163,6 +163,18 @@ export default function MarketScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}><Text style={styles.headerTitle}>交易集市</Text></View>
 
+      <View style={styles.searchSection}>
+        <Text style={styles.searchIcon}>⌕</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="搜索藏品..."
+          placeholderTextColor="#98A2A8"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          returnKeyType="search"
+        />
+      </View>
+
       <View style={styles.categoryWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
           <TouchableOpacity style={[styles.catTab, activeCategory === 'all' && styles.catTabActive]} onPress={() => handleCategoryChange('all')}>
@@ -178,24 +190,14 @@ export default function MarketScreen() {
       
       <View style={styles.filterBar}>
          <View style={styles.sortSection}>
-             <TouchableOpacity onPress={() => handleSortChange('latest')}>
+             <TouchableOpacity style={[styles.sortButton, activeSort === 'latest' && styles.sortButtonActive]} onPress={() => handleSortChange('latest')}>
                 <Text style={[styles.sortText, activeSort === 'latest' && styles.sortTextActive]}>最新上架</Text>
              </TouchableOpacity>
-             <TouchableOpacity style={styles.sortPriceBtn} onPress={() => handleSortChange(activeSort === 'price_asc' ? 'price_desc' : 'price_asc')}>
+             <TouchableOpacity style={[styles.sortButton, styles.sortPriceBtn, (activeSort === 'price_asc' || activeSort === 'price_desc') && styles.sortButtonActive]} onPress={() => handleSortChange(activeSort === 'price_asc' ? 'price_desc' : 'price_asc')}>
                 <Text style={[styles.sortText, (activeSort === 'price_asc' || activeSort === 'price_desc') && styles.sortTextActive]}>
                     价格排序 {activeSort === 'price_asc' ? '↑' : (activeSort === 'price_desc' ? '↓' : '')}
                 </Text>
              </TouchableOpacity>
-         </View>
-         
-         <View style={styles.searchSection}>
-            <TextInput 
-               style={styles.searchInput} 
-               placeholder="🔍 搜索藏品..." 
-               placeholderTextColor="#A1887F"
-               value={searchQuery}
-               onChangeText={setSearchQuery}
-            />
          </View>
       </View>
 
@@ -203,11 +205,11 @@ export default function MarketScreen() {
         // 🌟 骨架屏占位
         <View style={{flexDirection: 'row', flexWrap: 'wrap', padding: 16, justifyContent: 'space-between'}}>
            {Array.from({length: 6}).map((_, i) => (
-             <View key={i} style={[styles.card, { opacity: 0.5 }]}>
-                <View style={[styles.imageContainer, {backgroundColor: '#EAE0D5'}]} />
+           <View key={i} style={[styles.card, { opacity: 0.58 }]}>
+                <View style={[styles.imageContainer, {backgroundColor: '#EEF2F4'}]} />
                 <View style={{padding: 12}}>
-                   <View style={{height: 14, backgroundColor: '#EAE0D5', borderRadius: 4, marginBottom: 8, width: '80%'}} />
-                   <View style={{height: 10, backgroundColor: '#EAE0D5', borderRadius: 4, width: '50%'}} />
+                   <View style={{height: 14, backgroundColor: '#E5EAED', borderRadius: 4, marginBottom: 8, width: '80%'}} />
+                   <View style={{height: 10, backgroundColor: '#E5EAED', borderRadius: 4, width: '50%'}} />
                 </View>
              </View>
            ))}
@@ -220,11 +222,11 @@ export default function MarketScreen() {
           numColumns={2} 
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }} 
           columnWrapperStyle={{ justifyContent: 'space-between' }} 
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#D49A36" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#789DB4" />}
           ListEmptyComponent={
-             <View style={{alignItems:'center', marginTop: 80}}>
-                <Text style={{fontSize: 60, marginBottom: 16}}>🥔</Text>
-                <Text style={{color:'#8D6E63', fontWeight: '800', fontSize: 16}}>集市里还没有这种藏品哦</Text>
+             <View style={styles.emptyState}>
+                <View style={styles.emptyIllustration}><Text style={styles.emptyIcon}>🥔</Text></View>
+                <Text style={styles.emptyText}>集市里还没有这种藏品哦</Text>
              </View>
           }
         />
@@ -234,39 +236,46 @@ export default function MarketScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FDF8F0' },
-  header: { padding: 16, backgroundColor: '#FDF8F0', alignItems: 'center', borderBottomWidth: 1, borderColor: '#EAE0D5' },
-  headerTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E' },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  header: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, backgroundColor: '#FFFFFF', alignItems: 'flex-start' },
+  headerTitle: { fontSize: 22, lineHeight: 28, fontWeight: '900', color: '#3F484D', letterSpacing: 0.2 },
   
-  categoryWrapper: { backgroundColor: '#FDF8F0', paddingVertical: 12 },
-  categoryScroll: { paddingHorizontal: 16 },
-  catTab: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, marginRight: 10, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#EAE0D5' },
-  catTabActive: { backgroundColor: '#D49A36', borderColor: '#D49A36', shadowColor: '#D49A36', shadowOpacity: 0.2, shadowRadius: 4, elevation: 2 },
-  catText: { fontSize: 13, color: '#8D6E63', fontWeight: '800' },
-  catTextActive: { color: '#FFF', fontWeight: '900' },
+  searchSection: { height: 46, marginHorizontal: 16, marginTop: 4, marginBottom: 8, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: '#E5EAED' },
+  searchIcon: { width: 25, color: '#789DB4', fontSize: 24, lineHeight: 27, textAlign: 'center', marginRight: 5 },
+  searchInput: { flex: 1, minWidth: 0, height: '100%', paddingHorizontal: 2, fontSize: 14, color: '#3F484D', fontWeight: '500' },
 
-  filterBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FDF8F0', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderColor: '#EAE0D5' },
+  categoryWrapper: { backgroundColor: '#FFFFFF', paddingTop: 8, paddingBottom: 10 },
+  categoryScroll: { paddingHorizontal: 16 },
+  catTab: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 18, marginRight: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5EAED' },
+  catTabActive: { backgroundColor: '#EAF2F7', borderColor: '#D3E1E9' },
+  catText: { fontSize: 13, color: '#707D84', fontWeight: '700' },
+  catTextActive: { color: '#547C96', fontWeight: '800' },
+
+  filterBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingTop: 2, paddingBottom: 12, borderBottomWidth: 1, borderColor: '#EEF1F3' },
   sortSection: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  sortText: { fontSize: 13, color: '#8D6E63', marginRight: 20, fontWeight: '800' },
-  sortTextActive: { color: '#D49A36', fontWeight: '900' }, 
+  sortButton: { minHeight: 34, justifyContent: 'center', paddingHorizontal: 11, marginRight: 8, borderRadius: 10, borderWidth: 1, borderColor: '#E8ECEF', backgroundColor: '#FFFFFF' },
+  sortButtonActive: { backgroundColor: '#EEF4F8', borderColor: '#DCE8EF' },
+  sortText: { fontSize: 12, color: '#707D84', fontWeight: '700' },
+  sortTextActive: { color: '#547C96', fontWeight: '800' },
   sortPriceBtn: { flexDirection: 'row', alignItems: 'center' },
   
-  searchSection: { width: 130 },
-  searchInput: { backgroundColor: '#FFF', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8, fontSize: 12, color: '#4E342E', borderWidth: 1, borderColor: '#EAE0D5', fontWeight: '700' },
-
-  card: { width: CARD_WIDTH, backgroundColor: '#FFF', borderRadius: 16, marginBottom: 16, overflow: 'hidden', shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, borderWidth: 1, borderColor: '#F0E6D2' },
-  imageContainer: { width: '100%', aspectRatio: 1, backgroundColor: '#FDF8F0', borderBottomWidth: 1, borderColor: '#F0E6D2' },
+  card: { width: CARD_WIDTH, backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 14, overflow: 'hidden', shadowColor: '#34434D', shadowOpacity: 0.035, shadowRadius: 7, elevation: 1, borderWidth: 1, borderColor: '#E8ECEF' },
+  imageContainer: { width: '100%', aspectRatio: 1, backgroundColor: '#F7F9FA', borderBottomWidth: 1, borderColor: '#EEF1F3' },
   image: { width: '100%', height: '100%', resizeMode: 'cover' },
   
-  delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(78, 52, 46, 0.6)', justifyContent: 'center', alignItems: 'center' },
-  delistedStamp: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: '#D49A36', backgroundColor: 'rgba(44, 30, 22, 0.8)', justifyContent: 'center', alignItems: 'center', transform: [{rotate: '-15deg'}] },
-  delistedText: { color: '#D49A36', fontSize: 15, fontWeight: '900', letterSpacing: 2 },
+  delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.42)', justifyContent: 'center', alignItems: 'center' },
+  delistedStamp: { minWidth: 72, height: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(94,112,123,0.48)', backgroundColor: 'rgba(255,255,255,0.88)', justifyContent: 'center', alignItems: 'center', transform: [{rotate: '-8deg'}] },
+  delistedText: { color: '#697982', fontSize: 13, fontWeight: '800', letterSpacing: 1 },
   
-  info: { padding: 12 },
-  name: { fontSize: 14, fontWeight: '900', color: '#4E342E', marginBottom: 6 },
-  statsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  supplyText: { fontSize: 10, color: '#8D6E63', marginRight: 4, fontWeight: '700' },
-  priceRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', borderTopWidth: 1, borderColor: '#EAE0D5', paddingTop: 8 },
-  priceLabel: { fontSize: 11, color: '#A1887F', fontWeight: '800' },
-  price: { fontSize: 16, fontWeight: '900', color: '#D49A36' } 
+  info: { paddingHorizontal: 11, paddingTop: 11, paddingBottom: 12 },
+  name: { fontSize: 14, lineHeight: 19, fontWeight: '800', color: '#3F484D', marginBottom: 6 },
+  statsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 9 },
+  supplyText: { fontSize: 10, color: '#7D898F', marginRight: 5, fontWeight: '600' },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', borderTopWidth: 1, borderColor: '#EEF1F3', paddingTop: 8 },
+  priceLabel: { fontSize: 10, color: '#87939A', fontWeight: '600' },
+  price: { fontSize: 15, fontWeight: '800', color: '#668FA8' },
+  emptyState: { alignItems: 'center', marginTop: 72, paddingHorizontal: 24 },
+  emptyIllustration: { width: 76, height: 76, borderRadius: 38, backgroundColor: '#F3F7F9', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  emptyIcon: { fontSize: 36 },
+  emptyText: { color: '#67777F', fontWeight: '700', fontSize: 15, textAlign: 'center' },
 });

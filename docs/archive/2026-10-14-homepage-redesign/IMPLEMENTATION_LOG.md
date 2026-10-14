@@ -38,3 +38,15 @@
 - `npx eslint 'app/(tabs)/_layout.tsx' components/LiquidGlassTabBar.tsx`：通过，0 errors、0 warnings。
 - `npx expo export --platform web --output-dir .expo-preview`：通过，36 条静态路由完成导出。
 - `npx tsc --noEmit --pretty false`：未通过，报错仅在原有 `app/my-orders.tsx`、`app/wallet.tsx` 和 `potato-app/` 模板；导航组件未报告类型错误。
+
+## 2026-10-14：交易集市视觉优化
+
+- `app/(tabs)/market.tsx`：页面底色改为纯白；标题、搜索、动态分类与排序按实际操作顺序排布；选中态使用雾霾蓝，卡片采用轻边框和低阴影；退市状态改为浅色遮罩，保留藏品可辨识度；空态和骨架屏同步收敛配色。
+- 保留 Supabase 查询、动态分类、名称搜索、最新/价格排序、AsyncStorage 偏好、双列卡片数据、退市判断、价格标签、集合页跳转与下拉刷新；没有增加无后端依据的筛选功能。
+
+### 验证
+
+- `npx eslint 'app/(tabs)/market.tsx'`：0 errors；保留 3 条该文件原有空 `catch` 参数 warning。
+- `git diff --check`：通过。
+- `npx expo export --platform web --output-dir .expo-preview`：通过，36 条静态路由完成导出。
+- TypeScript 全量检查沿用上文记录的既有跨页面错误；本次仅修改页面样式和搜索框排布，没有改动数据逻辑。
