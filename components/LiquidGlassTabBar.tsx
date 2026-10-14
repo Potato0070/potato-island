@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,19 +16,20 @@ const INK = '#756252';
 const BLUE = '#6E98B5';
 const PAPER = '#F5E9D5';
 const SAGE = '#92A985';
+const HORIZONTAL_INSET = 12;
 
 export default function LiquidGlassTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
-  const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const routes = state.routes;
-  const barWidth = Math.max(screenWidth - 24, 280);
-  const slotWidth = barWidth / routes.length;
-  const lensWidth = Math.max(slotWidth - 8, 48);
-  const lensX = useRef(new Animated.Value(state.index * slotWidth + 4)).current;
+  const [barWidth, setBarWidth] = useState(0);
+  const slotWidth = routes.length > 0 ? barWidth / routes.length : 0;
+  const lensWidth = slotWidth > 0 ? Math.max(slotWidth - 8, 48) : 48;
+  const lensX = useRef(new Animated.Value(4)).current;
   const lensScaleX = useRef(new Animated.Value(1)).current;
   const [pressedIndex, setPressedIndex] = useState<number | null>(null);
 
   const placeLens = useCallback((index: number, immediate = false) => {
+    if (barWidth <= 0) return;
     const nextX = Math.max(4, Math.min(index * slotWidth + 4, barWidth - lensWidth - 4));
     if (immediate) {
       lensX.setValue(nextX);
@@ -49,12 +49,14 @@ export default function LiquidGlassTabBar({ state, descriptors, navigation }: Bo
   }, [placeLens, state.index]);
 
   const indexAtPageX = useCallback((pageX: number) => {
-    const localX = pageX - 12;
+    if (slotWidth <= 0) return 0;
+    const localX = pageX - HORIZONTAL_INSET;
     return Math.max(0, Math.min(routes.length - 1, Math.floor(localX / slotWidth)));
   }, [routes.length, slotWidth]);
 
   const setFingerPosition = useCallback((pageX: number) => {
-    const localX = Math.max(0, Math.min(barWidth, pageX - 12));
+    if (barWidth <= 0) return;
+    const localX = Math.max(0, Math.min(barWidth, pageX - HORIZONTAL_INSET));
     const nextX = Math.max(4, Math.min(localX - lensWidth / 2, barWidth - lensWidth - 4));
     lensX.setValue(nextX);
   }, [barWidth, lensWidth, lensX]);
@@ -121,7 +123,11 @@ export default function LiquidGlassTabBar({ state, descriptors, navigation }: Bo
       style={[styles.positioner, { bottom: Math.max(insets.bottom, 8) + 4 }]}
     >
       <View
-        style={[styles.bar, { width: barWidth }]}
+        onLayout={({ nativeEvent }) => {
+          const measuredWidth = nativeEvent.layout.width;
+          setBarWidth((currentWidth) => currentWidth === measuredWidth ? currentWidth : measuredWidth);
+        }}
+        style={styles.bar}
         {...panResponder.panHandlers}
       >
         <BlurView intensity={Platform.OS === 'web' ? 42 : 72} tint="light" style={StyleSheet.absoluteFill} />
@@ -160,7 +166,7 @@ export default function LiquidGlassTabBar({ state, descriptors, navigation }: Bo
                     useNativeDriver: true,
                   }).start();
                 }}
-                style={[styles.item, { width: slotWidth }]}
+                style={[styles.item, { flex: 1 }]}
               >
                 <Animated.View
                   style={{
@@ -184,6 +190,7 @@ export default function LiquidGlassTabBar({ state, descriptors, navigation }: Bo
             styles.lens,
             {
               width: lensWidth,
+              opacity: barWidth > 0 ? 1 : 0,
               transform: [{ translateX: lensX }, { scaleX: lensScaleX }],
             },
           ]}
@@ -291,8 +298,11 @@ function IslandTreasury({ color }: { color: string }) {
 }
 
 const styles = StyleSheet.create({
-  positioner: { position: 'absolute', left: 12, right: 12, alignItems: 'center', zIndex: 100 },
+  positioner: { position: 'absolute', left: HORIZONTAL_INSET, right: HORIZONTAL_INSET, alignItems: 'stretch', zIndex: 100 },
   bar: {
+    width: '100%',
+    alignSelf: 'stretch',
+    flexShrink: 0,
     height: 78,
     borderRadius: 34,
     overflow: 'hidden',

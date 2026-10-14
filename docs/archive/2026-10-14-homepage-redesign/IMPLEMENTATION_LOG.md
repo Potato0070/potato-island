@@ -27,3 +27,14 @@
 - `npx expo export --platform web --output-dir .expo-preview`：通过，36 条静态路由完成导出。
 - `npx tsc --noEmit --pretty false`：仍有既有错误，集中在未修改的 `app/my-orders.tsx`、`app/wallet.tsx` 与 `potato-app/` 模板文件；新导航组件未报告类型错误。
 - 线上验收待推送并等待 `podao.fun` 部署更新后进行。
+
+## 2026-10-14：导航栏切换宽度修复
+
+- `components/LiquidGlassTabBar.tsx`：导航外框改为填满安全边距内的实际布局容器，使用 `onLayout` 测得的宽度计算五个入口、触点命中区与透镜位置；选中 Tab 时仅移动内部透镜，外框宽度保持稳定。
+- 未调整五个页面内容、路由、数据和交易逻辑；用户确认的暖白液态玻璃样式与图标保留。
+
+### 验证
+
+- `npx eslint 'app/(tabs)/_layout.tsx' components/LiquidGlassTabBar.tsx`：通过，0 errors、0 warnings。
+- `npx expo export --platform web --output-dir .expo-preview`：通过，36 条静态路由完成导出。
+- `npx tsc --noEmit --pretty false`：未通过，报错仅在原有 `app/my-orders.tsx`、`app/wallet.tsx` 和 `potato-app/` 模板；导航组件未报告类型错误。
