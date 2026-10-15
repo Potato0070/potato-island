@@ -448,11 +448,10 @@ export default function MarketScreen() {
                 <BlurView intensity={7} tint="light" style={StyleSheet.absoluteFill} />
                 <View style={styles.delistedFrost} />
                 <Image
-                  source={require('../../assets/market/delisted-potato-plaque-v2.png')}
+                  source={require('../../assets/market/delisted-potato-plaque-lettered.png')}
                   style={styles.delistedPlaque}
                   resizeMode="contain"
                 />
-                <Text style={styles.delistedText}>已退市</Text>
               </View>
             )}
           </View>
@@ -1026,7 +1025,6 @@ const styles = StyleSheet.create({
   delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(238,243,239,0.10)' },
   delistedFrost: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(236,242,237,0.08)' },
   delistedPlaque: { position: 'absolute', width: '91%', height: '91%' },
-  delistedText: { position: 'absolute', left: '22%', right: '22%', top: '70%', textAlign: 'center', color: '#FFFFFF', fontSize: 16, lineHeight: 22, fontWeight: '900', letterSpacing: 3, textShadowColor: 'rgba(56,81,79,0.72)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   followButton: { position: 'absolute', top: 9, right: 9, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.94)', borderWidth: 1, borderColor: 'rgba(224,230,232,0.9)', shadowColor: '#38464D', shadowOpacity: 0.12, shadowRadius: 5, elevation: 2 },
   info: { paddingHorizontal: 11, paddingTop: 11, paddingBottom: 12 },
   name: { color: '#493D35', fontSize: 15, lineHeight: 20, fontWeight: '700', marginBottom: 6 },

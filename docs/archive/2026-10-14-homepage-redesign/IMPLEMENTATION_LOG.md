@@ -196,3 +196,8 @@
 - 线上截图与确认稿不符：旧实现把独立团子缩成小图，牌面则是 CSS 灰色胶囊；确认稿 A 是团子双手搭在有白色贴纸边的雾面牌上。
 - 新增完整透明组合贴纸 `assets/market/delisted-potato-plaque-v2.png`，代码只叠加“已退市”文字，确保图形比例、牌面纹理与确认稿匹配；整图模糊降到轻量级。
 - `npx eslint 'app/(tabs)/market.tsx'` 与 `git diff --check` 通过。Expo Web 静态路由打包成功，静态文件导出因临时目录权限失败；更换验证目录重试。
+
+## 2026-10-15：退市文字烘焙进贴纸
+
+- 使用 `assets/market/delisted-potato-plaque-lettered.png` 作为完整透明贴纸，牌面“已退市”由图像生成直接绘制，页面不再叠加代码文字。
+- 本机 ESLint 与 `git diff --check` 通过；上次确认 Vercel 部署检查成功。本次新素材和页面更新待推送。
