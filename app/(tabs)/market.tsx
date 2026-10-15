@@ -42,7 +42,6 @@ const CONTENT_MAX_WIDTH = 1200;
 const CARD_GAP = 12;
 const NAV_BAR_HEIGHT = 78;
 const NON_SALE_TYPES = new Set(['好友转赠', 'launch_mint', 'genesis_mint']);
-const COLLECTION_BOOKMARK_ICON = require('../../assets/market/collection-bookmark.png');
 
 const formatMoney = (value: number | string | null | undefined) => {
   const amount = Number(value);
@@ -213,17 +212,17 @@ export default function MarketScreen() {
         supabase.from('categories').select('*').order('sort_order', { ascending: true }),
         supabase.from('collections').select('*').eq('is_tradeable', true),
         supabase.from('transfer_logs')
-          .select('id, collection_id, transfer_type, seller_id, buyer_id, price, transfer_time')
-          .gte('transfer_time', since)
+          .select('id, collection_id, transfer_type, seller_id, buyer_id, price, transfer_time:created_at')
+          .gte('created_at', since)
           .not('seller_id', 'is', null)
           .gt('price', 0)
-          .order('transfer_time', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(LIST_LIMIT),
         supabase.from('transfer_logs')
-          .select('id, collection_id, transfer_type, seller_id, buyer_id, price, transfer_time')
+          .select('id, collection_id, transfer_type, seller_id, buyer_id, price, transfer_time:created_at')
           .not('seller_id', 'is', null)
           .gt('price', 0)
-          .order('transfer_time', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(20),
       ]);
 
@@ -475,10 +474,10 @@ export default function MarketScreen() {
           onPress={() => { void toggleFollowed(item.id); }}
           activeOpacity={0.78}
         >
-          <Image
-            source={COLLECTION_BOOKMARK_ICON}
-            style={[styles.followIcon, followedIds.includes(item.id) && styles.followIconSelected]}
-            resizeMode="contain"
+          <Ionicons
+            name={followedIds.includes(item.id) ? 'heart' : 'heart-outline'}
+            size={20}
+            color={followedIds.includes(item.id) ? '#D87572' : '#596A73'}
           />
         </TouchableOpacity>
       </View>
@@ -601,11 +600,11 @@ export default function MarketScreen() {
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityState={{ selected: activeSort === 'followed' }}
-              style={[styles.sortButton, styles.followSortButton, compactFilters && styles.sortButtonNarrow, activeSort === 'followed' && styles.followSortButtonActive]}
+              style={[styles.sortButton, styles.followSortButton, compactFilters && styles.sortButtonNarrow, activeSort === 'followed' && styles.sortButtonActive]}
               onPress={() => { void handleSortChange('followed'); }}
             >
-              <Image source={COLLECTION_BOOKMARK_ICON} style={[styles.followSortIcon, activeSort !== 'followed' && styles.followIconMuted]} resizeMode="contain" />
-              <Text style={[styles.sortText, activeSort === 'followed' && styles.followSortTextActive]}>关注</Text>
+              <Ionicons name={activeSort === 'followed' ? 'heart' : 'heart-outline'} size={12} color={activeSort === 'followed' ? '#D87572' : '#948A80'} />
+              <Text style={[styles.sortText, activeSort === 'followed' && styles.sortTextActive]}>关注</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -990,8 +989,6 @@ const styles = StyleSheet.create({
   sortButton: { minWidth: 56, minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 8, borderRadius: 10 },
   sortButtonNarrow: { flex: 1, minWidth: 0, minHeight: 44, paddingHorizontal: 5 },
   followSortButton: { paddingHorizontal: 8 },
-  followSortButtonActive: { backgroundColor: '#EDF2E7' },
-  followSortTextActive: { color: '#657D55', fontWeight: '700' },
   sortButtonActive: { backgroundColor: '#EEF3F7' },
   sortText: { color: '#82766D', fontSize: 12, lineHeight: 17, fontWeight: '600' },
   sortTextActive: { color: '#537895', fontWeight: '700' },
@@ -1021,16 +1018,12 @@ const styles = StyleSheet.create({
   fallbackIconWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   fallbackIcon: { fontSize: 32 },
   image: { width: '100%', height: '100%' },
-  delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(232,237,226,0.40)', justifyContent: 'center', alignItems: 'center' },
-  delistedRoute: { position: 'absolute', width: '76%', height: '48%', borderRadius: 999, borderWidth: 1, borderColor: 'rgba(91,108,79,0.58)', borderStyle: 'dashed' },
-  delistedRouteStart: { position: 'absolute', top: '25%', right: '17%', width: 8, height: 8, borderRadius: 4, backgroundColor: '#75866A', borderWidth: 1, borderColor: '#F8F7F2' },
-  delistedRouteEnd: { position: 'absolute', bottom: '25%', left: '17%', width: 8, height: 8, borderRadius: 4, backgroundColor: '#75866A', borderWidth: 1, borderColor: '#F8F7F2' },
-  delistedText: { color: '#58644F', fontSize: 16, fontWeight: '800', letterSpacing: 3, textShadowColor: 'rgba(255,255,255,0.82)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(20,22,21,0.48)', justifyContent: 'center', alignItems: 'center' },
+  delistedRoute: { position: 'absolute', width: '76%', height: '48%', borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.72)', borderStyle: 'dashed' },
+  delistedRouteStart: { position: 'absolute', top: '25%', right: '17%', width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: 'rgba(20,22,21,0.48)' },
+  delistedRouteEnd: { position: 'absolute', bottom: '25%', left: '17%', width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: 'rgba(20,22,21,0.48)' },
+  delistedText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 3, textShadowColor: 'rgba(0,0,0,0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   followButton: { position: 'absolute', top: 9, right: 9, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.94)', borderWidth: 1, borderColor: 'rgba(224,230,232,0.9)', shadowColor: '#38464D', shadowOpacity: 0.12, shadowRadius: 5, elevation: 2 },
-  followIcon: { width: 22, height: 22, opacity: 0.66 },
-  followIconSelected: { opacity: 1 },
-  followIconMuted: { opacity: 0.64 },
-  followSortIcon: { width: 16, height: 16 },
   info: { paddingHorizontal: 11, paddingTop: 11, paddingBottom: 12 },
   name: { color: '#493D35', fontSize: 15, lineHeight: 20, fontWeight: '700', marginBottom: 6 },
   statsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 9 },
