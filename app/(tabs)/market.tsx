@@ -137,7 +137,7 @@ export default function MarketScreen() {
   const [categories, setCategories] = useState<any[]>([]);
   const [collections, setCollections] = useState<MarketCollection[]>([]);
   const [activeKind, setActiveKind] = useState<MarketKind>('nft');
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string | null>('all');
   const [activeSort, setActiveSort] = useState<SortOption>('hot');
   const [followedIds, setFollowedIds] = useState<string[]>([]);
   const [hotCounts, setHotCounts] = useState<Record<string, number>>({});
@@ -178,7 +178,7 @@ export default function MarketScreen() {
         if (savedSort && ['hot', 'latest', 'price_asc', 'price_desc', 'followed'].includes(savedSort)) {
           setActiveSort(savedSort as SortOption);
         }
-        if (savedCategory && savedCategory !== 'all') setActiveCategory(savedCategory);
+        if (savedCategory) setActiveCategory(savedCategory);
         if (savedKind === 'nft' || savedKind === 'pfp') setActiveKind(savedKind);
         if (savedFollows) {
           const parsedFollows: unknown = JSON.parse(savedFollows);
@@ -295,7 +295,7 @@ export default function MarketScreen() {
     if (kind === activeKind) return;
     void Haptics.selectionAsync();
     setActiveKind(kind);
-    setActiveCategory(null);
+    setActiveCategory('all');
     setTrendCollectionId(null);
     setTrendFilterKind(kind);
     setTrendFilterCategoryId(null);
@@ -331,9 +331,9 @@ export default function MarketScreen() {
 
   useEffect(() => {
     if (!preferencesReady || loading) return;
-    const nextCategory = availableCategories.some((category) => category.id === activeCategory)
+    const nextCategory = activeCategory === 'all' || availableCategories.some((category) => category.id === activeCategory)
       ? activeCategory
-      : availableCategories[0]?.id || null;
+      : 'all';
     if (nextCategory !== activeCategory) setActiveCategory(nextCategory);
     void AsyncStorage.setItem('@market_category', nextCategory || 'all').catch(() => {});
   }, [activeCategory, availableCategories, loading, preferencesReady]);
@@ -347,7 +347,7 @@ export default function MarketScreen() {
   const processedData = useMemo(() => {
     const filtered = marketCollections.filter((collection) => {
       const categoryIds = getCollectionCategoryIds(collection);
-      const matchesCategory = !activeCategory || categoryIds.includes(activeCategory);
+      const matchesCategory = !activeCategory || activeCategory === 'all' || categoryIds.includes(activeCategory);
       const matchesSearch = String(collection.name || '').toLocaleLowerCase().includes(searchQuery.trim().toLocaleLowerCase());
       const matchesFollowed = activeSort !== 'followed' || followedIds.includes(collection.id);
       return matchesCategory && matchesSearch && matchesFollowed;
@@ -620,6 +620,14 @@ export default function MarketScreen() {
 
       <View style={styles.categoryOuter}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityState={{ selected: activeCategory === 'all' }}
+            style={[styles.categoryChip, activeCategory === 'all' && styles.categoryChipActive]}
+            onPress={() => { void handleCategoryChange('all'); }}
+          >
+            <Text style={[styles.categoryText, activeCategory === 'all' && styles.categoryTextActive]}>全部藏品</Text>
+          </TouchableOpacity>
           {availableCategories.map((category) => (
             <TouchableOpacity
               key={category.id}
