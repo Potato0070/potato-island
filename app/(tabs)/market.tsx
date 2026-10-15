@@ -147,6 +147,7 @@ export default function MarketScreen() {
   const [trendFilterKind, setTrendFilterKind] = useState<MarketKind>('nft');
   const [trendFilterCategoryId, setTrendFilterCategoryId] = useState<string | null>(null);
   const [trendSearchQuery, setTrendSearchQuery] = useState('');
+  const [trendFilterOpen, setTrendFilterOpen] = useState(false);
   const [tickerIndex, setTickerIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -382,10 +383,8 @@ export default function MarketScreen() {
     [categories, collections, trendFilterKind],
   );
   const trendCategories = useMemo(
-    () => categories.filter((category) =>
-      trendScopeCollections.some((collection) => getCollectionCategoryIds(collection).includes(category.id)),
-    ),
-    [categories, trendScopeCollections],
+    () => categories.filter((category) => trendFilterKind === 'pfp' ? isPfpCategory(category) : !isPfpCategory(category)),
+    [categories, trendFilterKind],
   );
   const trendCollections = useMemo(
     () => trendScopeCollections.filter((collection) =>
@@ -688,7 +687,7 @@ export default function MarketScreen() {
         transparent
         animationType="slide"
         statusBarTranslucent
-        onRequestClose={() => setFeedVisible(false)}
+        onRequestClose={() => trendFilterOpen ? setTrendFilterOpen(false) : setFeedVisible(false)}
       >
         <View style={styles.modalBackdrop}>
           <TouchableOpacity
@@ -761,127 +760,29 @@ export default function MarketScreen() {
               </ScrollView>
             ) : (
               <ScrollView style={styles.feedScroll} contentContainerStyle={styles.trendContent}>
-                <View style={styles.trendPicker}>
-                  <Text style={styles.trendPickerLabel}>分区</Text>
-                  <View style={styles.trendScopeChoices}>
-                    {([
-                      { id: 'nft' as const, label: '土豆王国' },
-                      { id: 'pfp' as const, label: '居民图鉴' },
-                    ]).map((scope) => (
-                      <TouchableOpacity
-                        key={scope.id}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: trendFilterKind === scope.id }}
-                        style={[styles.trendScopeChoice, trendFilterKind === scope.id && styles.trendScopeChoiceActive]}
-                        onPress={() => {
-                          setTrendFilterKind(scope.id);
-                          setTrendFilterCategoryId(null);
-                          setTrendCollectionId(null);
-                          setTrendSearchQuery('');
-                        }}
-                      >
-                        <Text style={[styles.trendScopeChoiceText, trendFilterKind === scope.id && styles.trendScopeChoiceTextActive]}>
-                          {scope.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="打开走势筛选"
+                  style={styles.trendFilterSummary}
+                  onPress={() => setTrendFilterOpen(true)}
+                >
+                  <View style={styles.trendFilterSummaryCopy}>
+                    <Text style={styles.trendFilterEyebrow} numberOfLines={1}>
+                      {trendFilterKind === 'nft' ? '土豆王国' : '居民图鉴'}
+                      {trendCategoryName ? ' · ' + trendCategoryName : ''}
+                    </Text>
+                    <Text style={styles.trendFilterCollection} numberOfLines={1}>
+                      {selectedTrendCollection?.name || (trendSearchQuery ? '未找到匹配藏品' : '暂未选择藏品')}
+                    </Text>
                   </View>
-
-                  <Text style={styles.trendPickerLabel}>分类</Text>
-                  {trendCategories.length > 0 ? (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendCategoryChoices}>
-                      <TouchableOpacity
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: trendFilterCategoryId === null }}
-                        style={[styles.trendCategoryChoice, trendFilterCategoryId === null && styles.trendCategoryChoiceActive]}
-                        onPress={() => { setTrendFilterCategoryId(null); setTrendCollectionId(null); }}
-                      >
-                        <Text style={[styles.trendCategoryChoiceText, trendFilterCategoryId === null && styles.trendCategoryChoiceTextActive]}>全部分类</Text>
-                      </TouchableOpacity>
-                      {trendCategories.map((category) => (
-                        <TouchableOpacity
-                          key={category.id}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: trendFilterCategoryId === category.id }}
-                          style={[styles.trendCategoryChoice, trendFilterCategoryId === category.id && styles.trendCategoryChoiceActive]}
-                          onPress={() => { setTrendFilterCategoryId(category.id); setTrendCollectionId(null); }}
-                        >
-                          <Text style={[styles.trendCategoryChoiceText, trendFilterCategoryId === category.id && styles.trendCategoryChoiceTextActive]}>{category.name}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  ) : (
-                    <Text style={styles.trendNoCategories}>{trendFilterKind === 'pfp' ? '居民图鉴暂未开放分类' : '当前没有可用分类'}</Text>
-                  )}
-
-                  <View style={styles.trendSearchField}>
-                    <Ionicons name="search-outline" size={17} color="#96897E" />
-                    <TextInput
-                      style={[styles.trendSearchInput, viewport.width < 768 && styles.searchInputMobile]}
-                      placeholder="搜索藏品名称"
-                      placeholderTextColor="#A59A90"
-                      value={trendSearchQuery}
-                      onChangeText={setTrendSearchQuery}
-                      returnKeyType="search"
-                      selectionColor="#B68E54"
-                      accessibilityLabel="搜索走势藏品名称"
-                    />
-                    {trendSearchQuery.length > 0 && (
-                      <TouchableOpacity
-                        accessibilityRole="button"
-                        accessibilityLabel="清空藏品搜索"
-                        onPress={() => setTrendSearchQuery('')}
-                        style={styles.trendSearchClear}
-                      >
-                        <Ionicons name="close-circle" size={17} color="#A3968B" />
-                      </TouchableOpacity>
-                    )}
+                  <View style={styles.trendFilterAction}>
+                    <Ionicons name="options-outline" size={17} color="#537895" />
+                    <Text style={styles.trendFilterActionText}>筛选</Text>
                   </View>
-
-                  {trendScopeCollections.length > 0 && (
-                    <ScrollView style={styles.trendResults} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                      {filteredTrendCollections.slice(0, 25).map((collection) => {
-                        const categoryName = categories
-                          .filter((category) => getCollectionCategoryIds(collection).includes(category.id))
-                          .map((category) => category.name)
-                          .join(' · ');
-                        const selected = selectedTrendCollection?.id === collection.id;
-                        return (
-                          <TouchableOpacity
-                            key={collection.id}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected }}
-                            style={[styles.trendResultRow, selected && styles.trendResultRowActive]}
-                            onPress={() => setTrendCollectionId(collection.id)}
-                          >
-                            <View style={styles.trendResultCopy}>
-                              <Text style={[styles.trendResultName, selected && styles.trendResultNameActive]} numberOfLines={1}>{collection.name}</Text>
-                              <Text style={styles.trendResultCategory} numberOfLines={1}>{categoryName || '未分类'}</Text>
-                            </View>
-                            {selected && <Ionicons name="checkmark" size={18} color="#66859A" />}
-                          </TouchableOpacity>
-                        );
-                      })}
-                      {filteredTrendCollections.length === 0 && (
-                        <Text style={styles.trendResultEmpty}>没有找到匹配藏品</Text>
-                      )}
-                      {filteredTrendCollections.length > 25 && (
-                        <Text style={styles.trendResultHint}>匹配到 {filteredTrendCollections.length} 件，请输入名称缩小范围</Text>
-                      )}
-                    </ScrollView>
-                  )}
-                </View>
+                </TouchableOpacity>
 
                 {selectedTrendCollection ? (
                   <>
-                    <View style={styles.trendCurrentSelection}>
-                      <Text style={styles.panelHint}>
-                        {trendFilterKind === 'nft' ? '土豆王国' : '居民图鉴'}
-                        {trendCategoryName ? ' · ' + trendCategoryName : ''}
-                      </Text>
-                      <Text style={styles.trendCollectionName} numberOfLines={1}>{selectedTrendCollection.name}</Text>
-                    </View>
-
                     <View style={styles.metricsGrid}>
                       <View style={styles.metricCard}>
                         <Text style={styles.metricLabel}>近 1 小时成交</Text>
@@ -962,6 +863,155 @@ export default function MarketScreen() {
               </ScrollView>
             )}
           </View>
+          {trendFilterOpen && feedTab === 'trends' && (
+            <View style={styles.trendDrawerBackdrop}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="关闭走势筛选"
+                activeOpacity={1}
+                style={StyleSheet.absoluteFill}
+                onPress={() => setTrendFilterOpen(false)}
+              />
+              <View style={[styles.trendDrawerPanel, { height: Math.min(viewport.height * 0.76, 660), paddingBottom: Math.max(insets.bottom, 14) }]}>
+                <View style={styles.trendDrawerHandle} />
+                <View style={styles.trendDrawerHeader}>
+                  <View>
+                    <Text style={styles.trendDrawerTitle}>筛选走势藏品</Text>
+                    <Text style={styles.trendDrawerSubtitle}>选择专区、分类和藏品</Text>
+                  </View>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="关闭筛选抽屉"
+                    style={styles.modalClose}
+                    onPress={() => setTrendFilterOpen(false)}
+                  >
+                    <Ionicons name="close" size={21} color="#6D625A" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={styles.trendDrawerScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                  <Text style={styles.trendPickerLabel}>专区</Text>
+                  <View style={styles.trendScopeChoices}>
+                    {([
+                      { id: 'nft' as const, label: '土豆王国' },
+                      { id: 'pfp' as const, label: '居民图鉴' },
+                    ]).map((scope) => (
+                      <TouchableOpacity
+                        key={scope.id}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: trendFilterKind === scope.id }}
+                        style={[styles.trendScopeChoice, trendFilterKind === scope.id && styles.trendScopeChoiceActive]}
+                        onPress={() => {
+                          setTrendFilterKind(scope.id);
+                          setTrendFilterCategoryId(null);
+                          setTrendCollectionId(null);
+                          setTrendSearchQuery('');
+                        }}
+                      >
+                        <Text style={[styles.trendScopeChoiceText, trendFilterKind === scope.id && styles.trendScopeChoiceTextActive]}>{scope.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.trendPickerLabel}>分类</Text>
+                  {trendCategories.length > 0 ? (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendCategoryChoices}>
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: trendFilterCategoryId === null }}
+                        style={[styles.trendCategoryChoice, trendFilterCategoryId === null && styles.trendCategoryChoiceActive]}
+                        onPress={() => { setTrendFilterCategoryId(null); setTrendCollectionId(null); }}
+                      >
+                        <Text style={[styles.trendCategoryChoiceText, trendFilterCategoryId === null && styles.trendCategoryChoiceTextActive]}>全部分类</Text>
+                      </TouchableOpacity>
+                      {trendCategories.map((category) => (
+                        <TouchableOpacity
+                          key={category.id}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: trendFilterCategoryId === category.id }}
+                          style={[styles.trendCategoryChoice, trendFilterCategoryId === category.id && styles.trendCategoryChoiceActive]}
+                          onPress={() => { setTrendFilterCategoryId(category.id); setTrendCollectionId(null); }}
+                        >
+                          <Text style={[styles.trendCategoryChoiceText, trendFilterCategoryId === category.id && styles.trendCategoryChoiceTextActive]}>{category.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  ) : (
+                    <Text style={styles.trendNoCategories}>{trendFilterKind === 'pfp' ? '居民图鉴暂未开放分类' : '当前没有可用分类'}</Text>
+                  )}
+
+                  <Text style={styles.trendPickerLabel}>搜索藏品</Text>
+                  <View style={styles.trendSearchField}>
+                    <Ionicons name="search-outline" size={17} color="#96897E" />
+                    <TextInput
+                      style={[styles.trendSearchInput, viewport.width < 768 && styles.searchInputMobile]}
+                      placeholder="输入藏品名称"
+                      placeholderTextColor="#A59A90"
+                      value={trendSearchQuery}
+                      onChangeText={setTrendSearchQuery}
+                      returnKeyType="search"
+                      selectionColor="#B68E54"
+                      accessibilityLabel="搜索走势藏品名称"
+                    />
+                    {trendSearchQuery.length > 0 && (
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="清空藏品搜索"
+                        onPress={() => setTrendSearchQuery('')}
+                        style={styles.trendSearchClear}
+                      >
+                        <Ionicons name="close-circle" size={17} color="#A3968B" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  <Text style={styles.trendPickerLabel}>选择藏品</Text>
+                  <View style={styles.trendResults}>
+                    {filteredTrendCollections.slice(0, 25).map((collection) => {
+                      const categoryName = categories
+                        .filter((category) => getCollectionCategoryIds(collection).includes(category.id))
+                        .map((category) => category.name)
+                        .join(' · ');
+                      const selected = selectedTrendCollection?.id === collection.id;
+                      return (
+                        <TouchableOpacity
+                          key={collection.id}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected }}
+                          style={[styles.trendResultRow, selected && styles.trendResultRowActive]}
+                          onPress={() => setTrendCollectionId(collection.id)}
+                        >
+                          <View style={styles.trendResultCopy}>
+                            <Text style={[styles.trendResultName, selected && styles.trendResultNameActive]} numberOfLines={1}>{collection.name}</Text>
+                            <Text style={styles.trendResultCategory} numberOfLines={1}>{categoryName || '未分类'}</Text>
+                          </View>
+                          {selected && <Ionicons name="checkmark" size={18} color="#66859A" />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                    {filteredTrendCollections.length === 0 && (
+                      <Text style={styles.trendResultEmpty}>
+                        {trendScopeCollections.length === 0
+                          ? (trendFilterKind === 'pfp' ? '居民图鉴暂未上架藏品' : '当前专区暂无可选藏品')
+                          : '没有找到匹配藏品'}
+                      </Text>
+                    )}
+                    {filteredTrendCollections.length > 25 && (
+                      <Text style={styles.trendResultHint}>匹配到 {filteredTrendCollections.length} 件，请输入名称缩小范围</Text>
+                    )}
+                  </View>
+                </ScrollView>
+
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  style={styles.trendApplyButton}
+                  onPress={() => setTrendFilterOpen(false)}
+                >
+                  <Text style={styles.trendApplyButtonText}>应用筛选</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
       </Modal>
     </SafeAreaView>
@@ -1072,9 +1122,21 @@ const styles = StyleSheet.create({
   feedEmptyText: { color: '#8F8176', fontSize: 13, lineHeight: 19, textAlign: 'center' },
 
   trendContent: { paddingBottom: 16 },
-  trendCurrentSelection: { marginBottom: 12, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#E8EDF0', backgroundColor: '#F8FAFB' },
-  trendCollectionName: { marginTop: 2, color: '#493D35', fontSize: 16, lineHeight: 22, fontWeight: '800' },
-  trendPicker: { marginBottom: 12, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: '#E8EDF0', backgroundColor: '#FFFFFF' },
+  trendFilterSummary: { minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, paddingHorizontal: 13, paddingVertical: 9, borderRadius: 14, borderWidth: 1, borderColor: '#E8EDF0', backgroundColor: '#FFFFFF' },
+  trendFilterSummaryCopy: { flex: 1, minWidth: 0 },
+  trendFilterEyebrow: { color: '#91857A', fontSize: 11, lineHeight: 15, fontWeight: '600' },
+  trendFilterCollection: { marginTop: 2, color: '#493D35', fontSize: 14, lineHeight: 19, fontWeight: '700' },
+  trendFilterAction: { minHeight: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 11, borderRadius: 10, backgroundColor: '#EEF3F6' },
+  trendFilterActionText: { color: '#537895', fontSize: 12, lineHeight: 16, fontWeight: '700' },
+  trendDrawerBackdrop: { ...StyleSheet.absoluteFillObject, zIndex: 20, justifyContent: 'flex-end', alignItems: 'center', backgroundColor: 'rgba(48,39,32,0.20)' },
+  trendDrawerPanel: { width: '100%', maxWidth: 720, flexDirection: 'column', paddingHorizontal: 18, paddingTop: 10, backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, shadowColor: '#302720', shadowOpacity: 0.12, shadowRadius: 18, elevation: 12 },
+  trendDrawerHandle: { width: 38, height: 4, alignSelf: 'center', marginBottom: 12, borderRadius: 2, backgroundColor: '#E8E1D9' },
+  trendDrawerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  trendDrawerTitle: { color: '#493D35', fontSize: 17, lineHeight: 23, fontWeight: '800' },
+  trendDrawerSubtitle: { marginTop: 2, color: '#94877C', fontSize: 11, lineHeight: 15 },
+  trendDrawerScroll: { flex: 1, minHeight: 0 },
+  trendApplyButton: { minHeight: 46, alignItems: 'center', justifyContent: 'center', marginTop: 10, borderRadius: 13, backgroundColor: '#5E8198' },
+  trendApplyButtonText: { color: '#FFFFFF', fontSize: 14, lineHeight: 19, fontWeight: '800' },
   trendPickerLabel: { marginTop: 2, marginBottom: 7, color: '#8C8075', fontSize: 11, lineHeight: 15, fontWeight: '700' },
   trendScopeChoices: { flexDirection: 'row', gap: 8, marginBottom: 14 },
   trendScopeChoice: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, borderRadius: 11, backgroundColor: '#FAFAF8', borderWidth: 1, borderColor: '#EAE6DF' },
@@ -1090,7 +1152,7 @@ const styles = StyleSheet.create({
   trendSearchField: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, borderRadius: 11, borderWidth: 1, borderColor: '#ECE7E0', backgroundColor: '#FBFAF8' },
   trendSearchInput: { flex: 1, minWidth: 0, height: 40, fontSize: 14, color: '#493D35', paddingVertical: 0, borderWidth: 0, outlineStyle: 'solid', outlineWidth: 0, outlineColor: 'transparent' },
   trendSearchClear: { width: 28, height: 36, alignItems: 'center', justifyContent: 'center' },
-  trendResults: { maxHeight: 150, marginTop: 7 },
+  trendResults: { marginTop: 2, marginBottom: 10 },
   trendResultRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingHorizontal: 9, borderRadius: 9, borderBottomWidth: 1, borderColor: '#F1ECE6' },
   trendResultRowActive: { backgroundColor: '#F3F7F9' },
   trendResultCopy: { flex: 1, minWidth: 0, paddingVertical: 6 },
