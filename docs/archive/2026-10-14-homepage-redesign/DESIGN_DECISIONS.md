@@ -142,3 +142,8 @@
 
 - 复查 Expo Web BlurView 实现后发现 intensity 同时影响 backdrop blur 和 tint 底色透明度；`light` 在强度 60 下提供约 47% 白底。
 - 当前保持 intensity 60，改用 `default` tint，并保留 20% 白色遮罩，避免亮白底层盖住退市藏品图。
+
+## 2026-10-15：退市遮罩最终采用 B 轻雾
+
+- 用户确认 B 档；Expo Blur intensity 为 20，Web 端约 4px 模糊。
+- 白色遮罩、纯牌框、“已退市”烘焙素材、88% 贴纸尺寸和 80% 贴纸透明度保持不变；此值替代之前的 intensity 60。

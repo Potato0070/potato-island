@@ -230,3 +230,9 @@
 
 - 用户反馈 60 档上线后藏品仍难辨认。确认部署代码确为 intensity 60，根因是 `tint="light"` 令 BlurView 自带约 47% 白底，叠加 20% 外层白遮罩后画面过白。
 - 保持 blur 强度 60，改为 `tint="default"`（自带底色约 18%），使藏品内容能透出；目标 ESLint 与 diff check 通过。
+
+## 2026-10-15：按用户选择 B 档降低退市遮罩模糊
+
+- 用户确认预览 B（轻雾 4px）；`BlurView` intensity 从 60 调为 20，保持 `tint="default"`。
+- 维持白色 20% 外层遮罩、纯牌框素材 88% 尺寸及 80% 贴纸不透明度。
+- 三档对比预览已归档至 E 盘资源库；目标文件 ESLint 与 `git diff --check` 通过。
