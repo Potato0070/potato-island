@@ -147,3 +147,8 @@
 
 - 用户确认 B 档；Expo Blur intensity 为 20，Web 端约 4px 模糊。
 - 白色遮罩、纯牌框、“已退市”烘焙素材、88% 贴纸尺寸和 80% 贴纸透明度保持不变；此值替代之前的 intensity 60。
+
+## 2026-10-15：退市遮罩 1px 试用值
+
+- 当前试用值设为 Expo Blur intensity 5，对应 Web 端约 1px backdrop blur。
+- 其余已确认视觉参数不变。

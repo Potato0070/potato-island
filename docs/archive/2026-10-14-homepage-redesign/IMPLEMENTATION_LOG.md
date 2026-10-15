@@ -236,3 +236,8 @@
 - 用户确认预览 B（轻雾 4px）；`BlurView` intensity 从 60 调为 20，保持 `tint="default"`。
 - 维持白色 20% 外层遮罩、纯牌框素材 88% 尺寸及 80% 贴纸不透明度。
 - 三档对比预览已归档至 E 盘资源库；目标文件 ESLint 与 `git diff --check` 通过。
+
+## 2026-10-15：应用 1px 退市轻模糊
+
+- 按用户要求将 `BlurView` intensity 从 20 降至 5（Web 端约 1px），保持 `tint="default"` 和其余遮罩/贴纸样式不变。
+- 目标文件 ESLint 与 `git diff --check` 通过。

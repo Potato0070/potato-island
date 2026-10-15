@@ -144,3 +144,8 @@
 
 - 用户确认三档预览中的 B 轻雾；Expo Blur intensity 设为 20，对应 Web `backdrop-filter: blur(4px)`。
 - 当前值替代此前的 intensity 60；白色遮罩、纯牌框贴纸尺寸 88% 和贴纸透明度 80% 不变。
+
+## 2026-10-15：退市遮罩模糊调整至 1px
+
+- 用户要求试用约 1px 模糊；Web 端 `BlurView` 对应 Expo intensity 5。
+- 白色遮罩、纯牌框贴纸和其他透明度/尺寸保持不变。
