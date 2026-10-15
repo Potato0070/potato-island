@@ -451,7 +451,7 @@ export default function MarketScreen() {
             <FallbackImage uri={item.image_url} style={styles.image} />
             {isDelisted && (
               <View pointerEvents="none" style={styles.delistedOverlay}>
-                <BlurView intensity={60} tint="light" style={StyleSheet.absoluteFill} />
+                <BlurView intensity={60} tint="default" style={StyleSheet.absoluteFill} />
                 <Image
                   source={require('../../assets/market/delisted-plaque-only-v1.png')}
                   style={styles.delistedPlaque}

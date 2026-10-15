@@ -137,3 +137,8 @@
 
 - 根据线上商品图辨识度反馈，将此前确认的 C/80 调低至 Expo Blur intensity 60（Web 约 12px）。
 - 当前视觉规范以 60 为准；其他退市卡片视觉参数不变。
+
+## 2026-10-15：毛玻璃强度与底色拆分
+
+- 复查 Expo Web BlurView 实现后发现 intensity 同时影响 backdrop blur 和 tint 底色透明度；`light` 在强度 60 下提供约 47% 白底。
+- 当前保持 intensity 60，改用 `default` tint，并保留 20% 白色遮罩，避免亮白底层盖住退市藏品图。
