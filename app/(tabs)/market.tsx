@@ -19,7 +19,6 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../supabase';
 
@@ -451,10 +450,8 @@ export default function MarketScreen() {
             <FallbackImage uri={item.image_url} style={styles.image} />
             {isDelisted && (
               <View pointerEvents="none" style={styles.delistedOverlay}>
-                <BlurView intensity={7} tint="light" style={StyleSheet.absoluteFill} />
-                <View style={styles.delistedFrost} />
                 <Image
-                  source={require('../../assets/market/delisted-potato-plaque-lettered.png')}
+                  source={require('../../assets/market/delisted-plaque-only-v1.png')}
                   style={styles.delistedPlaque}
                   resizeMode="contain"
                 />
@@ -1079,9 +1076,8 @@ const styles = StyleSheet.create({
   fallbackIconWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   fallbackIcon: { fontSize: 32 },
   image: { width: '100%', height: '100%' },
-  delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(238,243,239,0.10)' },
-  delistedFrost: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(236,242,237,0.08)' },
-  delistedPlaque: { position: 'absolute', width: '74%', height: '74%', opacity: 0.64 },
+  delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.20)' },
+  delistedPlaque: { position: 'absolute', width: '88%', height: '88%', opacity: 0.8 },
   followButton: { position: 'absolute', top: 9, right: 9, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.94)', borderWidth: 1, borderColor: 'rgba(224,230,232,0.9)', shadowColor: '#38464D', shadowOpacity: 0.12, shadowRadius: 5, elevation: 2 },
   info: { paddingHorizontal: 11, paddingTop: 11, paddingBottom: 12 },
   name: { color: '#493D35', fontSize: 15, lineHeight: 20, fontWeight: '700', marginBottom: 6 },
