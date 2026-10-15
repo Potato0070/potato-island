@@ -174,3 +174,11 @@
 - 按用户最新反馈，将退市整图遮罩改为半透明黑色，状态文字改为中央白色；保留轻量环岛虚线路径作为装饰。
 - 关注图标恢复原有爱心。市场成交记录真实时间字段为 `created_at`，查询用 `transfer_time:created_at` 映射到页面内部字段，修复线上 `transfer_logs.transfer_time` 不存在导致的 400。
 - 黑底白字预览已归档至 `E:\土豆岛资源库\市场UI方案预览\退市遮罩层-黑底白字-A-B-C.png`。
+
+### 线上验收
+
+- 2026-10-15 在线上手机视口检查首页进入集市：退市卡片显示半透明黑色全图遮罩与居中白字，关注爱心可见；集市成交播报正常显示。
+- `transfer_logs` 请求返回 HTTP 200。`npx eslint 'app/(tabs)/market.tsx'` 与 `git diff --check` 通过。
+- `npx tsc --noEmit --pretty false` 仍报告 `app/my-orders.tsx`、`app/wallet.tsx` 与 `potato-app/` 中既有类型错误，修改涉及的集市文件未报告错误。
+- 首页底部导航进入 `/market` 正常；直接冷启动访问 `https://www.podao.fun/market` 仍返回 Vercel 404，需单独检查线上路由回退配置。
+- 线上验收截图归档至 `E:\土豆岛资源库\市场UI方案预览\线上验收-2026-10-15-黑底白字与爱心.png`。
