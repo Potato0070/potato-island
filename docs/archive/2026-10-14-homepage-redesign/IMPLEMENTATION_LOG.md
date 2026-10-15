@@ -182,3 +182,11 @@
 - `npx tsc --noEmit --pretty false` 仍报告 `app/my-orders.tsx`、`app/wallet.tsx` 与 `potato-app/` 中既有类型错误，修改涉及的集市文件未报告错误。
 - 首页底部导航进入 `/market` 正常；直接冷启动访问 `https://www.podao.fun/market` 仍返回 Vercel 404，需单独检查线上路由回退配置。
 - 线上验收截图归档至 `E:\土豆岛资源库\市场UI方案预览\线上验收-2026-10-15-黑底白字与爱心.png`。
+
+## 2026-10-15：集市视觉与走势筛选更新
+
+- 按用户确认的 A 版，将退市卡片改为整图轻透毛玻璃层，叠加白描边土豆团子贴纸与雾面牌，牌面用白色水平“已退市”；运行时透明素材为 `assets/market/delisted-potato-peek.png`，原图已归档到 E 盘。
+- 成交播报改用中性底与扩音器图标，去除红点/红底；分区和四个排序项固定同行，居民图鉴标签简化为“居民图鉴”；分类选中态改为浅雾霾蓝，去除土豆色整条底。
+- 走势选择器常驻显示分区、分类和名称搜索；居民图鉴为空时保留筛选控件，显示空态和切回土豆王国入口。
+- 浏览器验证：390px 和 320px 视口筛选同行；320px 文档宽度等于视口宽度，无横向溢出；切换到空的居民图鉴后，分区、搜索与切换入口仍可见；来回切换正常，无页面运行时错误。
+- `npx expo export --platform web`、目标文件 ESLint 和 `git diff --check` 通过。`npx tsc --noEmit --pretty false` 仅报告 `app/my-orders.tsx`、`app/wallet.tsx` 与 `potato-app/` 既有错误，集市文件未报告类型错误。
