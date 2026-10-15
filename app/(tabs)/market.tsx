@@ -445,19 +445,14 @@ export default function MarketScreen() {
             <FallbackImage uri={item.image_url} style={styles.image} />
             {isDelisted && (
               <View pointerEvents="none" style={styles.delistedOverlay}>
-                <BlurView intensity={18} tint="light" style={StyleSheet.absoluteFill} />
+                <BlurView intensity={7} tint="light" style={StyleSheet.absoluteFill} />
                 <View style={styles.delistedFrost} />
-                <View style={styles.delistedSticker}>
-                  <View style={styles.delistedBadge}>
-                    <Text style={styles.delistedText}>已退市</Text>
-                    <View style={styles.delistedShoreline} />
-                  </View>
-                  <Image
-                    source={require('../../assets/market/delisted-potato-peek.png')}
-                    style={styles.delistedMascot}
-                    resizeMode="contain"
-                  />
-                </View>
+                <Image
+                  source={require('../../assets/market/delisted-potato-plaque-v2.png')}
+                  style={styles.delistedPlaque}
+                  resizeMode="contain"
+                />
+                <Text style={styles.delistedText}>已退市</Text>
               </View>
             )}
           </View>
@@ -1028,13 +1023,10 @@ const styles = StyleSheet.create({
   fallbackIconWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   fallbackIcon: { fontSize: 32 },
   image: { width: '100%', height: '100%' },
-  delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', backgroundColor: 'rgba(228,236,232,0.30)', justifyContent: 'center', alignItems: 'center' },
-  delistedFrost: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(226,235,233,0.28)' },
-  delistedSticker: { position: 'relative', width: '76%', height: 92, alignItems: 'center', justifyContent: 'flex-end' },
-  delistedBadge: { width: '100%', height: 46, alignItems: 'center', justifyContent: 'center', gap: 3, paddingTop: 2, borderRadius: 13, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.96)', backgroundColor: 'rgba(107,132,135,0.72)', shadowColor: '#30454A', shadowOpacity: 0.16, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
-  delistedText: { color: '#FFFFFF', fontSize: 14, lineHeight: 18, fontWeight: '900', letterSpacing: 2, textShadowColor: 'rgba(36,57,61,0.46)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
-  delistedShoreline: { width: 30, height: 2, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.76)' },
-  delistedMascot: { position: 'absolute', top: 0, width: 66, height: 66, zIndex: 2 },
+  delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(238,243,239,0.10)' },
+  delistedFrost: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(236,242,237,0.08)' },
+  delistedPlaque: { position: 'absolute', width: '91%', height: '91%' },
+  delistedText: { position: 'absolute', left: '22%', right: '22%', top: '70%', textAlign: 'center', color: '#FFFFFF', fontSize: 16, lineHeight: 22, fontWeight: '900', letterSpacing: 3, textShadowColor: 'rgba(56,81,79,0.72)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   followButton: { position: 'absolute', top: 9, right: 9, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.94)', borderWidth: 1, borderColor: 'rgba(224,230,232,0.9)', shadowColor: '#38464D', shadowOpacity: 0.12, shadowRadius: 5, elevation: 2 },
   info: { paddingHorizontal: 11, paddingTop: 11, paddingBottom: 12 },
   name: { color: '#493D35', fontSize: 15, lineHeight: 20, fontWeight: '700', marginBottom: 6 },

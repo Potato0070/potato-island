@@ -190,3 +190,9 @@
 - 走势选择器常驻显示分区、分类和名称搜索；居民图鉴为空时保留筛选控件，显示空态和切回土豆王国入口。
 - 浏览器验证：390px 和 320px 视口筛选同行；320px 文档宽度等于视口宽度，无横向溢出；切换到空的居民图鉴后，分区、搜索与切换入口仍可见；来回切换正常，无页面运行时错误。
 - `npx expo export --platform web`、目标文件 ESLint 和 `git diff --check` 通过。`npx tsc --noEmit --pretty false` 仅报告 `app/my-orders.tsx`、`app/wallet.tsx` 与 `potato-app/` 既有错误，集市文件未报告类型错误。
+
+## 2026-10-15：退市牌 A 版视觉纠正
+
+- 线上截图与确认稿不符：旧实现把独立团子缩成小图，牌面则是 CSS 灰色胶囊；确认稿 A 是团子双手搭在有白色贴纸边的雾面牌上。
+- 新增完整透明组合贴纸 `assets/market/delisted-potato-plaque-v2.png`，代码只叠加“已退市”文字，确保图形比例、牌面纹理与确认稿匹配；整图模糊降到轻量级。
+- `npx eslint 'app/(tabs)/market.tsx'` 与 `git diff --check` 通过。Expo Web 静态路由打包成功，静态文件导出因临时目录权限失败；更换验证目录重试。
