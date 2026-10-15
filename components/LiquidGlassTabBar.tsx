@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,10 +26,12 @@ const TAB_ICON_SOURCES: Record<string, number> = {
 
 export default function LiquidGlassTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth } = useWindowDimensions();
   const routes = state.routes;
   const [barWidth, setBarWidth] = useState(0);
   const slotWidth = routes.length > 0 ? barWidth / routes.length : 0;
   const lensWidth = slotWidth > 0 ? Math.max(slotWidth - 8, 48) : 48;
+  const barLeft = Math.max(0, (viewportWidth - (barWidth || Math.min(viewportWidth - HORIZONTAL_INSET * 2, 560))) / 2);
   const lensX = useRef(new Animated.Value(4)).current;
   const lensScaleX = useRef(new Animated.Value(1)).current;
   const [pressedIndex, setPressedIndex] = useState<number | null>(null);
@@ -55,16 +58,16 @@ export default function LiquidGlassTabBar({ state, descriptors, navigation }: Bo
 
   const indexAtPageX = useCallback((pageX: number) => {
     if (slotWidth <= 0) return 0;
-    const localX = pageX - HORIZONTAL_INSET;
+    const localX = pageX - barLeft;
     return Math.max(0, Math.min(routes.length - 1, Math.floor(localX / slotWidth)));
-  }, [routes.length, slotWidth]);
+  }, [barLeft, routes.length, slotWidth]);
 
   const setFingerPosition = useCallback((pageX: number) => {
     if (barWidth <= 0) return;
-    const localX = Math.max(0, Math.min(barWidth, pageX - HORIZONTAL_INSET));
+    const localX = Math.max(0, Math.min(barWidth, pageX - barLeft));
     const nextX = Math.max(4, Math.min(localX - lensWidth / 2, barWidth - lensWidth - 4));
     lensX.setValue(nextX);
-  }, [barWidth, lensWidth, lensX]);
+  }, [barLeft, barWidth, lensWidth, lensX]);
 
   const panResponder = useMemo(
     () =>
@@ -220,10 +223,11 @@ function IslandTabIcon({ name }: { name: string }) {
 }
 
 const styles = StyleSheet.create({
-  positioner: { position: 'absolute', left: HORIZONTAL_INSET, right: HORIZONTAL_INSET, alignItems: 'stretch', zIndex: 100 },
+  positioner: { position: 'absolute', left: 0, right: 0, paddingHorizontal: HORIZONTAL_INSET, alignItems: 'center', zIndex: 100 },
   bar: {
     width: '100%',
-    alignSelf: 'stretch',
+    maxWidth: 560,
+    alignSelf: 'center',
     flexShrink: 0,
     height: 78,
     borderRadius: 34,

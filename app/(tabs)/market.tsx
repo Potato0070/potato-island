@@ -2,45 +2,115 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, FlatList, Image, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  FlatList,
+  Image,
+  Keyboard,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../supabase';
 
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 48) / 2;
-
 type SortOption = 'hot' | 'latest' | 'price_asc' | 'price_desc' | 'followed';
+type MarketKind = 'nft' | 'pfp';
+type MarketCollection = Record<string, any> & { id: string; name: string };
+type MarketTrade = {
+  id: string;
+  collection_id: string | null;
+  transfer_type: string | null;
+  seller_id: string | null;
+  buyer_id: string | null;
+  price: number | string | null;
+  transfer_time: string;
+};
 
 const FOLLOWED_STORAGE_KEY = '@market_followed_collection_ids';
 const HOT_WINDOW_DAYS = 30;
+const LIST_LIMIT = 1000;
+const CONTENT_MAX_WIDTH = 1200;
+const CARD_GAP = 12;
+const NAV_BAR_HEIGHT = 78;
+const NON_SALE_TYPES = new Set(['好友转赠', 'launch_mint', 'genesis_mint']);
 
-// 💰 千分位金钱格式化工具
-const formatMoney = (num: number | string) => {
-  const n = Number(num);
-  if (isNaN(n)) return '0.00';
-  let parts = n.toFixed(2).split(".");
-  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return parts.join(".");
+const formatMoney = (value: number | string | null | undefined) => {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return '0.00';
+  const parts = amount.toFixed(2).split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.join('.');
 };
 
-const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
+const formatRelativeTime = (value: string) => {
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return '';
+  const elapsed = Math.max(0, Date.now() - timestamp);
+  if (elapsed < 60_000) return '刚刚';
+  if (elapsed < 3_600_000) return Math.floor(elapsed / 60_000) + ' 分钟前';
+  if (elapsed < 86_400_000) return Math.floor(elapsed / 3_600_000) + ' 小时前';
+  return new Date(value).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+};
+
+const isSaleTrade = (trade: Partial<MarketTrade>) =>
+  Number(trade.price) > 0 &&
+  Boolean(trade.seller_id) &&
+  !NON_SALE_TYPES.has(trade.transfer_type || '');
+
+const getMarketKind = (collection: MarketCollection, categories: any[]): MarketKind => {
+  const categoryIds = Array.isArray(collection.category_ids)
+    ? collection.category_ids
+    : collection.category_id
+      ? [collection.category_id]
+      : [];
+  const categoryNames = categories
+    .filter((category) => categoryIds.includes(category.id))
+    .map((category) => category.name);
+  const hints = [
+    collection.collection_type,
+    collection.collection_kind,
+    collection.kind,
+    collection.type,
+    collection.series,
+    collection.series_name,
+    collection.name,
+    ...categoryNames,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return /pfp|居民图鉴|岛民图鉴|头像/.test(hints) ? 'pfp' : 'nft';
+};
+
+const FallbackImage = ({ uri, style }: { uri?: string; style: any }) => {
   const [hasError, setHasError] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(uri));
+
+  useEffect(() => {
+    setHasError(false);
+    setLoading(Boolean(uri));
+  }, [uri]);
 
   return (
-      <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F7F9FA' }]}>
-      {loading && !hasError && <ActivityIndicator color="#789DB4" style={{ position: 'absolute' }} />}
-      {!hasError ? (
+    <View style={[style, styles.imageFallback]}>
+      {loading && !hasError && <ActivityIndicator color="#789DB4" style={StyleSheet.absoluteFill} />}
+      {!hasError && uri ? (
         <Image
-          source={{ uri: uri || 'invalid_url' }}
-          style={[style, { position: 'absolute', width: '100%', height: '100%' }]}
+          source={{ uri }}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
           onLoadEnd={() => setLoading(false)}
           onError={() => { setHasError(true); setLoading(false); }}
         />
       ) : (
-        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-           <Text style={{ fontSize: 32 }}>🥔</Text>
+        <View style={styles.fallbackIconWrap}>
+          <Text style={styles.fallbackIcon}>🥔</Text>
         </View>
       )}
     </View>
@@ -49,140 +119,285 @@ const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
 
 export default function MarketScreen() {
   const router = useRouter();
-  
+  const insets = useSafeAreaInsets();
+  const viewport = useWindowDimensions();
   const [categories, setCategories] = useState<any[]>([]);
-  const [collections, setCollections] = useState<any[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string | 'all'>('all');
-  const [activeSort, setActiveSort] = useState<SortOption>('latest');
+  const [collections, setCollections] = useState<MarketCollection[]>([]);
+  const [activeKind, setActiveKind] = useState<MarketKind>('nft');
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [activeSort, setActiveSort] = useState<SortOption>('hot');
   const [followedIds, setFollowedIds] = useState<string[]>([]);
   const [hotCounts, setHotCounts] = useState<Record<string, number>>({});
+  const [recentTrades, setRecentTrades] = useState<MarketTrade[]>([]);
+  const [trendTrades, setTrendTrades] = useState<MarketTrade[]>([]);
+  const [trendCollectionId, setTrendCollectionId] = useState<string | null>(null);
+  const [tickerIndex, setTickerIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [feedVisible, setFeedVisible] = useState(false);
+  const [feedTab, setFeedTab] = useState<'trades' | 'trends'>('trades');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const searchProgress = useRef(new Animated.Value(0)).current;
+  const searchInputRef = useRef<TextInput>(null);
 
-  // 🌟 初始化时读取用户的偏好记忆
+  const contentWidth = Math.min(viewport.width, CONTENT_MAX_WIDTH);
+  const columnCount = viewport.width >= 1100 ? 4 : viewport.width >= 720 ? 3 : 2;
+  const cardWidth = Math.max(0, (contentWidth - 32 - CARD_GAP * (columnCount - 1)) / columnCount);
+  const listBottomPadding = Math.max(insets.bottom, 8) + NAV_BAR_HEIGHT + 24;
+  const expandedSearchWidth = Math.max(44, Math.min(contentWidth - 32, 360));
+
   useEffect(() => {
     const loadPreferences = async () => {
       try {
-        const savedSort = await AsyncStorage.getItem('@market_sort');
-        const savedCat = await AsyncStorage.getItem('@market_category');
-        const savedFollows = await AsyncStorage.getItem(FOLLOWED_STORAGE_KEY);
+        const [savedSort, savedCategory, savedFollows, savedKind] = await Promise.all([
+          AsyncStorage.getItem('@market_sort'),
+          AsyncStorage.getItem('@market_category'),
+          AsyncStorage.getItem(FOLLOWED_STORAGE_KEY),
+          AsyncStorage.getItem('@market_kind'),
+        ]);
         if (savedSort && ['hot', 'latest', 'price_asc', 'price_desc', 'followed'].includes(savedSort)) {
           setActiveSort(savedSort as SortOption);
         }
-        if (savedCat) setActiveCategory(savedCat);
+        if (savedCategory && savedCategory !== 'all') setActiveCategory(savedCategory);
+        if (savedKind === 'nft' || savedKind === 'pfp') setActiveKind(savedKind);
         if (savedFollows) {
           const parsedFollows: unknown = JSON.parse(savedFollows);
           if (Array.isArray(parsedFollows)) setFollowedIds(parsedFollows.filter((id): id is string => typeof id === 'string'));
         }
-      } catch {}
+      } catch {
+        // Keep safe defaults when saved preferences are unavailable.
+      }
     };
-    loadPreferences();
+    void loadPreferences();
   }, []);
 
-  const fetchMarketData = async () => {
+  useEffect(() => {
+    Animated.spring(searchProgress, {
+      toValue: searchOpen ? 1 : 0,
+      stiffness: 320,
+      damping: 28,
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (finished && searchOpen) searchInputRef.current?.focus();
+    });
+  }, [expandedSearchWidth, searchOpen, searchProgress]);
+
+  useEffect(() => {
+    if (recentTrades.length < 2) {
+      setTickerIndex(0);
+      return;
+    }
+    const timer = setInterval(() => {
+      setTickerIndex((current) => (current + 1) % recentTrades.length);
+    }, 4200);
+    return () => clearInterval(timer);
+  }, [recentTrades.length]);
+
+  const fetchMarketData = useCallback(async () => {
     try {
       const since = new Date(Date.now() - HOT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
-      const [categoryResult, collectionResult, tradeResult] = await Promise.all([
+      const [categoryResult, collectionResult, trendResult, latestResult] = await Promise.all([
         supabase.from('categories').select('*').order('sort_order', { ascending: true }),
         supabase.from('collections').select('*').eq('is_tradeable', true),
         supabase.from('transfer_logs')
-          .select('collection_id, transfer_type, seller_id, price, transfer_time')
+          .select('id, collection_id, transfer_type, seller_id, buyer_id, price, transfer_time')
           .gte('transfer_time', since)
           .not('seller_id', 'is', null)
-          .gt('price', 0),
+          .gt('price', 0)
+          .order('transfer_time', { ascending: false })
+          .limit(LIST_LIMIT),
+        supabase.from('transfer_logs')
+          .select('id, collection_id, transfer_type, seller_id, buyer_id, price, transfer_time')
+          .not('seller_id', 'is', null)
+          .gt('price', 0)
+          .order('transfer_time', { ascending: false })
+          .limit(20),
       ]);
+
       if (categoryResult.data) setCategories(categoryResult.data);
       if (collectionResult.error) throw collectionResult.error;
-      setCollections(collectionResult.data || []);
+      setCollections((collectionResult.data || []) as MarketCollection[]);
 
-      if (tradeResult.error) {
-        console.warn('近30天成交记录读取失败，最热排序暂不可用：', tradeResult.error);
+      if (trendResult.error) {
+        console.warn('近30天成交记录读取失败，热度与走势暂不可用：', trendResult.error);
+        setTrendTrades([]);
         setHotCounts({});
       } else {
-        const counts = (tradeResult.data || []).reduce<Record<string, number>>((result, trade) => {
-          const nonSaleTypes = ['好友转赠', 'launch_mint', 'genesis_mint'];
-          if (trade.collection_id && !nonSaleTypes.includes(trade.transfer_type || '')) {
-            result[trade.collection_id] = (result[trade.collection_id] || 0) + 1;
-          }
-          return result;
-        }, {});
-        setHotCounts(counts);
+        const sales = ((trendResult.data || []) as MarketTrade[]).filter(isSaleTrade);
+        setTrendTrades(sales);
+        setHotCounts(sales.reduce<Record<string, number>>((counts, trade) => {
+          if (trade.collection_id) counts[trade.collection_id] = (counts[trade.collection_id] || 0) + 1;
+          return counts;
+        }, {}));
       }
-    } catch (error) { console.error(error); } finally { setLoading(false); setRefreshing(false); }
-  };
 
-  useFocusEffect(useCallback(() => { fetchMarketData(); }, []));
-
-  const onRefresh = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setRefreshing(true);
-    fetchMarketData();
+      if (latestResult.error) {
+        console.warn('最近成交记录读取失败：', latestResult.error);
+        setRecentTrades([]);
+      } else {
+        setRecentTrades(((latestResult.data || []) as MarketTrade[]).filter(isSaleTrade).slice(0, 20));
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
-  // 🌟 处理排序切换并记忆
+  useFocusEffect(useCallback(() => {
+    void fetchMarketData();
+    const channel = supabase
+      .channel('market-live-transaction-feed')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transfer_logs' }, () => {
+        void fetchMarketData();
+      })
+      .subscribe();
+
+    return () => { void supabase.removeChannel(channel); };
+  }, [fetchMarketData]));
+
+  const onRefresh = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setRefreshing(true);
+    void fetchMarketData();
+  }, [fetchMarketData]);
+
   const handleSortChange = async (sort: SortOption) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void Haptics.selectionAsync();
     setActiveSort(sort);
     try { await AsyncStorage.setItem('@market_sort', sort); } catch {}
   };
 
-  // 🌟 处理分类切换并记忆
-  const handleCategoryChange = async (cat: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setActiveCategory(cat);
-    try { await AsyncStorage.setItem('@market_category', cat); } catch {}
+  const handleKindChange = async (kind: MarketKind) => {
+    if (kind === activeKind) return;
+    void Haptics.selectionAsync();
+    setActiveKind(kind);
+    setActiveCategory(null);
+    setTrendCollectionId(null);
+    try {
+      await Promise.all([
+        AsyncStorage.setItem('@market_kind', kind),
+        AsyncStorage.setItem('@market_category', 'all'),
+      ]);
+    } catch {}
+  };
+
+  const handleCategoryChange = async (categoryId: string) => {
+    void Haptics.selectionAsync();
+    const nextCategory = activeCategory === categoryId ? null : categoryId;
+    setActiveCategory(nextCategory);
+    try { await AsyncStorage.setItem('@market_category', nextCategory || 'all'); } catch {}
   };
 
   const toggleFollowed = async (collectionId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void Haptics.selectionAsync();
     const nextFollowed = followedIds.includes(collectionId)
-      ? followedIds.filter(id => id !== collectionId)
+      ? followedIds.filter((id) => id !== collectionId)
       : [...followedIds, collectionId];
     setFollowedIds(nextFollowed);
     try { await AsyncStorage.setItem(FOLLOWED_STORAGE_KEY, JSON.stringify(nextFollowed)); } catch {}
   };
 
-  let processedData = collections.filter(c => {
-      let matchCat = true;
-      if (activeCategory !== 'all') {
-          if (c.category_ids && Array.isArray(c.category_ids)) {
-              matchCat = c.category_ids.includes(activeCategory);
-          } else {
-              matchCat = c.category_id === activeCategory;
-          }
-      }
-      let matchSearch = true;
-      if (searchQuery.trim() !== '') {
-          matchSearch = c.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
-      }
-      const matchFollowed = activeSort !== 'followed' || followedIds.includes(c.id);
-      return matchCat && matchSearch && matchFollowed;
-  });
+  const marketCollections = useMemo(
+    () => collections.filter((collection) => getMarketKind(collection, categories) === activeKind),
+    [activeKind, categories, collections],
+  );
 
-  processedData.sort((a, b) => {
+  const processedData = useMemo(() => {
+    const filtered = marketCollections.filter((collection) => {
+      const categoryIds = Array.isArray(collection.category_ids)
+        ? collection.category_ids
+        : collection.category_id
+          ? [collection.category_id]
+          : [];
+      const matchesCategory = !activeCategory || categoryIds.includes(activeCategory);
+      const matchesSearch = String(collection.name || '').toLocaleLowerCase().includes(searchQuery.trim().toLocaleLowerCase());
+      const matchesFollowed = activeSort !== 'followed' || followedIds.includes(collection.id);
+      return matchesCategory && matchesSearch && matchesFollowed;
+    });
+
+    return filtered.sort((a, b) => {
       if (activeSort === 'hot') {
-        const hotDifference = (hotCounts[b.id] || 0) - (hotCounts[a.id] || 0);
-        if (hotDifference !== 0) return hotDifference;
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        const difference = (hotCounts[b.id] || 0) - (hotCounts[a.id] || 0);
+        if (difference !== 0) return difference;
       }
-      if (activeSort === 'price_asc') return (a.floor_price_cache || 0) - (b.floor_price_cache || 0);
-      if (activeSort === 'price_desc') return (b.floor_price_cache || 0) - (a.floor_price_cache || 0);
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
+      if (activeSort === 'price_asc') return Number(a.floor_price_cache || 0) - Number(b.floor_price_cache || 0);
+      if (activeSort === 'price_desc') return Number(b.floor_price_cache || 0) - Number(a.floor_price_cache || 0);
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    });
+  }, [activeCategory, activeSort, followedIds, hotCounts, marketCollections, searchQuery]);
 
-  const renderItem = ({ item }: { item: any }) => {
-    const isDelisted = item.on_sale_count === 0 || item.on_sale_count == null;
-    const displayPrice = isDelisted ? (item.max_consign_price || 0) : (item.floor_price_cache || 0);
+  const collectionById = useMemo(
+    () => new Map(collections.map((collection) => [collection.id, collection])),
+    [collections],
+  );
+
+  const currentTickerTrade = recentTrades[tickerIndex % Math.max(recentTrades.length, 1)];
+  const tickerCollectionName = currentTickerTrade
+    ? collectionById.get(currentTickerTrade.collection_id || '')?.name || '某件藏品'
+    : '';
+  const tickerMessage = currentTickerTrade
+    ? '匿名藏友_' + String(currentTickerTrade.buyer_id || '岛民').slice(0, 4).toUpperCase() +
+      ' 购买了 ' + tickerCollectionName + ' · ¥' + formatMoney(currentTickerTrade.price)
+    : '点击查看近期成交播报与藏品走势';
+
+  const selectedTrendCollection = marketCollections.find((collection) => collection.id === trendCollectionId) || marketCollections[0];
+  const selectedCollectionTrades = selectedTrendCollection
+    ? trendTrades.filter((trade) => trade.collection_id === selectedTrendCollection.id)
+    : [];
+  const now = Date.now();
+  const lastHourTrades = selectedCollectionTrades.filter((trade) => now - new Date(trade.transfer_time).getTime() <= 60 * 60 * 1000);
+  const lastDayTrades = selectedCollectionTrades.filter((trade) => now - new Date(trade.transfer_time).getTime() <= 24 * 60 * 60 * 1000);
+  const averagePrice = lastDayTrades.length
+    ? lastDayTrades.reduce((sum, trade) => sum + Number(trade.price || 0), 0) / lastDayTrades.length
+    : null;
+  const currentFloor = Number(selectedTrendCollection?.floor_price_cache || 0);
+  const floorLabel = currentFloor > 0 && Number(selectedTrendCollection?.on_sale_count || 0) > 0
+    ? '¥' + formatMoney(currentFloor)
+    : '暂无';
+
+  const dayBuckets = new Map<string, { total: number; count: number }>();
+  selectedCollectionTrades.forEach((trade) => {
+    const day = new Date(trade.transfer_time).toISOString().slice(0, 10);
+    const bucket = dayBuckets.get(day) || { total: 0, count: 0 };
+    bucket.total += Number(trade.price || 0);
+    bucket.count += 1;
+    dayBuckets.set(day, bucket);
+  });
+  const chartDays = Array.from({ length: 30 }, (_, index) => {
+    const date = new Date(now - (29 - index) * 24 * 60 * 60 * 1000);
+    const key = date.toISOString().slice(0, 10);
+    const bucket = dayBuckets.get(key);
+    return { key, average: bucket ? bucket.total / bucket.count : null };
+  });
+  const chartValues = chartDays.map((day) => day.average).filter((value): value is number => value !== null);
+  const chartMin = chartValues.length ? Math.min(...chartValues) : 0;
+  const chartMax = chartValues.length ? Math.max(...chartValues) : 0;
+
+  const renderItem = ({ item }: { item: MarketCollection }) => {
+    const isDelisted = Number(item.on_sale_count || 0) === 0;
+    const displayPrice = isDelisted ? Number(item.max_consign_price || 0) : Number(item.floor_price_cache || 0);
 
     return (
-      <View style={styles.card}>
-        <TouchableOpacity activeOpacity={0.9} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push({ pathname: '/collection', params: { id: item.id } }); }}>
+      <View style={[styles.card, { width: cardWidth }]}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          accessibilityRole="button"
+          accessibilityLabel={'查看藏品 ' + item.name}
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push({ pathname: '/collection', params: { id: item.id } });
+          }}
+        >
           <View style={styles.imageContainer}>
             <FallbackImage uri={item.image_url} style={styles.image} />
             {isDelisted && (
               <View style={styles.delistedOverlay}>
-                 <View style={styles.delistedStamp}><Text style={styles.delistedText}>已退市</Text></View>
+                <View style={[styles.delistedStamp, { width: Math.min(cardWidth * 0.86, 260) }]}>
+                  <Text style={styles.delistedText}>已退市</Text>
+                </View>
               </View>
             )}
           </View>
@@ -191,160 +406,509 @@ export default function MarketScreen() {
             <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
             <View style={styles.statsRow}>
               <Text style={styles.supplyText}>在售 {formatMoney(item.on_sale_count || 0).replace('.00', '')}</Text>
-              <Text style={styles.supplyText}>|</Text>
+              <Text style={styles.supplyText}>·</Text>
               <Text style={styles.supplyText}>流通 {formatMoney(item.circulating_supply).replace('.00', '')}</Text>
             </View>
             <View style={styles.priceRow}>
               <Text style={styles.priceLabel}>{isDelisted ? '求购参考价' : '全网地板价'}</Text>
-              <Text style={[styles.price, isDelisted && {color: '#8D6E63'}]}>¥{formatMoney(displayPrice)}</Text>
+              <Text style={[styles.price, isDelisted && styles.delistedPrice]}>¥{formatMoney(displayPrice)}</Text>
             </View>
           </View>
         </TouchableOpacity>
         <TouchableOpacity
           accessibilityRole="button"
-          accessibilityLabel={followedIds.includes(item.id) ? `取消关注${item.name}` : `关注${item.name}`}
+          accessibilityLabel={followedIds.includes(item.id) ? '取消关注' + item.name : '关注' + item.name}
+          accessibilityState={{ selected: followedIds.includes(item.id) }}
           style={styles.followButton}
-          onPress={() => toggleFollowed(item.id)}
+          onPress={() => { void toggleFollowed(item.id); }}
           activeOpacity={0.78}
         >
-          <Ionicons name={followedIds.includes(item.id) ? 'heart' : 'heart-outline'} size={20} color={followedIds.includes(item.id) ? '#D87572' : '#596A73'} />
+          <Ionicons
+            name={followedIds.includes(item.id) ? 'heart' : 'heart-outline'}
+            size={20}
+            color={followedIds.includes(item.id) ? '#D87572' : '#596A73'}
+          />
         </TouchableOpacity>
       </View>
     );
   };
 
+  const searchWidth = searchProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [44, expandedSearchWidth],
+  });
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>交易集市</Text>
-      </View>
-
-      <View style={styles.searchSection}>
-        <Text style={styles.searchIcon}>⌕</Text>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="搜索藏品名称"
-          placeholderTextColor="#98A2A8"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          returnKeyType="search"
-        />
-      </View>
-
-      <View style={styles.categoryWrapper}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
-          <TouchableOpacity style={[styles.catTab, activeCategory === 'all' && styles.catTabActive]} onPress={() => handleCategoryChange('all')}>
-            <Text style={[styles.catText, activeCategory === 'all' && styles.catTextActive]}>全部藏品</Text>
+      <View style={styles.headerOuter}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="查看藏品实时交易播报"
+            style={styles.broadcastButton}
+            activeOpacity={0.82}
+            onPress={() => { setFeedTab('trades'); setFeedVisible(true); }}
+          >
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveBadgeText}>成交播报</Text>
+            </View>
+            <View style={styles.tickerTextWindow}>
+              <Text numberOfLines={1} style={styles.tickerText}>{tickerMessage}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={17} color="#9A8B7D" />
           </TouchableOpacity>
-          {categories.map(cat => (
-            <TouchableOpacity key={cat.id} style={[styles.catTab, activeCategory === cat.id && styles.catTabActive]} onPress={() => handleCategoryChange(cat.id)}>
-              <Text style={[styles.catText, activeCategory === cat.id && styles.catTextActive]}>{cat.name}</Text>
+          <Animated.View style={[styles.searchOverlay, { width: searchWidth }]}>
+            {searchOpen ? (
+              <View style={styles.expandedSearch}>
+                <Ionicons name="search-outline" size={19} color="#8C8177" />
+                <TextInput
+                  ref={searchInputRef}
+                  style={styles.searchInput}
+                  placeholder="搜索藏品名称"
+                  placeholderTextColor="#A59A90"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  onSubmitEditing={() => Keyboard.dismiss()}
+                  returnKeyType="search"
+                  accessibilityLabel="搜索藏品名称"
+                />
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="收起搜索"
+                  hitSlop={8}
+                  onPress={() => setSearchOpen(false)}
+                  style={styles.searchClose}
+                >
+                  <Ionicons name="close" size={19} color="#796D64" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="展开搜索"
+                style={styles.searchToggle}
+                onPress={() => setSearchOpen(true)}
+              >
+                <Ionicons name="search-outline" size={21} color="#6E6258" />
+              </TouchableOpacity>
+            )}
+          </Animated.View>
+        </View>
+      </View>
+
+      <View style={styles.filterOuter}>
+        <View style={styles.filterBar}>
+          <View style={styles.marketKindSwitcher} accessibilityRole="tablist">
+            <TouchableOpacity
+              accessibilityRole="tab"
+              accessibilityState={{ selected: activeKind === 'nft' }}
+              style={[styles.marketKindTab, activeKind === 'nft' && styles.marketKindTabActive]}
+              onPress={() => { void handleKindChange('nft'); }}
+            >
+              <Text style={[styles.marketKindText, activeKind === 'nft' && styles.marketKindTextActive]}>土豆王国</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="tab"
+              accessibilityState={{ selected: activeKind === 'pfp' }}
+              style={[styles.marketKindTab, styles.pfpKindTab, activeKind === 'pfp' && styles.marketKindTabActive]}
+              onPress={() => { void handleKindChange('pfp'); }}
+            >
+              <Text style={[styles.marketKindText, activeKind === 'pfp' && styles.marketKindTextActive]}>居民图鉴 PFP</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.sortSection}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityState={{ selected: activeSort === 'hot' }}
+              hitSlop={4}
+              style={[styles.sortButton, activeSort === 'hot' && styles.sortButtonActive]}
+              onPress={() => { void handleSortChange('hot'); }}
+            >
+              <Text style={[styles.sortText, activeSort === 'hot' && styles.sortTextActive]}>最热</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityState={{ selected: activeSort === 'latest' }}
+              hitSlop={4}
+              style={[styles.sortButton, activeSort === 'latest' && styles.sortButtonActive]}
+              onPress={() => { void handleSortChange('latest'); }}
+            >
+              <Text style={[styles.sortText, activeSort === 'latest' && styles.sortTextActive]}>最新</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityState={{ selected: activeSort === 'price_asc' || activeSort === 'price_desc' }}
+              hitSlop={4}
+              style={[styles.sortButton, (activeSort === 'price_asc' || activeSort === 'price_desc') && styles.sortButtonActive]}
+              onPress={() => { void handleSortChange(activeSort === 'price_asc' ? 'price_desc' : 'price_asc'); }}
+            >
+              <Text style={[styles.sortText, (activeSort === 'price_asc' || activeSort === 'price_desc') && styles.sortTextActive]} numberOfLines={1}>
+                价格{activeSort === 'price_asc' ? '↑' : activeSort === 'price_desc' ? '↓' : ''}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityState={{ selected: activeSort === 'followed' }}
+              hitSlop={4}
+              style={[styles.sortButton, styles.followSortButton, activeSort === 'followed' && styles.sortButtonActive]}
+              onPress={() => { void handleSortChange('followed'); }}
+            >
+              <Ionicons name={activeSort === 'followed' ? 'heart' : 'heart-outline'} size={12} color={activeSort === 'followed' ? '#D87572' : '#948A80'} />
+              <Text style={[styles.sortText, activeSort === 'followed' && styles.sortTextActive]}>关注</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.categoryOuter}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
+          {categories.map((category) => (
+            <TouchableOpacity
+              key={category.id}
+              accessibilityRole="button"
+              accessibilityState={{ selected: activeCategory === category.id }}
+              style={[styles.categoryChip, activeCategory === category.id && styles.categoryChipActive]}
+              onPress={() => { void handleCategoryChange(category.id); }}
+            >
+              <Text style={[styles.categoryText, activeCategory === category.id && styles.categoryTextActive]}>{category.name}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
-      
-      <View style={styles.filterBar}>
-        <View style={styles.resultCount}>
-          <Ionicons name="albums-outline" size={14} color="#A19284" />
-          <Text style={styles.resultCountText} numberOfLines={1}>共 {processedData.length} 件</Text>
-        </View>
-        <View style={styles.sortSection}>
-          <TouchableOpacity hitSlop={4} style={[styles.sortButton, activeSort === 'hot' && styles.sortButtonActive]} onPress={() => handleSortChange('hot')}>
-            <Text style={[styles.sortText, activeSort === 'hot' && styles.sortTextActive]}>最热</Text>
-          </TouchableOpacity>
-          <TouchableOpacity hitSlop={4} style={[styles.sortButton, activeSort === 'latest' && styles.sortButtonActive]} onPress={() => handleSortChange('latest')}>
-            <Text style={[styles.sortText, activeSort === 'latest' && styles.sortTextActive]}>最新</Text>
-          </TouchableOpacity>
-          <TouchableOpacity hitSlop={4} style={[styles.sortButton, (activeSort === 'price_asc' || activeSort === 'price_desc') && styles.sortButtonActive]} onPress={() => handleSortChange(activeSort === 'price_asc' ? 'price_desc' : 'price_asc')}>
-            <Text style={[styles.sortText, (activeSort === 'price_asc' || activeSort === 'price_desc') && styles.sortTextActive]} numberOfLines={1}>
-              价格排序{activeSort === 'price_asc' ? '↑' : activeSort === 'price_desc' ? '↓' : ''}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity hitSlop={4} style={[styles.sortButton, activeSort === 'followed' && styles.sortButtonActive]} onPress={() => handleSortChange('followed')}>
-            <Ionicons name={activeSort === 'followed' ? 'heart' : 'heart-outline'} size={12} color={activeSort === 'followed' ? '#D87572' : '#77858C'} />
-            <Text style={[styles.sortText, activeSort === 'followed' && styles.sortTextActive]}>关注</Text>
-          </TouchableOpacity>
-        </View>
+
+      <View style={styles.resultRow}>
+        <Text style={styles.resultCount}>{loading ? '正在整理藏品' : '共 ' + processedData.length + ' 件藏品'}</Text>
+        {activeSort === 'hot' && <Text style={styles.sortHint}>近 30 日成交排序</Text>}
       </View>
 
       {loading ? (
-        // 🌟 骨架屏占位
-        <View style={{flexDirection: 'row', flexWrap: 'wrap', padding: 16, justifyContent: 'space-between'}}>
-           {Array.from({length: 6}).map((_, i) => (
-           <View key={i} style={[styles.card, { opacity: 0.58 }]}>
-                <View style={[styles.imageContainer, {backgroundColor: '#EEF2F4'}]} />
-                <View style={{padding: 12}}>
-                   <View style={{height: 14, backgroundColor: '#E5EAED', borderRadius: 4, marginBottom: 8, width: '80%'}} />
-                   <View style={{height: 10, backgroundColor: '#E5EAED', borderRadius: 4, width: '50%'}} />
+        <View style={styles.listOuter}>
+          <View style={styles.skeletonGrid}>
+            {Array.from({ length: columnCount * 2 }).map((_, index) => (
+              <View key={index} style={[styles.card, styles.skeletonCard, { width: cardWidth }]}>
+                <View style={styles.skeletonImage} />
+                <View style={styles.skeletonInfo}>
+                  <View style={styles.skeletonLineWide} />
+                  <View style={styles.skeletonLineShort} />
                 </View>
-             </View>
-           ))}
+              </View>
+            ))}
+          </View>
         </View>
       ) : (
-        <FlatList 
-          data={processedData} 
-          renderItem={renderItem} 
-          keyExtractor={item => item.id} 
-          numColumns={2} 
-          contentContainerStyle={{ padding: 16, paddingBottom: 100 }} 
-          columnWrapperStyle={{ justifyContent: 'space-between' }} 
+        <FlatList
+          key={'market-grid-' + columnCount}
+          data={processedData}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          numColumns={columnCount}
+          contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
+          columnWrapperStyle={styles.cardRow}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#789DB4" />}
           ListEmptyComponent={
-             <View style={styles.emptyState}>
-                <View style={styles.emptyIllustration}><Text style={styles.emptyIcon}>🥔</Text></View>
-                <Text style={styles.emptyText}>{activeSort === 'followed' && followedIds.length === 0 ? '还没有关注的藏品，点亮卡片上的爱心收藏' : '集市里还没有这种藏品哦'}</Text>
-             </View>
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIllustration}><Text style={styles.emptyIcon}>🥔</Text></View>
+              <Text style={styles.emptyTitle}>
+                {activeKind === 'pfp' ? '居民图鉴正在准备中' : '这里还没有藏品'}
+              </Text>
+              <Text style={styles.emptyText}>
+                {activeSort === 'followed' && followedIds.length === 0
+                  ? '点亮藏品卡片上的爱心，就能在关注里快速找到它们。'
+                  : activeKind === 'pfp'
+                    ? '岛民头像专区的藏品上架后，会出现在这里。'
+                    : '试试切换分区，或清除当前筛选条件。'}
+              </Text>
+            </View>
           }
         />
       )}
+
+      <Modal
+        visible={feedVisible}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setFeedVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="关闭成交播报"
+            activeOpacity={1}
+            style={StyleSheet.absoluteFill}
+            onPress={() => setFeedVisible(false)}
+          />
+          <View style={[styles.feedPanel, { paddingBottom: Math.max(insets.bottom, 16), minHeight: Math.min(420, viewport.height * 0.7), maxHeight: viewport.height * 0.9 }]}>
+            <View style={styles.modalHandle} />
+            <View style={styles.feedHeader}>
+              <View>
+                <Text style={styles.feedTitle}>藏品实时交易情况</Text>
+                <Text style={styles.feedSubtitle}>成交播报与藏品走势</Text>
+              </View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="关闭"
+                style={styles.modalClose}
+                onPress={() => setFeedVisible(false)}
+              >
+                <Ionicons name="close" size={21} color="#6D625A" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.feedTabs}>
+              <TouchableOpacity
+                accessibilityRole="tab"
+                accessibilityState={{ selected: feedTab === 'trades' }}
+                style={[styles.feedTab, feedTab === 'trades' && styles.feedTabActive]}
+                onPress={() => setFeedTab('trades')}
+              >
+                <Text style={[styles.feedTabText, feedTab === 'trades' && styles.feedTabTextActive]}>成交播报</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityRole="tab"
+                accessibilityState={{ selected: feedTab === 'trends' }}
+                style={[styles.feedTab, feedTab === 'trends' && styles.feedTabActive]}
+                onPress={() => setFeedTab('trends')}
+              >
+                <Text style={[styles.feedTabText, feedTab === 'trends' && styles.feedTabTextActive]}>藏品走势</Text>
+              </TouchableOpacity>
+            </View>
+
+            {feedTab === 'trades' ? (
+              <ScrollView style={styles.feedScroll} contentContainerStyle={styles.feedScrollContent}>
+                <Text style={styles.panelHint}>最近 20 笔成交</Text>
+                {recentTrades.length ? recentTrades.map((trade, index) => {
+                  const collectionName = collectionById.get(trade.collection_id || '')?.name || '某件藏品';
+                  const buyerName = trade.buyer_id === 'system'
+                    ? '创世中枢网络'
+                    : '匿名藏友_' + String(trade.buyer_id || '岛民').slice(0, 4).toUpperCase();
+                  return (
+                    <View key={trade.id || String(index)} style={styles.tradeRow}>
+                      <View style={styles.tradeAvatar}><Ionicons name="person-outline" size={16} color="#8A796B" /></View>
+                      <View style={styles.tradeCopy}>
+                        <Text style={styles.tradeName} numberOfLines={1}>{buyerName}</Text>
+                        <Text style={styles.tradeDescription} numberOfLines={1}>购买了 {collectionName} · {formatRelativeTime(trade.transfer_time)}</Text>
+                      </View>
+                      <Text style={styles.tradePrice}>¥{formatMoney(trade.price)}</Text>
+                    </View>
+                  );
+                }) : (
+                  <View style={styles.feedEmpty}>
+                    <Ionicons name="receipt-outline" size={25} color="#B5A99D" />
+                    <Text style={styles.feedEmptyText}>暂时还没有成交记录</Text>
+                  </View>
+                )}
+              </ScrollView>
+            ) : (
+              <ScrollView style={styles.feedScroll} contentContainerStyle={styles.trendContent}>
+                {marketCollections.length ? (
+                  <>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendChoices}>
+                      {marketCollections.map((collection) => (
+                        <TouchableOpacity
+                          key={collection.id}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: (selectedTrendCollection?.id || marketCollections[0]?.id) === collection.id }}
+                          style={[styles.trendChoice, (selectedTrendCollection?.id || marketCollections[0]?.id) === collection.id && styles.trendChoiceActive]}
+                          onPress={() => setTrendCollectionId(collection.id)}
+                        >
+                          <Text style={[styles.trendChoiceText, (selectedTrendCollection?.id || marketCollections[0]?.id) === collection.id && styles.trendChoiceTextActive]} numberOfLines={1}>
+                            {collection.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+
+                    <Text style={styles.trendCollectionName}>{selectedTrendCollection?.name || '选择藏品查看走势'}</Text>
+                    <View style={styles.metricsGrid}>
+                      <View style={styles.metricCard}>
+                        <Text style={styles.metricLabel}>近 1 小时成交</Text>
+                        <Text style={styles.metricValue}>{lastHourTrades.length} 笔</Text>
+                      </View>
+                      <View style={styles.metricCard}>
+                        <Text style={styles.metricLabel}>近 24 小时成交</Text>
+                        <Text style={styles.metricValue}>{lastDayTrades.length} 笔</Text>
+                      </View>
+                      <View style={styles.metricCard}>
+                        <Text style={styles.metricLabel}>成交均价</Text>
+                        <Text style={styles.metricValue}>{averagePrice === null ? '暂无' : '¥' + formatMoney(averagePrice)}</Text>
+                      </View>
+                      <View style={styles.metricCard}>
+                        <Text style={styles.metricLabel}>当前地板价</Text>
+                        <Text style={styles.metricValue}>{floorLabel}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.chartHeader}>
+                      <Text style={styles.chartTitle}>近 30 日成交均价</Text>
+                      <Text style={styles.chartUnit}>人民币</Text>
+                    </View>
+                    {chartValues.length ? (
+                      <>
+                        <View style={styles.chartArea}>
+                          <View style={[styles.chartGuide, { top: '25%' }]} />
+                          <View style={[styles.chartGuide, { top: '60%' }]} />
+                          <View style={styles.chartBars}>
+                            {chartDays.map((day) => {
+                              const ratio = day.average === null
+                                ? 0
+                                : (day.average - chartMin) / (chartMax - chartMin || 1);
+                              return (
+                                <View key={day.key} style={styles.chartBarSlot}>
+                                  <View style={[styles.chartBar, { height: day.average === null ? 2 : 18 + ratio * 62, opacity: day.average === null ? 0.14 : 0.92 }]} />
+                                </View>
+                              );
+                            })}
+                          </View>
+                        </View>
+                        <View style={styles.chartLabels}>
+                          <Text style={styles.chartLabel}>30 天前</Text>
+                          <Text style={styles.chartLabel}>今天</Text>
+                        </View>
+                        <Text style={styles.chartFootnote}>成交均价按近 24 小时记录计算；图表按每日成交均价汇总。</Text>
+                      </>
+                    ) : (
+                      <View style={styles.chartEmpty}>
+                        <Text style={styles.chartEmptyText}>近 30 日暂无成交记录</Text>
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  <View style={styles.feedEmpty}>
+                    <Text style={styles.feedEmptyText}>当前分区暂无可查看走势的藏品</Text>
+                  </View>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
-  header: { minHeight: 58, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 22, lineHeight: 28, fontWeight: '800', color: '#493D35', letterSpacing: 0.2 },
-  
-  searchSection: { height: 46, marginHorizontal: 16, marginTop: 4, marginBottom: 8, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FBFAF8', borderRadius: 14, borderWidth: 1, borderColor: '#ECE7E0' },
-  searchIcon: { width: 25, color: '#9A8B7D', fontSize: 24, lineHeight: 27, textAlign: 'center', marginRight: 5 },
-  searchInput: { flex: 1, minWidth: 0, height: '100%', paddingHorizontal: 2, fontSize: 14, color: '#493D35', fontWeight: '500' },
+  headerOuter: { width: '100%', maxWidth: CONTENT_MAX_WIDTH, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8, zIndex: 2 },
+  headerRow: { height: 46, flexDirection: 'row', alignItems: 'center', position: 'relative' },
+  broadcastButton: { flex: 1, minWidth: 0, height: 44, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 11, paddingRight: 45, backgroundColor: '#FBFAF8', borderRadius: 14, borderWidth: 1, borderColor: '#ECE7E0' },
+  liveBadge: { height: 26, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, borderRadius: 9, backgroundColor: '#FFF0E7' },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#D78169' },
+  liveBadgeText: { color: '#9B5C43', fontSize: 11, lineHeight: 15, fontWeight: '700' },
+  tickerTextWindow: { flex: 1, minWidth: 0, overflow: 'hidden' },
+  tickerText: { color: '#695D53', fontSize: 12, lineHeight: 17, fontWeight: '600' },
+  searchOverlay: { position: 'absolute', right: 0, top: 1, bottom: 1, height: 44, zIndex: 5, overflow: 'hidden', borderRadius: 14 },
+  searchToggle: { flex: 1, height: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FBFAF8', borderWidth: 1, borderColor: '#ECE7E0', borderRadius: 14 },
+  expandedSearch: { flex: 1, height: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#D9E5EB', borderRadius: 14, shadowColor: '#657D8C', shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 },
+  searchInput: { flex: 1, minWidth: 0, height: '100%', fontSize: 14, color: '#493D35', paddingVertical: 0 },
+  searchClose: { width: 26, height: 34, alignItems: 'center', justifyContent: 'center' },
 
-  categoryWrapper: { backgroundColor: '#FFFFFF', paddingTop: 8, paddingBottom: 10 },
-  categoryScroll: { paddingHorizontal: 16 },
-  catTab: { minHeight: 40, paddingHorizontal: 17, paddingVertical: 9, borderRadius: 13, marginRight: 8, backgroundColor: '#FAF7F2', borderWidth: 1, borderColor: '#F0EAE1', justifyContent: 'center' },
-  catTabActive: { backgroundColor: '#F1E3C8', borderColor: '#DFC696' },
-  catText: { fontSize: 14, lineHeight: 20, color: '#75685D', fontWeight: '600' },
-  catTextActive: { color: '#76542D', fontWeight: '700' },
-
-  filterBar: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingTop: 0, paddingBottom: 10 },
-  resultCount: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1, minWidth: 72 },
-  resultCountText: { fontSize: 12, lineHeight: 16, color: '#94877C', fontWeight: '500' },
-  sortSection: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2, flexShrink: 0 },
-  sortButton: { minHeight: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, paddingHorizontal: 6, borderRadius: 9, backgroundColor: 'transparent' },
+  filterOuter: { width: '100%', maxWidth: CONTENT_MAX_WIDTH, alignSelf: 'center', paddingHorizontal: 16, paddingBottom: 8 },
+  filterBar: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
+  marketKindSwitcher: { flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 2, padding: 3, borderRadius: 13, backgroundColor: '#F7F5F1' },
+  marketKindTab: { minHeight: 34, paddingHorizontal: 8, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  pfpKindTab: { paddingHorizontal: 7 },
+  marketKindTabActive: { backgroundColor: '#E7F0F5', borderWidth: 1, borderColor: '#D2E2EB' },
+  marketKindText: { color: '#82766D', fontSize: 11, lineHeight: 15, fontWeight: '600' },
+  marketKindTextActive: { color: '#466E88', fontWeight: '800' },
+  sortSection: { flexShrink: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 0 },
+  sortButton: { minHeight: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: 3, borderRadius: 8 },
+  followSortButton: { paddingHorizontal: 2 },
   sortButtonActive: { backgroundColor: '#EEF3F7' },
-  sortText: { fontSize: 12, lineHeight: 16, color: '#948A80', fontWeight: '600', flexShrink: 0 },
+  sortText: { color: '#948A80', fontSize: 11, lineHeight: 15, fontWeight: '600' },
   sortTextActive: { color: '#537895', fontWeight: '700' },
-  
-  card: { width: CARD_WIDTH, position: 'relative', backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 14, overflow: 'hidden', shadowColor: '#493D35', shadowOpacity: 0.035, shadowRadius: 7, elevation: 1, borderWidth: 1, borderColor: '#EEE9E3' },
-  imageContainer: { width: '100%', aspectRatio: 1, backgroundColor: '#FBFAF8', borderBottomWidth: 1, borderColor: '#F1ECE5' },
-  image: { width: '100%', height: '100%', resizeMode: 'cover' },
-  
+
+  categoryOuter: { width: '100%', maxWidth: CONTENT_MAX_WIDTH, alignSelf: 'center', backgroundColor: '#FFFFFF' },
+  categoryScroll: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10, gap: 8 },
+  categoryChip: { minHeight: 40, paddingHorizontal: 16, borderRadius: 13, backgroundColor: '#FAF7F2', borderWidth: 1, borderColor: '#F0EAE1', alignItems: 'center', justifyContent: 'center' },
+  categoryChipActive: { backgroundColor: '#F1E3C8', borderColor: '#DFC696' },
+  categoryText: { color: '#75685D', fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  categoryTextActive: { color: '#76542D', fontWeight: '700' },
+  resultRow: { width: '100%', maxWidth: CONTENT_MAX_WIDTH, alignSelf: 'center', minHeight: 28, paddingHorizontal: 16, paddingBottom: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  resultCount: { color: '#94877C', fontSize: 12, lineHeight: 16, fontWeight: '500' },
+  sortHint: { color: '#A89A8E', fontSize: 11, lineHeight: 14 },
+
+  listOuter: { flex: 1, width: '100%', maxWidth: CONTENT_MAX_WIDTH + 32, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 8 },
+  skeletonGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', gap: CARD_GAP },
+  skeletonCard: { marginBottom: 0, opacity: 0.62 },
+  skeletonImage: { width: '100%', aspectRatio: 1, backgroundColor: '#EEF2F4' },
+  skeletonInfo: { padding: 12 },
+  skeletonLineWide: { width: '78%', height: 14, marginBottom: 8, borderRadius: 4, backgroundColor: '#E5EAED' },
+  skeletonLineShort: { width: '48%', height: 10, borderRadius: 4, backgroundColor: '#E5EAED' },
+  listContent: { width: '100%', maxWidth: CONTENT_MAX_WIDTH + 32, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 8 },
+  cardRow: { gap: CARD_GAP, justifyContent: 'flex-start' },
+  card: { position: 'relative', marginBottom: 14, overflow: 'hidden', backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: '#EEE9E3', shadowColor: '#493D35', shadowOpacity: 0.035, shadowRadius: 7, elevation: 1 },
+  imageContainer: { width: '100%', aspectRatio: 1, backgroundColor: '#FBFAF8', borderBottomWidth: 1, borderColor: '#F1ECE5', overflow: 'hidden' },
+  imageFallback: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: '#F7F9FA', overflow: 'hidden' },
+  fallbackIconWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  fallbackIcon: { fontSize: 32 },
+  image: { width: '100%', height: '100%' },
   delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,250,244,0.18)', justifyContent: 'center', alignItems: 'center' },
-  delistedStamp: { minWidth: CARD_WIDTH * 0.78, height: 50, paddingHorizontal: 14, borderRadius: 10, borderWidth: 2, borderColor: '#FFF9F1', backgroundColor: '#A84337', justifyContent: 'center', alignItems: 'center', transform: [{rotate: '-8deg'}] },
-  delistedText: { color: '#FFF9F1', fontSize: 18, fontWeight: '800', letterSpacing: 2 },
+  delistedStamp: { maxWidth: '90%', height: 48, paddingHorizontal: 12, borderRadius: 10, borderWidth: 2, borderColor: '#FFF9F1', backgroundColor: '#A84337', justifyContent: 'center', alignItems: 'center', transform: [{ rotate: '-8deg' }] },
+  delistedText: { color: '#FFF9F1', fontSize: 17, fontWeight: '800', letterSpacing: 1.5 },
   followButton: { position: 'absolute', top: 9, right: 9, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.94)', borderWidth: 1, borderColor: 'rgba(224,230,232,0.9)', shadowColor: '#38464D', shadowOpacity: 0.12, shadowRadius: 5, elevation: 2 },
-  
   info: { paddingHorizontal: 11, paddingTop: 11, paddingBottom: 12 },
-  name: { fontSize: 15, lineHeight: 20, fontWeight: '700', color: '#493D35', marginBottom: 6 },
+  name: { color: '#493D35', fontSize: 15, lineHeight: 20, fontWeight: '700', marginBottom: 6 },
   statsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 9 },
-  supplyText: { fontSize: 11, lineHeight: 14, color: '#94877C', marginRight: 5, fontWeight: '500' },
+  supplyText: { color: '#94877C', fontSize: 11, lineHeight: 14, marginRight: 5, fontWeight: '500' },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', borderTopWidth: 1, borderColor: '#EEE9E3', paddingTop: 8 },
-  priceLabel: { fontSize: 11, lineHeight: 14, color: '#94877C', fontWeight: '500' },
-  price: { fontSize: 18, lineHeight: 24, fontWeight: '700', color: '#9A6A33' },
-  emptyState: { alignItems: 'center', marginTop: 72, paddingHorizontal: 24 },
+  priceLabel: { color: '#94877C', fontSize: 11, lineHeight: 14, fontWeight: '500' },
+  price: { color: '#9A6A33', fontSize: 18, lineHeight: 24, fontWeight: '700' },
+  delistedPrice: { color: '#8D6E63' },
+  emptyState: { alignItems: 'center', marginTop: 58, paddingHorizontal: 24 },
   emptyIllustration: { width: 76, height: 76, borderRadius: 38, backgroundColor: '#F3F7F9', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   emptyIcon: { fontSize: 36 },
-  emptyText: { color: '#67777F', fontWeight: '700', fontSize: 15, textAlign: 'center' },
+  emptyTitle: { marginBottom: 8, color: '#493D35', fontSize: 16, lineHeight: 22, fontWeight: '700', textAlign: 'center' },
+  emptyText: { color: '#67777F', fontWeight: '500', fontSize: 13, lineHeight: 19, textAlign: 'center' },
+
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(48,39,32,0.30)', justifyContent: 'flex-end', paddingTop: 48 },
+  feedPanel: { width: '100%', maxWidth: 720, maxHeight: '90%', minHeight: 420, alignSelf: 'center', paddingHorizontal: 18, paddingTop: 10, backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  modalHandle: { width: 38, height: 4, alignSelf: 'center', marginBottom: 14, borderRadius: 2, backgroundColor: '#E8E1D9' },
+  feedHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  feedTitle: { color: '#493D35', fontSize: 18, lineHeight: 24, fontWeight: '800' },
+  feedSubtitle: { marginTop: 2, color: '#94877C', fontSize: 12, lineHeight: 16 },
+  modalClose: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: '#F7F5F1' },
+  feedTabs: { flexDirection: 'row', padding: 3, marginBottom: 12, borderRadius: 12, backgroundColor: '#F7F5F1' },
+  feedTab: { flex: 1, minHeight: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 9 },
+  feedTabActive: { backgroundColor: '#E7F0F5' },
+  feedTabText: { color: '#84776D', fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  feedTabTextActive: { color: '#466E88', fontWeight: '800' },
+  feedScroll: { flex: 1 },
+  feedScrollContent: { paddingBottom: 12 },
+  panelHint: { marginBottom: 4, color: '#9B8E83', fontSize: 11, lineHeight: 15 },
+  tradeRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderColor: '#F1ECE6' },
+  tradeAvatar: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#F7F4EF' },
+  tradeCopy: { flex: 1, minWidth: 0 },
+  tradeName: { color: '#493D35', fontSize: 13, lineHeight: 18, fontWeight: '700' },
+  tradeDescription: { marginTop: 2, color: '#94877C', fontSize: 11, lineHeight: 15 },
+  tradePrice: { color: '#9A6A33', fontSize: 13, lineHeight: 18, fontWeight: '800' },
+  feedEmpty: { minHeight: 180, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  feedEmptyText: { color: '#8F8176', fontSize: 13, lineHeight: 19, textAlign: 'center' },
+
+  trendContent: { paddingBottom: 16 },
+  trendChoices: { gap: 8, paddingVertical: 4 },
+  trendChoice: { maxWidth: 180, minHeight: 34, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: '#EEE9E3', backgroundColor: '#FBFAF8' },
+  trendChoiceActive: { borderColor: '#D2E2EB', backgroundColor: '#EAF2F6' },
+  trendChoiceText: { color: '#80746A', fontSize: 12, lineHeight: 16, fontWeight: '600' },
+  trendChoiceTextActive: { color: '#466E88', fontWeight: '700' },
+  trendCollectionName: { marginTop: 12, marginBottom: 10, color: '#493D35', fontSize: 16, lineHeight: 22, fontWeight: '800' },
+  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  metricCard: { width: '48%', minHeight: 70, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 13, borderWidth: 1, borderColor: '#EEE9E3', backgroundColor: '#FCFBF9' },
+  metricLabel: { color: '#91857A', fontSize: 11, lineHeight: 15, fontWeight: '500' },
+  metricValue: { marginTop: 5, color: '#493D35', fontSize: 15, lineHeight: 20, fontWeight: '800' },
+  chartHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 20, marginBottom: 8 },
+  chartTitle: { color: '#493D35', fontSize: 14, lineHeight: 20, fontWeight: '700' },
+  chartUnit: { color: '#A3968B', fontSize: 11, lineHeight: 15 },
+  chartArea: { height: 100, justifyContent: 'flex-end', overflow: 'hidden', paddingHorizontal: 4 },
+  chartGuide: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: '#EFEAE4' },
+  chartBars: { height: 84, flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
+  chartBarSlot: { flex: 1, height: '100%', justifyContent: 'flex-end', alignItems: 'center' },
+  chartBar: { width: '52%', minWidth: 2, borderTopLeftRadius: 3, borderTopRightRadius: 3, backgroundColor: '#9DB9CC' },
+  chartLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 5 },
+  chartLabel: { color: '#A3968B', fontSize: 10, lineHeight: 14 },
+  chartFootnote: { marginTop: 10, color: '#94877C', fontSize: 11, lineHeight: 16 },
+  chartEmpty: { height: 110, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#FAF8F5' },
+  chartEmptyText: { color: '#94877C', fontSize: 12, lineHeight: 17 },
 });

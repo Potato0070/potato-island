@@ -100,3 +100,18 @@
 - 提交 `ede8092` 已推送到 `origin/main`。等待部署后从线上首页点击底部“集市”可进入更新页面，并看到“交易集市”、动态分类、结果数、排序控件、方形藏品图和 C 款底栏图标。
 - 直接打开 `https://www.podao.fun/market` 返回 404；站内底部导航切换可正常进入集市。
 - iPhone 16 视口复核未完成：桌面加载后临时缩放会保留已计算的桌面卡片宽度；在新移动视口里触发集市切换时浏览器超时。因此不能把本次截图当作移动端实机验收结论。
+
+## 2026-10-15：集市播报分区与响应式修正
+
+- `app/(tabs)/market.tsx`：移除集市标题；加入轮播成交播报、可展开搜索、土豆王国/居民图鉴 PFP 主分区、动态分类胶囊和次级排序。播报面板读取最近 20 笔成交，并按真实成交记录计算近 1 小时、近 24 小时、24 小时均价和近 30 日均价趋势；当前地板价来自 collections 缓存字段。
+- PFP 沿用现有 collections 数据，按类型、系列、名称或关联分类的 PFP/图鉴/头像字样归类。当前没有可识别 PFP 记录时显示空状态。
+- 集市卡片列数按视口切换为手机双列、平板三列、桌面四列；列表底部预留导航和安全区高度。
+- `components/LiquidGlassTabBar.tsx`：导航手机端使用完整可用宽度，桌面居中限制至 560px；透镜拖动位置按栏体实测宽度与居中位置计算，避免横向滑动时偏移。
+- 规范与边界同步记录于 `UI_GUIDELINES.md`、`CHANGE_BOUNDARIES.md` 和 `DESIGN_DECISIONS.md`。
+
+### 验证
+
+- `npx eslint 'app/(tabs)/market.tsx' components/LiquidGlassTabBar.tsx`：通过。
+- `npx tsc --noEmit --pretty false`：失败原因为未修改文件中的既有类型问题：`app/my-orders.tsx`、`app/wallet.tsx` 与 `potato-app/` 模板目录；本轮两个修改的 TSX 文件未报告类型错误。
+- `npx expo export --platform web --output-dir .expo-market-responsive`：Metro 成功打包集市及 36 条静态路由；最后复制静态资源时 Windows 返回 `EPERM`，完整导出未完成。
+- `git diff --check`：通过后归档。
