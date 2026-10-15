@@ -92,6 +92,15 @@ const getMarketKind = (collection: MarketCollection, categories: any[]): MarketK
   return /pfp|居民图鉴|岛民图鉴|头像/.test(hints) ? 'pfp' : 'nft';
 };
 
+const isPfpCategory = (category: Record<string, any>) =>
+  /pfp|居民图鉴|岛民图鉴|头像/.test([
+    category.name,
+    category.kind,
+    category.type,
+    category.collection_type,
+    category.scope,
+  ].filter(Boolean).join(' ').toLowerCase());
+
 const FallbackImage = ({ uri, style }: { uri?: string; style: any }) => {
   const [hasError, setHasError] = useState(false);
   const [loading, setLoading] = useState(Boolean(uri));
@@ -315,10 +324,8 @@ export default function MarketScreen() {
   );
 
   const availableCategories = useMemo(
-    () => categories.filter((category) =>
-      marketCollections.some((collection) => getCollectionCategoryIds(collection).includes(category.id)),
-    ),
-    [categories, marketCollections],
+    () => categories.filter((category) => activeKind === 'pfp' ? isPfpCategory(category) : !isPfpCategory(category)),
+    [activeKind, categories],
   );
 
   useEffect(() => {
@@ -973,7 +980,7 @@ const styles = StyleSheet.create({
   searchOverlay: { position: 'absolute', right: 0, top: 1, bottom: 1, height: 44, zIndex: 5, overflow: 'hidden', borderRadius: 14 },
   searchToggle: { flex: 1, height: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FBFAF8', borderWidth: 1, borderColor: '#ECE7E0', borderRadius: 14 },
   expandedSearch: { flex: 1, height: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, backgroundColor: '#FBFAF8', borderWidth: 1, borderColor: '#ECE7E0', borderRadius: 14 },
-  searchInput: { flex: 1, minWidth: 0, height: '100%', fontSize: 14, color: '#493D35', paddingVertical: 0 },
+  searchInput: { flex: 1, minWidth: 0, height: '100%', fontSize: 14, color: '#493D35', paddingVertical: 0, borderWidth: 0, outlineStyle: 'solid', outlineWidth: 0, outlineColor: 'transparent' },
   searchInputMobile: { fontSize: 16, lineHeight: 20 },
   searchClose: { width: 26, height: 34, alignItems: 'center', justifyContent: 'center' },
 
@@ -1024,7 +1031,7 @@ const styles = StyleSheet.create({
   image: { width: '100%', height: '100%' },
   delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(238,243,239,0.10)' },
   delistedFrost: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(236,242,237,0.08)' },
-  delistedPlaque: { position: 'absolute', width: '91%', height: '91%' },
+  delistedPlaque: { position: 'absolute', width: '74%', height: '74%', opacity: 0.64 },
   followButton: { position: 'absolute', top: 9, right: 9, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.94)', borderWidth: 1, borderColor: 'rgba(224,230,232,0.9)', shadowColor: '#38464D', shadowOpacity: 0.12, shadowRadius: 5, elevation: 2 },
   info: { paddingHorizontal: 11, paddingTop: 11, paddingBottom: 12 },
   name: { color: '#493D35', fontSize: 15, lineHeight: 20, fontWeight: '700', marginBottom: 6 },
@@ -1081,7 +1088,7 @@ const styles = StyleSheet.create({
   trendCategoryChoiceTextActive: { color: '#537895', fontWeight: '700' },
   trendNoCategories: { paddingBottom: 10, color: '#94877C', fontSize: 12, lineHeight: 17 },
   trendSearchField: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, borderRadius: 11, borderWidth: 1, borderColor: '#ECE7E0', backgroundColor: '#FBFAF8' },
-  trendSearchInput: { flex: 1, minWidth: 0, height: 40, fontSize: 14, color: '#493D35', paddingVertical: 0 },
+  trendSearchInput: { flex: 1, minWidth: 0, height: 40, fontSize: 14, color: '#493D35', paddingVertical: 0, borderWidth: 0, outlineStyle: 'solid', outlineWidth: 0, outlineColor: 'transparent' },
   trendSearchClear: { width: 28, height: 36, alignItems: 'center', justifyContent: 'center' },
   trendResults: { maxHeight: 150, marginTop: 7 },
   trendResultRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingHorizontal: 9, borderRadius: 9, borderBottomWidth: 1, borderColor: '#F1ECE6' },
