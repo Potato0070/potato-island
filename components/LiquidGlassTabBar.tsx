@@ -202,7 +202,6 @@ export default function LiquidGlassTabBar({ state, descriptors, navigation }: Bo
         >
           <BlurView intensity={Platform.OS === 'web' ? 22 : 36} tint="light" style={StyleSheet.absoluteFill} />
           <View style={styles.lensFill} />
-          <View style={styles.lensTopSheen} />
           <View style={styles.lensBottomRim} />
           <View style={styles.lensContent}>
             <IslandTabIcon name={routes[pressedIndex ?? state.index]?.name ?? 'index'} />
@@ -254,7 +253,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: 'rgba(255,255,255,0.52)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.98)',
+    borderColor: 'rgba(215,230,239,0.88)',
     shadowColor: '#7EA2BA',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -265,15 +264,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(242,248,251,0.18)',
     borderRadius: 32,
-  },
-  lensTopSheen: {
-    position: 'absolute',
-    top: 1,
-    left: 14,
-    right: 14,
-    height: 13,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.62)',
   },
   lensBottomRim: {
     position: 'absolute',
