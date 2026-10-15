@@ -18,9 +18,9 @@ const HORIZONTAL_INSET = 12;
 const TAB_ICON_SOURCES: Record<string, number> = {
   index: require('../assets/navigation/set-c/home-island.png'),
   market: require('../assets/navigation/set-c/market-stall.png'),
-  community: require('../assets/navigation/set-c/decree-map.png'),
-  messages: require('../assets/navigation/set-c/message-courier.png'),
-  profile: require('../assets/navigation/set-c/treasury-chest.png'),
+  community: require('../assets/navigation/set-c-clean/decree-map.png'),
+  messages: require('../assets/navigation/set-c-clean/message-courier.png'),
+  profile: require('../assets/navigation/set-c-clean/treasury-chest.png'),
 };
 
 export default function LiquidGlassTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
