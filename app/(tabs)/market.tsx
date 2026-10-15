@@ -19,6 +19,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../supabase';
 
@@ -450,6 +451,7 @@ export default function MarketScreen() {
             <FallbackImage uri={item.image_url} style={styles.image} />
             {isDelisted && (
               <View pointerEvents="none" style={styles.delistedOverlay}>
+                <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
                 <Image
                   source={require('../../assets/market/delisted-plaque-only-v1.png')}
                   style={styles.delistedPlaque}
