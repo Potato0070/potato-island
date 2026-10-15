@@ -42,6 +42,7 @@ const CONTENT_MAX_WIDTH = 1200;
 const CARD_GAP = 12;
 const NAV_BAR_HEIGHT = 78;
 const NON_SALE_TYPES = new Set(['好友转赠', 'launch_mint', 'genesis_mint']);
+const COLLECTION_BOOKMARK_ICON = require('../../assets/market/collection-bookmark.png');
 
 const formatMoney = (value: number | string | null | undefined) => {
   const amount = Number(value);
@@ -66,12 +67,15 @@ const isSaleTrade = (trade: Partial<MarketTrade>) =>
   Boolean(trade.seller_id) &&
   !NON_SALE_TYPES.has(trade.transfer_type || '');
 
-const getMarketKind = (collection: MarketCollection, categories: any[]): MarketKind => {
-  const categoryIds = Array.isArray(collection.category_ids)
+const getCollectionCategoryIds = (collection: MarketCollection) =>
+  Array.isArray(collection.category_ids)
     ? collection.category_ids
     : collection.category_id
       ? [collection.category_id]
       : [];
+
+const getMarketKind = (collection: MarketCollection, categories: any[]): MarketKind => {
+  const categoryIds = getCollectionCategoryIds(collection);
   const categoryNames = categories
     .filter((category) => categoryIds.includes(category.id))
     .map((category) => category.name);
@@ -131,6 +135,10 @@ export default function MarketScreen() {
   const [recentTrades, setRecentTrades] = useState<MarketTrade[]>([]);
   const [trendTrades, setTrendTrades] = useState<MarketTrade[]>([]);
   const [trendCollectionId, setTrendCollectionId] = useState<string | null>(null);
+  const [trendFilterKind, setTrendFilterKind] = useState<MarketKind>('nft');
+  const [trendFilterCategoryId, setTrendFilterCategoryId] = useState<string | null>(null);
+  const [trendSearchQuery, setTrendSearchQuery] = useState('');
+  const [trendFilterOpen, setTrendFilterOpen] = useState(false);
   const [tickerIndex, setTickerIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -138,6 +146,7 @@ export default function MarketScreen() {
   const [feedTab, setFeedTab] = useState<'trades' | 'trends'>('trades');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [preferencesReady, setPreferencesReady] = useState(false);
   const searchProgress = useRef(new Animated.Value(0)).current;
   const searchInputRef = useRef<TextInput>(null);
 
@@ -145,7 +154,8 @@ export default function MarketScreen() {
   const columnCount = viewport.width >= 1100 ? 4 : viewport.width >= 720 ? 3 : 2;
   const cardWidth = Math.max(0, (contentWidth - 32 - CARD_GAP * (columnCount - 1)) / columnCount);
   const listBottomPadding = Math.max(insets.bottom, 8) + NAV_BAR_HEIGHT + 24;
-  const expandedSearchWidth = Math.max(44, Math.min(contentWidth - 32, 360));
+  const expandedSearchWidth = Math.max(44, contentWidth - 32);
+  const compactFilters = viewport.width < 480;
 
   useEffect(() => {
     const loadPreferences = async () => {
@@ -167,6 +177,8 @@ export default function MarketScreen() {
         }
       } catch {
         // Keep safe defaults when saved preferences are unavailable.
+      } finally {
+        setPreferencesReady(true);
       }
     };
     void loadPreferences();
@@ -276,19 +288,17 @@ export default function MarketScreen() {
     setActiveKind(kind);
     setActiveCategory(null);
     setTrendCollectionId(null);
+    setTrendFilterKind(kind);
+    setTrendFilterCategoryId(null);
     try {
-      await Promise.all([
-        AsyncStorage.setItem('@market_kind', kind),
-        AsyncStorage.setItem('@market_category', 'all'),
-      ]);
+      await AsyncStorage.setItem('@market_kind', kind);
     } catch {}
   };
 
   const handleCategoryChange = async (categoryId: string) => {
     void Haptics.selectionAsync();
-    const nextCategory = activeCategory === categoryId ? null : categoryId;
-    setActiveCategory(nextCategory);
-    try { await AsyncStorage.setItem('@market_category', nextCategory || 'all'); } catch {}
+    setActiveCategory(categoryId);
+    try { await AsyncStorage.setItem('@market_category', categoryId); } catch {}
   };
 
   const toggleFollowed = async (collectionId: string) => {
@@ -305,13 +315,31 @@ export default function MarketScreen() {
     [activeKind, categories, collections],
   );
 
+  const availableCategories = useMemo(
+    () => categories.filter((category) =>
+      marketCollections.some((collection) => getCollectionCategoryIds(collection).includes(category.id)),
+    ),
+    [categories, marketCollections],
+  );
+
+  useEffect(() => {
+    if (!preferencesReady || loading) return;
+    const nextCategory = availableCategories.some((category) => category.id === activeCategory)
+      ? activeCategory
+      : availableCategories[0]?.id || null;
+    if (nextCategory !== activeCategory) setActiveCategory(nextCategory);
+    void AsyncStorage.setItem('@market_category', nextCategory || 'all').catch(() => {});
+  }, [activeCategory, availableCategories, loading, preferencesReady]);
+
+  useEffect(() => {
+    setTrendFilterKind(activeKind);
+    setTrendFilterCategoryId(null);
+    setTrendCollectionId(null);
+  }, [activeKind]);
+
   const processedData = useMemo(() => {
     const filtered = marketCollections.filter((collection) => {
-      const categoryIds = Array.isArray(collection.category_ids)
-        ? collection.category_ids
-        : collection.category_id
-          ? [collection.category_id]
-          : [];
+      const categoryIds = getCollectionCategoryIds(collection);
       const matchesCategory = !activeCategory || categoryIds.includes(activeCategory);
       const matchesSearch = String(collection.name || '').toLocaleLowerCase().includes(searchQuery.trim().toLocaleLowerCase());
       const matchesFollowed = activeSort !== 'followed' || followedIds.includes(collection.id);
@@ -343,7 +371,30 @@ export default function MarketScreen() {
       ' 购买了 ' + tickerCollectionName + ' · ¥' + formatMoney(currentTickerTrade.price)
     : '点击查看近期成交播报与藏品走势';
 
-  const selectedTrendCollection = marketCollections.find((collection) => collection.id === trendCollectionId) || marketCollections[0];
+  const trendScopeCollections = useMemo(
+    () => collections.filter((collection) => getMarketKind(collection, categories) === trendFilterKind),
+    [categories, collections, trendFilterKind],
+  );
+  const trendCategories = useMemo(
+    () => categories.filter((category) =>
+      trendScopeCollections.some((collection) => getCollectionCategoryIds(collection).includes(category.id)),
+    ),
+    [categories, trendScopeCollections],
+  );
+  const trendCollections = useMemo(
+    () => trendScopeCollections.filter((collection) =>
+      !trendFilterCategoryId || getCollectionCategoryIds(collection).includes(trendFilterCategoryId),
+    ),
+    [trendFilterCategoryId, trendScopeCollections],
+  );
+  const filteredTrendCollections = useMemo(
+    () => trendCollections.filter((collection) =>
+      String(collection.name || '').toLocaleLowerCase().includes(trendSearchQuery.trim().toLocaleLowerCase()),
+    ),
+    [trendCollections, trendSearchQuery],
+  );
+  const selectedTrendCollection = trendCollections.find((collection) => collection.id === trendCollectionId) || trendCollections[0];
+  const trendCategoryName = categories.find((category) => category.id === trendFilterCategoryId)?.name;
   const selectedCollectionTrades = selectedTrendCollection
     ? trendTrades.filter((trade) => trade.collection_id === selectedTrendCollection.id)
     : [];
@@ -394,10 +445,11 @@ export default function MarketScreen() {
           <View style={styles.imageContainer}>
             <FallbackImage uri={item.image_url} style={styles.image} />
             {isDelisted && (
-              <View style={styles.delistedOverlay}>
-                <View style={[styles.delistedStamp, { width: Math.min(cardWidth * 0.86, 260) }]}>
-                  <Text style={styles.delistedText}>已退市</Text>
-                </View>
+              <View pointerEvents="none" style={styles.delistedOverlay}>
+                <View style={styles.delistedRoute} />
+                <View style={styles.delistedRouteStart} />
+                <View style={styles.delistedRouteEnd} />
+                <Text style={styles.delistedText}>已退市</Text>
               </View>
             )}
           </View>
@@ -410,7 +462,7 @@ export default function MarketScreen() {
               <Text style={styles.supplyText}>流通 {formatMoney(item.circulating_supply).replace('.00', '')}</Text>
             </View>
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>{isDelisted ? '求购参考价' : '全网地板价'}</Text>
+              <Text style={styles.priceLabel}>{isDelisted ? '退市价' : '地板价'}</Text>
               <Text style={[styles.price, isDelisted && styles.delistedPrice]}>¥{formatMoney(displayPrice)}</Text>
             </View>
           </View>
@@ -423,10 +475,10 @@ export default function MarketScreen() {
           onPress={() => { void toggleFollowed(item.id); }}
           activeOpacity={0.78}
         >
-          <Ionicons
-            name={followedIds.includes(item.id) ? 'heart' : 'heart-outline'}
-            size={20}
-            color={followedIds.includes(item.id) ? '#D87572' : '#596A73'}
+          <Image
+            source={COLLECTION_BOOKMARK_ICON}
+            style={[styles.followIcon, followedIds.includes(item.id) && styles.followIconSelected]}
+            resizeMode="contain"
           />
         </TouchableOpacity>
       </View>
@@ -447,7 +499,7 @@ export default function MarketScreen() {
             accessibilityLabel="查看藏品实时交易播报"
             style={styles.broadcastButton}
             activeOpacity={0.82}
-            onPress={() => { setFeedTab('trades'); setFeedVisible(true); }}
+            onPress={() => { setFeedTab('trades'); setTrendFilterOpen(false); setFeedVisible(true); }}
           >
             <View style={styles.liveBadge}>
               <View style={styles.liveDot} />
@@ -464,20 +516,21 @@ export default function MarketScreen() {
                 <Ionicons name="search-outline" size={19} color="#8C8177" />
                 <TextInput
                   ref={searchInputRef}
-                  style={styles.searchInput}
+                  style={[styles.searchInput, viewport.width < 768 && styles.searchInputMobile]}
                   placeholder="搜索藏品名称"
                   placeholderTextColor="#A59A90"
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   onSubmitEditing={() => Keyboard.dismiss()}
                   returnKeyType="search"
+                  selectionColor="#B68E54"
                   accessibilityLabel="搜索藏品名称"
                 />
                 <TouchableOpacity
                   accessibilityRole="button"
                   accessibilityLabel="收起搜索"
                   hitSlop={8}
-                  onPress={() => setSearchOpen(false)}
+                  onPress={() => { setSearchOpen(false); Keyboard.dismiss(); }}
                   style={styles.searchClose}
                 >
                   <Ionicons name="close" size={19} color="#796D64" />
@@ -498,7 +551,7 @@ export default function MarketScreen() {
       </View>
 
       <View style={styles.filterOuter}>
-        <View style={styles.filterBar}>
+        <View style={[styles.filterBar, compactFilters && styles.filterBarNarrow]}>
           <View style={styles.marketKindSwitcher} accessibilityRole="tablist">
             <TouchableOpacity
               accessibilityRole="tab"
@@ -518,12 +571,11 @@ export default function MarketScreen() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.sortSection}>
+          <View style={[styles.sortSection, compactFilters && styles.sortSectionNarrow]}>
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityState={{ selected: activeSort === 'hot' }}
-              hitSlop={4}
-              style={[styles.sortButton, activeSort === 'hot' && styles.sortButtonActive]}
+              style={[styles.sortButton, compactFilters && styles.sortButtonNarrow, activeSort === 'hot' && styles.sortButtonActive]}
               onPress={() => { void handleSortChange('hot'); }}
             >
               <Text style={[styles.sortText, activeSort === 'hot' && styles.sortTextActive]}>最热</Text>
@@ -531,8 +583,7 @@ export default function MarketScreen() {
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityState={{ selected: activeSort === 'latest' }}
-              hitSlop={4}
-              style={[styles.sortButton, activeSort === 'latest' && styles.sortButtonActive]}
+              style={[styles.sortButton, compactFilters && styles.sortButtonNarrow, activeSort === 'latest' && styles.sortButtonActive]}
               onPress={() => { void handleSortChange('latest'); }}
             >
               <Text style={[styles.sortText, activeSort === 'latest' && styles.sortTextActive]}>最新</Text>
@@ -540,8 +591,7 @@ export default function MarketScreen() {
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityState={{ selected: activeSort === 'price_asc' || activeSort === 'price_desc' }}
-              hitSlop={4}
-              style={[styles.sortButton, (activeSort === 'price_asc' || activeSort === 'price_desc') && styles.sortButtonActive]}
+              style={[styles.sortButton, compactFilters && styles.sortButtonNarrow, (activeSort === 'price_asc' || activeSort === 'price_desc') && styles.sortButtonActive]}
               onPress={() => { void handleSortChange(activeSort === 'price_asc' ? 'price_desc' : 'price_asc'); }}
             >
               <Text style={[styles.sortText, (activeSort === 'price_asc' || activeSort === 'price_desc') && styles.sortTextActive]} numberOfLines={1}>
@@ -551,12 +601,11 @@ export default function MarketScreen() {
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityState={{ selected: activeSort === 'followed' }}
-              hitSlop={4}
-              style={[styles.sortButton, styles.followSortButton, activeSort === 'followed' && styles.sortButtonActive]}
+              style={[styles.sortButton, styles.followSortButton, compactFilters && styles.sortButtonNarrow, activeSort === 'followed' && styles.followSortButtonActive]}
               onPress={() => { void handleSortChange('followed'); }}
             >
-              <Ionicons name={activeSort === 'followed' ? 'heart' : 'heart-outline'} size={12} color={activeSort === 'followed' ? '#D87572' : '#948A80'} />
-              <Text style={[styles.sortText, activeSort === 'followed' && styles.sortTextActive]}>关注</Text>
+              <Image source={COLLECTION_BOOKMARK_ICON} style={[styles.followSortIcon, activeSort !== 'followed' && styles.followIconMuted]} resizeMode="contain" />
+              <Text style={[styles.sortText, activeSort === 'followed' && styles.followSortTextActive]}>关注</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -564,7 +613,7 @@ export default function MarketScreen() {
 
       <View style={styles.categoryOuter}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
-          {categories.map((category) => (
+          {availableCategories.map((category) => (
             <TouchableOpacity
               key={category.id}
               accessibilityRole="button"
@@ -615,7 +664,7 @@ export default function MarketScreen() {
               </Text>
               <Text style={styles.emptyText}>
                 {activeSort === 'followed' && followedIds.length === 0
-                  ? '点亮藏品卡片上的爱心，就能在关注里快速找到它们。'
+                  ? '把喜欢的藏品收进图鉴，就能在关注里快速找到它们。'
                   : activeKind === 'pfp'
                     ? '岛民头像专区的藏品上架后，会出现在这里。'
                     : '试试切换分区，或清除当前筛选条件。'}
@@ -703,25 +752,146 @@ export default function MarketScreen() {
               </ScrollView>
             ) : (
               <ScrollView style={styles.feedScroll} contentContainerStyle={styles.trendContent}>
-                {marketCollections.length ? (
+                {trendScopeCollections.length ? (
                   <>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendChoices}>
-                      {marketCollections.map((collection) => (
-                        <TouchableOpacity
-                          key={collection.id}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: (selectedTrendCollection?.id || marketCollections[0]?.id) === collection.id }}
-                          style={[styles.trendChoice, (selectedTrendCollection?.id || marketCollections[0]?.id) === collection.id && styles.trendChoiceActive]}
-                          onPress={() => setTrendCollectionId(collection.id)}
-                        >
-                          <Text style={[styles.trendChoiceText, (selectedTrendCollection?.id || marketCollections[0]?.id) === collection.id && styles.trendChoiceTextActive]} numberOfLines={1}>
-                            {collection.name}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
+                    <View style={styles.trendPickerHeader}>
+                      <View style={styles.trendSelectionCopy}>
+                        <Text style={styles.panelHint}>
+                          {trendFilterKind === 'nft' ? '土豆王国' : '居民图鉴 PFP'}
+                          {trendCategoryName ? ' · ' + trendCategoryName : ''}
+                        </Text>
+                        <Text style={styles.trendCollectionName} numberOfLines={1}>
+                          {selectedTrendCollection?.name || '选择藏品查看走势'}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel={trendFilterOpen ? '收起藏品筛选' : '筛选走势藏品'}
+                        accessibilityState={{ expanded: trendFilterOpen }}
+                        style={[styles.trendFilterTrigger, trendFilterOpen && styles.trendFilterTriggerActive]}
+                        onPress={() => setTrendFilterOpen((open) => !open)}
+                      >
+                        <Ionicons name="options-outline" size={17} color="#6E6258" />
+                        <Text style={styles.trendFilterTriggerText}>筛选</Text>
+                        <Ionicons name={trendFilterOpen ? 'chevron-up' : 'chevron-down'} size={15} color="#8A7D71" />
+                      </TouchableOpacity>
+                    </View>
 
-                    <Text style={styles.trendCollectionName}>{selectedTrendCollection?.name || '选择藏品查看走势'}</Text>
+                    {trendFilterOpen && (
+                      <View style={styles.trendPicker}>
+                        <Text style={styles.trendPickerLabel}>分区</Text>
+                        <View style={styles.trendScopeChoices}>
+                          {([
+                            { id: 'nft' as const, label: '土豆王国' },
+                            { id: 'pfp' as const, label: '居民图鉴 PFP' },
+                          ]).map((scope) => (
+                            <TouchableOpacity
+                              key={scope.id}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: trendFilterKind === scope.id }}
+                              style={[styles.trendScopeChoice, trendFilterKind === scope.id && styles.trendScopeChoiceActive]}
+                              onPress={() => {
+                                setTrendFilterKind(scope.id);
+                                setTrendFilterCategoryId(null);
+                                setTrendCollectionId(null);
+                                setTrendSearchQuery('');
+                              }}
+                            >
+                              <Text style={[styles.trendScopeChoiceText, trendFilterKind === scope.id && styles.trendScopeChoiceTextActive]}>
+                                {scope.label}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+
+                        {trendCategories.length > 0 && (
+                          <>
+                            <Text style={styles.trendPickerLabel}>分类</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendCategoryChoices}>
+                              <TouchableOpacity
+                                accessibilityRole="button"
+                                accessibilityState={{ selected: trendFilterCategoryId === null }}
+                                style={[styles.trendCategoryChoice, trendFilterCategoryId === null && styles.trendCategoryChoiceActive]}
+                                onPress={() => { setTrendFilterCategoryId(null); setTrendCollectionId(null); }}
+                              >
+                                <Text style={[styles.trendCategoryChoiceText, trendFilterCategoryId === null && styles.trendCategoryChoiceTextActive]}>全部分类</Text>
+                              </TouchableOpacity>
+                              {trendCategories.map((category) => (
+                                <TouchableOpacity
+                                  key={category.id}
+                                  accessibilityRole="button"
+                                  accessibilityState={{ selected: trendFilterCategoryId === category.id }}
+                                  style={[styles.trendCategoryChoice, trendFilterCategoryId === category.id && styles.trendCategoryChoiceActive]}
+                                  onPress={() => { setTrendFilterCategoryId(category.id); setTrendCollectionId(null); }}
+                                >
+                                  <Text style={[styles.trendCategoryChoiceText, trendFilterCategoryId === category.id && styles.trendCategoryChoiceTextActive]}>{category.name}</Text>
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          </>
+                        )}
+
+                        <View style={styles.trendSearchField}>
+                          <Ionicons name="search-outline" size={17} color="#96897E" />
+                          <TextInput
+                            style={[styles.trendSearchInput, viewport.width < 768 && styles.searchInputMobile]}
+                            placeholder="搜索藏品名称"
+                            placeholderTextColor="#A59A90"
+                            value={trendSearchQuery}
+                            onChangeText={setTrendSearchQuery}
+                            returnKeyType="search"
+                            selectionColor="#B68E54"
+                            accessibilityLabel="搜索走势藏品名称"
+                          />
+                          {trendSearchQuery.length > 0 && (
+                            <TouchableOpacity
+                              accessibilityRole="button"
+                              accessibilityLabel="清空藏品搜索"
+                              onPress={() => setTrendSearchQuery('')}
+                              style={styles.trendSearchClear}
+                            >
+                              <Ionicons name="close-circle" size={17} color="#A3968B" />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+
+                        <ScrollView style={styles.trendResults} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                          {filteredTrendCollections.slice(0, 25).map((collection) => {
+                            const categoryName = categories
+                              .filter((category) => getCollectionCategoryIds(collection).includes(category.id))
+                              .map((category) => category.name)
+                              .join(' · ');
+                            const selected = selectedTrendCollection?.id === collection.id;
+                            return (
+                              <TouchableOpacity
+                                key={collection.id}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected }}
+                                style={[styles.trendResultRow, selected && styles.trendResultRowActive]}
+                                onPress={() => {
+                                  setTrendCollectionId(collection.id);
+                                  setTrendSearchQuery('');
+                                  setTrendFilterOpen(false);
+                                }}
+                              >
+                                <View style={styles.trendResultCopy}>
+                                  <Text style={[styles.trendResultName, selected && styles.trendResultNameActive]} numberOfLines={1}>{collection.name}</Text>
+                                  <Text style={styles.trendResultCategory} numberOfLines={1}>{categoryName || '未分类'}</Text>
+                                </View>
+                                {selected && <Ionicons name="checkmark" size={18} color="#66859A" />}
+                              </TouchableOpacity>
+                            );
+                          })}
+                          {filteredTrendCollections.length === 0 && (
+                            <Text style={styles.trendResultEmpty}>没有找到匹配藏品</Text>
+                          )}
+                          {filteredTrendCollections.length > 25 && (
+                            <Text style={styles.trendResultHint}>匹配到 {filteredTrendCollections.length} 件，请输入名称缩小范围</Text>
+                          )}
+                        </ScrollView>
+                      </View>
+                    )}
+
                     <View style={styles.metricsGrid}>
                       <View style={styles.metricCard}>
                         <Text style={styles.metricLabel}>近 1 小时成交</Text>
@@ -743,7 +913,7 @@ export default function MarketScreen() {
 
                     <View style={styles.chartHeader}>
                       <Text style={styles.chartTitle}>近 30 日成交均价</Text>
-                      <Text style={styles.chartUnit}>人民币</Text>
+                      <Text style={styles.chartUnit}>土豆币</Text>
                     </View>
                     {chartValues.length ? (
                       <>
@@ -801,23 +971,29 @@ const styles = StyleSheet.create({
   tickerText: { color: '#695D53', fontSize: 12, lineHeight: 17, fontWeight: '600' },
   searchOverlay: { position: 'absolute', right: 0, top: 1, bottom: 1, height: 44, zIndex: 5, overflow: 'hidden', borderRadius: 14 },
   searchToggle: { flex: 1, height: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FBFAF8', borderWidth: 1, borderColor: '#ECE7E0', borderRadius: 14 },
-  expandedSearch: { flex: 1, height: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#D9E5EB', borderRadius: 14, shadowColor: '#657D8C', shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 },
+  expandedSearch: { flex: 1, height: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, backgroundColor: '#FBFAF8', borderWidth: 1, borderColor: '#ECE7E0', borderRadius: 14 },
   searchInput: { flex: 1, minWidth: 0, height: '100%', fontSize: 14, color: '#493D35', paddingVertical: 0 },
+  searchInputMobile: { fontSize: 16, lineHeight: 20 },
   searchClose: { width: 26, height: 34, alignItems: 'center', justifyContent: 'center' },
 
   filterOuter: { width: '100%', maxWidth: CONTENT_MAX_WIDTH, alignSelf: 'center', paddingHorizontal: 16, paddingBottom: 8 },
-  filterBar: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
+  filterBar: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  filterBarNarrow: { alignItems: 'stretch', flexDirection: 'column', gap: 6 },
   marketKindSwitcher: { flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 2, padding: 3, borderRadius: 13, backgroundColor: '#F7F5F1' },
   marketKindTab: { minHeight: 34, paddingHorizontal: 8, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   pfpKindTab: { paddingHorizontal: 7 },
   marketKindTabActive: { backgroundColor: '#E7F0F5', borderWidth: 1, borderColor: '#D2E2EB' },
   marketKindText: { color: '#82766D', fontSize: 11, lineHeight: 15, fontWeight: '600' },
   marketKindTextActive: { color: '#466E88', fontWeight: '800' },
-  sortSection: { flexShrink: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 0 },
-  sortButton: { minHeight: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: 3, borderRadius: 8 },
-  followSortButton: { paddingHorizontal: 2 },
+  sortSection: { flexShrink: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 5 },
+  sortSectionNarrow: { width: '100%', flexShrink: 0, justifyContent: 'space-between', gap: 6 },
+  sortButton: { minWidth: 56, minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 8, borderRadius: 10 },
+  sortButtonNarrow: { flex: 1, minWidth: 0, minHeight: 44, paddingHorizontal: 5 },
+  followSortButton: { paddingHorizontal: 8 },
+  followSortButtonActive: { backgroundColor: '#EDF2E7' },
+  followSortTextActive: { color: '#657D55', fontWeight: '700' },
   sortButtonActive: { backgroundColor: '#EEF3F7' },
-  sortText: { color: '#948A80', fontSize: 11, lineHeight: 15, fontWeight: '600' },
+  sortText: { color: '#82766D', fontSize: 12, lineHeight: 17, fontWeight: '600' },
   sortTextActive: { color: '#537895', fontWeight: '700' },
 
   categoryOuter: { width: '100%', maxWidth: CONTENT_MAX_WIDTH, alignSelf: 'center', backgroundColor: '#FFFFFF' },
@@ -845,10 +1021,16 @@ const styles = StyleSheet.create({
   fallbackIconWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   fallbackIcon: { fontSize: 32 },
   image: { width: '100%', height: '100%' },
-  delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,250,244,0.18)', justifyContent: 'center', alignItems: 'center' },
-  delistedStamp: { maxWidth: '90%', height: 48, paddingHorizontal: 12, borderRadius: 10, borderWidth: 2, borderColor: '#FFF9F1', backgroundColor: '#A84337', justifyContent: 'center', alignItems: 'center', transform: [{ rotate: '-8deg' }] },
-  delistedText: { color: '#FFF9F1', fontSize: 17, fontWeight: '800', letterSpacing: 1.5 },
+  delistedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(232,237,226,0.40)', justifyContent: 'center', alignItems: 'center' },
+  delistedRoute: { position: 'absolute', width: '76%', height: '48%', borderRadius: 999, borderWidth: 1, borderColor: 'rgba(91,108,79,0.58)', borderStyle: 'dashed' },
+  delistedRouteStart: { position: 'absolute', top: '25%', right: '17%', width: 8, height: 8, borderRadius: 4, backgroundColor: '#75866A', borderWidth: 1, borderColor: '#F8F7F2' },
+  delistedRouteEnd: { position: 'absolute', bottom: '25%', left: '17%', width: 8, height: 8, borderRadius: 4, backgroundColor: '#75866A', borderWidth: 1, borderColor: '#F8F7F2' },
+  delistedText: { color: '#58644F', fontSize: 16, fontWeight: '800', letterSpacing: 3, textShadowColor: 'rgba(255,255,255,0.82)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
   followButton: { position: 'absolute', top: 9, right: 9, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.94)', borderWidth: 1, borderColor: 'rgba(224,230,232,0.9)', shadowColor: '#38464D', shadowOpacity: 0.12, shadowRadius: 5, elevation: 2 },
+  followIcon: { width: 22, height: 22, opacity: 0.66 },
+  followIconSelected: { opacity: 1 },
+  followIconMuted: { opacity: 0.64 },
+  followSortIcon: { width: 16, height: 16 },
   info: { paddingHorizontal: 11, paddingTop: 11, paddingBottom: 12 },
   name: { color: '#493D35', fontSize: 15, lineHeight: 20, fontWeight: '700', marginBottom: 6 },
   statsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 9 },
@@ -888,12 +1070,36 @@ const styles = StyleSheet.create({
   feedEmptyText: { color: '#8F8176', fontSize: 13, lineHeight: 19, textAlign: 'center' },
 
   trendContent: { paddingBottom: 16 },
-  trendChoices: { gap: 8, paddingVertical: 4 },
-  trendChoice: { maxWidth: 180, minHeight: 34, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: '#EEE9E3', backgroundColor: '#FBFAF8' },
-  trendChoiceActive: { borderColor: '#D2E2EB', backgroundColor: '#EAF2F6' },
-  trendChoiceText: { color: '#80746A', fontSize: 12, lineHeight: 16, fontWeight: '600' },
-  trendChoiceTextActive: { color: '#466E88', fontWeight: '700' },
-  trendCollectionName: { marginTop: 12, marginBottom: 10, color: '#493D35', fontSize: 16, lineHeight: 22, fontWeight: '800' },
+  trendPickerHeader: { minHeight: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: '#EEE9E3', backgroundColor: '#FCFBF9' },
+  trendSelectionCopy: { flex: 1, minWidth: 0, paddingVertical: 9 },
+  trendCollectionName: { marginTop: 2, color: '#493D35', fontSize: 16, lineHeight: 22, fontWeight: '800' },
+  trendFilterTrigger: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10, borderRadius: 11, backgroundColor: '#F5F1EB' },
+  trendFilterTriggerActive: { backgroundColor: '#EAF2F6' },
+  trendFilterTriggerText: { color: '#695D53', fontSize: 13, lineHeight: 18, fontWeight: '700' },
+  trendPicker: { marginBottom: 14, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: '#EEE9E3', backgroundColor: '#FFFFFF' },
+  trendPickerLabel: { marginTop: 2, marginBottom: 7, color: '#8C8075', fontSize: 11, lineHeight: 15, fontWeight: '700' },
+  trendScopeChoices: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  trendScopeChoice: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, borderRadius: 10, backgroundColor: '#F7F5F1', borderWidth: 1, borderColor: '#EEE9E3' },
+  trendScopeChoiceActive: { backgroundColor: '#E7F0F5', borderColor: '#D2E2EB' },
+  trendScopeChoiceText: { color: '#82766D', fontSize: 12, lineHeight: 17, fontWeight: '600' },
+  trendScopeChoiceTextActive: { color: '#466E88', fontWeight: '800' },
+  trendCategoryChoices: { gap: 7, paddingBottom: 10 },
+  trendCategoryChoice: { minHeight: 34, justifyContent: 'center', paddingHorizontal: 11, borderRadius: 10, borderWidth: 1, borderColor: '#EEE9E3', backgroundColor: '#FBFAF8' },
+  trendCategoryChoiceActive: { borderColor: '#DFC696', backgroundColor: '#F5EBD7' },
+  trendCategoryChoiceText: { color: '#80746A', fontSize: 12, lineHeight: 16, fontWeight: '600' },
+  trendCategoryChoiceTextActive: { color: '#76542D', fontWeight: '700' },
+  trendSearchField: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, borderRadius: 11, borderWidth: 1, borderColor: '#ECE7E0', backgroundColor: '#FBFAF8' },
+  trendSearchInput: { flex: 1, minWidth: 0, height: 40, fontSize: 14, color: '#493D35', paddingVertical: 0 },
+  trendSearchClear: { width: 28, height: 36, alignItems: 'center', justifyContent: 'center' },
+  trendResults: { maxHeight: 210, marginTop: 7 },
+  trendResultRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingHorizontal: 9, borderRadius: 9, borderBottomWidth: 1, borderColor: '#F1ECE6' },
+  trendResultRowActive: { backgroundColor: '#F3F7F9' },
+  trendResultCopy: { flex: 1, minWidth: 0, paddingVertical: 6 },
+  trendResultName: { color: '#554A41', fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  trendResultNameActive: { color: '#466E88', fontWeight: '800' },
+  trendResultCategory: { marginTop: 1, color: '#A3968B', fontSize: 10, lineHeight: 14 },
+  trendResultEmpty: { paddingVertical: 18, color: '#94877C', textAlign: 'center', fontSize: 12, lineHeight: 17 },
+  trendResultHint: { paddingVertical: 8, color: '#94877C', textAlign: 'center', fontSize: 11, lineHeight: 15 },
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   metricCard: { width: '48%', minHeight: 70, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 13, borderWidth: 1, borderColor: '#EEE9E3', backgroundColor: '#FCFBF9' },
   metricLabel: { color: '#91857A', fontSize: 11, lineHeight: 15, fontWeight: '500' },
