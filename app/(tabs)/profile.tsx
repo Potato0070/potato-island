@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import PencilButton from '../../components/PencilButton';
 import { useIslandFonts } from '../../hooks/use-island-fonts';
@@ -38,6 +38,8 @@ export default function ProfileScreen() {
   const [contentWidth, setContentWidth] = useState(Math.min(width, 720));
   const [profile, setProfile] = useState<Profile | null>(null);
   const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [totalNfts, setTotalNfts] = useState(0);
   const [earnings, setEarnings] = useState({ today: 0, month: 0 });
   const [refreshing, setRefreshing] = useState(false);
@@ -56,6 +58,7 @@ export default function ProfileScreen() {
   }, []);
   useEffect(() => () => { if (notificationTimer.current) clearTimeout(notificationTimer.current); }, []);
   useEffect(() => setAvatarFailed(false), [profile?.avatar_url]);
+  useEffect(() => { setSearchOpen(false); setSearchQuery(''); }, [profile?.id]);
 
   const fetchProfileData = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -134,6 +137,8 @@ export default function ProfileScreen() {
   const isCompact = contentWidth < 370;
   const columns = contentWidth >= 640 ? 3 : 2;
   const collectionWidth = (contentWidth - 64 - (columns - 1) * 12) / columns;
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+  const filteredHoldings = holdings.filter(col => col.name.toLocaleLowerCase().includes(normalizedQuery));
   const regular = { fontFamily: fonts.regular };
   const semibold = { fontFamily: fonts.semibold, fontWeight: fonts.semibold ? 'normal' as const : '600' as const };
   const statusName = profile?.is_admin ? '创世神' : (VIP_NAMES[profile?.vip_level || 1] || '大众会员');
@@ -149,9 +154,9 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: 112 + insets.bottom }]}
+        keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchProfileData} tintColor={COLORS.blue} />}>
         <View testID="treasury-content" style={styles.content} onLayout={event => setContentWidth(event.nativeEvent.layout.width)}>
-          <Text accessibilityRole="header" style={[styles.pageTitle, semibold]}>金库</Text>
           {!profile ? (
             <View style={styles.initialState}>
               {error ? <>
@@ -206,10 +211,29 @@ export default function ProfileScreen() {
               ))}
             </View>
             <View style={styles.collectionSection}>
-              <View style={styles.collectionHeader}><Text accessibilityRole="header" style={[styles.sectionTitle, semibold]}>我的藏品 <Text style={[styles.collectionCount, regular]}>({totalNfts.toLocaleString('en-US')})</Text></Text></View>
-              {holdings.length ? (
+              <View style={styles.collectionHeader}>
+                <Text accessibilityRole="header" style={[styles.sectionTitle, semibold]}>我的藏品 <Text style={[styles.collectionCount, regular]}>({totalNfts.toLocaleString('en-US')})</Text></Text>
+                <Pressable accessibilityRole="button" accessibilityLabel={searchOpen ? '关闭藏品搜索' : '搜索我的藏品'} accessibilityState={{ expanded: searchOpen }}
+                  onPress={() => { setSearchOpen(!searchOpen); setSearchQuery(''); }} style={({ pressed }) => [styles.searchToggle, pressed && styles.pressed]}>
+                  <Ionicons name={searchOpen ? 'close-outline' : 'search-outline'} size={22} color={COLORS.blue} />
+                </Pressable>
+              </View>
+              {searchOpen ? <View testID="treasury-collection-search" style={styles.searchField}>
+                <Ionicons name="search-outline" size={19} color={COLORS.muted} />
+                <TextInput accessibilityLabel="搜索持有藏品名称" placeholder="搜索藏品名称" placeholderTextColor={COLORS.muted} value={searchQuery}
+                  onChangeText={setSearchQuery} autoFocus autoCapitalize="none" autoCorrect={false} returnKeyType="search"
+                  style={[styles.searchInput, regular]} />
+                {searchQuery ? <Pressable accessibilityRole="button" accessibilityLabel="清空藏品搜索" onPress={() => setSearchQuery('')} style={styles.searchClear}>
+                  <Ionicons name="close-circle" size={18} color={COLORS.muted} />
+                </Pressable> : null}
+              </View> : null}
+              {holdings.length && !filteredHoldings.length ? <View style={styles.emptyCollection}>
+                <Image source={require('../../assets/empty-states/storybook-pencil-v1/runtime/empty-search.webp')} style={styles.emptyArt} resizeMode="contain" accessible={false} />
+                <Text style={[styles.emptyText, regular]}>没有找到匹配的藏品</Text>
+                <PencilButton label="清空搜索" onPress={() => setSearchQuery('')} fontFamily={fonts.semibold} style={styles.marketButton} />
+              </View> : filteredHoldings.length ? (
                 <View style={styles.collectionGrid}>
-                  {holdings.map(col => (
+                  {filteredHoldings.map(col => (
                     <Pressable key={col.id} accessibilityRole="button" accessibilityLabel={`${col.name}，持有 ${col.count} 件`}
                       onPress={() => router.push({ pathname: '/my-collection-list', params: { collectionId: col.id, collectionName: col.name } })}
                       style={({ pressed }) => [styles.collectionCard, { width: collectionWidth }, pressed && styles.pressed]}>
@@ -238,8 +262,7 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' }, scrollContent: { flexGrow: 1, alignItems: 'center' },
-  content: { width: '100%', maxWidth: 720, paddingHorizontal: 16 },
-  pageTitle: { fontSize: 22, lineHeight: 28, color: COLORS.ink, textAlign: 'center', paddingTop: 14, paddingBottom: 22 },
+  content: { width: '100%', maxWidth: 720, paddingHorizontal: 16, paddingTop: 16 },
   identity: { flexDirection: 'row', alignItems: 'center', marginBottom: 18, gap: 12 },
   avatarButton: { width: 64, height: 64, borderRadius: 32, overflow: 'hidden', borderWidth: 1, borderColor: '#EBD6B8', backgroundColor: '#FBF6ED' },
   avatar: { width: '100%', height: '100%', resizeMode: 'cover' }, identityInfo: { flex: 1, minWidth: 0 },
@@ -257,7 +280,11 @@ const styles = StyleSheet.create({
   menuIconBox: { width: 66, height: 66, alignItems: 'center', justifyContent: 'center' }, menuIcon: { width: 66, height: 66 }, existingMenuIcon: { width: 62, height: 62, borderRadius: 31 },
   menuLabel: { color: COLORS.ink, fontSize: 13, lineHeight: 20, marginTop: 3 },
   collectionSection: { borderWidth: 1, borderColor: '#EFE7DB', borderRadius: 16, padding: 15, marginTop: 2 },
-  collectionHeader: { minHeight: 32, marginBottom: 10, justifyContent: 'center' }, sectionTitle: { color: COLORS.ink, fontSize: 18, lineHeight: 24 }, collectionCount: { color: '#897A6C', fontSize: 14 },
+  collectionHeader: { minHeight: 44, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, sectionTitle: { color: COLORS.ink, fontSize: 18, lineHeight: 24, flexShrink: 1 }, collectionCount: { color: '#897A6C', fontSize: 14 },
+  searchToggle: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  searchField: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: COLORS.line, backgroundColor: '#FCFBF9', borderRadius: 12, paddingLeft: 12, marginBottom: 14, minHeight: 44 },
+  searchInput: { flex: 1, minWidth: 0, fontSize: 16, lineHeight: 22, color: COLORS.ink, paddingHorizontal: 9, paddingVertical: 10, borderWidth: 0, outlineStyle: 'solid', outlineWidth: 0, outlineColor: 'transparent' },
+  searchClear: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   collectionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 }, collectionCard: { minWidth: 0, marginBottom: 8 },
   collectionImageBox: { width: '100%', aspectRatio: 1, borderRadius: 12, borderWidth: 1, borderColor: '#ECE2D4', backgroundColor: '#FCF8EF', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   collectionImage: { width: '100%', height: '100%', resizeMode: 'cover' }, collectionName: { color: COLORS.ink, fontSize: 15, lineHeight: 21, marginTop: 8 }, holdingCount: { color: COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 3 },

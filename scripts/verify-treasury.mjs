@@ -43,7 +43,7 @@ async function openFixture({ admin = false, empty = false, failure = false, larg
     if (url.pathname.endsWith('/nfts')) {
       state.nftsRequests++;
       if (empty) return json([]);
-      const col = { id: 'local-collection-1', name: '本地验证藏品', image_url: origin + '/fixture-art.png' };
+      const col = { id: 'local-collection-1', name: 'Potato卡', image_url: origin + '/fixture-art.png' };
       if (large) {
         const offset = Number(url.searchParams.get('offset') || 0);
         return json(Array.from({ length: offset === 0 ? 1000 : 1 }, (_, index) => ({ id: 'local-nft-' + (offset + index), status: 'idle', collections: col })));
@@ -53,7 +53,7 @@ async function openFixture({ admin = false, empty = false, failure = false, larg
     return json([]);
   });
   await page.goto(origin + '/profile', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('heading', { name: '金库', exact: true }).waitFor();
+  await page.getByTestId('treasury-content').waitFor();
   if (failure) await page.getByRole('button', { name: '重新加载', exact: true }).waitFor();
   else await page.getByRole('button', { name: '订单', exact: true }).waitFor();
   await page.waitForFunction(() => [...document.fonts].filter(font => font.family.startsWith('Island-') && font.status === 'loaded').length === 2);
@@ -66,6 +66,7 @@ async function assertLayout(page, width) {
   assert(box.width <= 720.5, 'Desktop reading width is capped');
   assert(await page.getByTestId('treasury-content').evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'Content children do not overflow horizontally');
   assert.equal(await page.getByText('命运抽签', { exact: true }).count(), 0);
+  assert.equal(await page.getByRole('heading', { name: '金库', exact: true }).count(), 0);
   for (const name of ['首页', '集市', '旨意', '消息', '金库']) {
     const bounds = await page.getByText(name, { exact: true }).last().boundingBox();
     assert(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width + 1 && bounds.y >= 0 && bounds.y + bounds.height <= page.viewportSize().height + 1, 'Navigation label visible: ' + name);
@@ -77,6 +78,35 @@ async function assertLayout(page, width) {
 }
 
 try {
+  for (const width of [320, 393, 1440]) {
+    const { page, context, errors } = await openFixture({ width });
+    await page.getByRole('button', { name: '搜索我的藏品', exact: true }).click();
+    const input = page.getByRole('textbox', { name: '搜索持有藏品名称', exact: true });
+    assert(await input.evaluate(node => document.activeElement === node), 'Opening search focuses input');
+    assert(await input.evaluate(node => parseFloat(getComputedStyle(node).fontSize) >= 16), 'Mobile input avoids small-font auto zoom');
+    assert(await input.evaluate(node => parseFloat(getComputedStyle(node).outlineWidth) === 0), 'Focused search has no browser outline');
+    await input.fill('  potato  ');
+    assert.equal(await page.getByTestId('treasury-collection-image').count(), 1);
+    await page.getByRole('button', { name: 'Potato卡，持有 1 件', exact: true }).waitFor();
+    await page.getByRole('button', { name: '清空藏品搜索', exact: true }).click();
+    assert.equal(await input.inputValue(), '');
+    assert.equal(await page.getByTestId('treasury-collection-image').count(), 2);
+    await input.fill('不存在的藏品');
+    await page.getByText('没有找到匹配的藏品', { exact: true }).waitFor();
+    assert.equal(await page.getByText('这里还没有藏品', { exact: true }).count(), 0);
+    await page.getByRole('button', { name: '清空搜索', exact: true }).click();
+    await input.fill('第二件');
+    await assertLayout(page, width);
+    await page.screenshot({ path: path.join(output, `search-${width}.png`), fullPage: true });
+    await page.getByRole('button', { name: '关闭藏品搜索', exact: true }).click();
+    assert.equal(await input.count(), 0);
+    assert.equal(await page.getByTestId('treasury-collection-image').count(), 2);
+    await page.getByRole('button', { name: '第二件本地藏品，持有 1 件', exact: true }).click();
+    await page.waitForURL(url => url.pathname === '/my-collection-list' && url.searchParams.get('collectionId') === 'local-collection-2');
+    assert.deepEqual(errors, []);
+    checks.push(`Search ${width}px: focus, case-insensitive trimmed matching, clear, no matches, close reset, correct owned collection route`);
+    await context.close();
+  }
   for (const width of [320, 360, 393, 430, 1024, 1440]) {
     const { page, context, errors } = await openFixture({ width, admin: true });
     await assertLayout(page, width);
