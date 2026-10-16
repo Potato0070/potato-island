@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -59,6 +59,35 @@ const formatDateTime = (value?: string | null) => {
   const minutes = String(date.getMinutes()).padStart(2, '0');
   return `${month}.${day} ${hours}:${minutes}`;
 };
+
+function CollectionThumbnail({ uri, size }: { uri?: string | null; size: number }) {
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setHasError(false);
+  }, [uri]);
+
+  if (!uri || hasError) {
+    return (
+      <View style={[styles.imagePlaceholder, { width: size, height: size }]}>
+        <Image
+          source={require('../assets/homepage/icons/gene.png')}
+          style={styles.placeholderGeneIcon}
+          resizeMode="contain"
+        />
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      source={{ uri }}
+      style={[styles.collectionImage, { width: size, height: size }]}
+      resizeMode="cover"
+      onError={() => setHasError(true)}
+    />
+  );
+}
 
 export default function SynthesisListScreen() {
   const router = useRouter();
@@ -124,17 +153,7 @@ export default function SynthesisListScreen() {
         onPress={() => router.push({ pathname: '/synthesis-detail', params: { id: item.id } })}
       >
         <View style={styles.cardMain}>
-          {item.target_collection?.image_url ? (
-            <Image
-              source={{ uri: item.target_collection.image_url }}
-              style={[styles.collectionImage, { width: cardImageSize, height: cardImageSize }]}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[styles.imagePlaceholder, { width: cardImageSize, height: cardImageSize }]}>
-              <Text style={styles.placeholderEmoji}>🥔</Text>
-            </View>
-          )}
+          <CollectionThumbnail uri={item.target_collection?.image_url} size={cardImageSize} />
 
           <View style={styles.cardCopy}>
             <View style={styles.titleRow}>
@@ -185,16 +204,6 @@ export default function SynthesisListScreen() {
           </TouchableOpacity>
           <Text style={styles.navTitle}>藏品合成</Text>
           <View style={styles.navButton} />
-        </View>
-
-        <View style={styles.introRow}>
-          <View style={styles.introIcon}>
-            <Image source={require('../assets/homepage/icons/gene.png')} style={styles.introGeneIcon} resizeMode="contain" />
-          </View>
-          <View style={styles.introCopy}>
-            <Text style={styles.introTitle}>合成任务</Text>
-            <Text style={styles.introSubtitle} numberOfLines={1}>查看活动时间与材料进度，准备好后进入合成</Text>
-          </View>
         </View>
 
         <View style={styles.statusTabs} accessibilityRole="tablist">
@@ -251,14 +260,7 @@ const styles = StyleSheet.create({
   navButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   navTitle: { color: '#493D35', fontSize: 22, lineHeight: 28, fontWeight: '800' },
 
-  introRow: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 16, marginTop: 4, marginBottom: 12, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: '#FCFAF6', borderWidth: 1, borderColor: '#F0E9DF' },
-  introIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#F4EEE4' },
-  introGeneIcon: { width: 34, height: 34 },
-  introCopy: { flex: 1, minWidth: 0 },
-  introTitle: { color: '#493D35', fontSize: 15, lineHeight: 20, fontWeight: '800' },
-  introSubtitle: { marginTop: 2, color: '#8B8179', fontSize: 11, lineHeight: 14 },
-
-  statusTabs: { flexDirection: 'row', gap: 8, marginHorizontal: 16, marginBottom: 12, padding: 4, borderRadius: 16, backgroundColor: '#F8F6F2', borderWidth: 1, borderColor: '#F0ECE6' },
+  statusTabs: { flexDirection: 'row', gap: 8, marginHorizontal: 16, marginTop: 12, marginBottom: 12, padding: 4, borderRadius: 16, backgroundColor: '#F8F6F2', borderWidth: 1, borderColor: '#F0ECE6' },
   statusTab: { flex: 1, minWidth: 0, minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 4, borderRadius: 12 },
   statusTabSelected: { backgroundColor: '#EAF1F5', borderWidth: 1, borderColor: '#D8E5EC' },
   statusTabLabel: { color: '#7F746B', fontSize: 14, lineHeight: 20, fontWeight: '600' },
@@ -272,7 +274,7 @@ const styles = StyleSheet.create({
   cardMain: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   collectionImage: { borderRadius: 11, backgroundColor: '#F6F2EB', borderWidth: 1, borderColor: '#EFE8DE' },
   imagePlaceholder: { alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: '#F6F2EB' },
-  placeholderEmoji: { fontSize: 27 },
+  placeholderGeneIcon: { width: '60%', height: '60%' },
   cardCopy: { flex: 1, minWidth: 0, justifyContent: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   collectionName: { flex: 1, minWidth: 0, color: '#493D35', fontSize: 15, lineHeight: 20, fontWeight: '800' },
