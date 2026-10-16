@@ -4,6 +4,8 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import FolioButton from '../components/FolioButton';
+import FolioPaperSurface from '../components/FolioPaperSurface';
+import { FolioArtwork, FolioSerialTag, FolioStateTag } from '../components/FolioArtwork';
 import { OWNED_COLORS, itemStatus, money, serialLabel, validateConsignPrice, type OwnedItem } from '../constants/owned-collection';
 import { useIslandFonts } from '../hooks/use-island-fonts';
 import { supabase } from '../supabase';
@@ -24,16 +26,9 @@ function imageOf(item: OwnedItem) {
   return record.image_url || collectionOf(item)?.image_url || null;
 }
 
-function FallbackArt({ uri, style }: { uri: string | null; style: object }) {
-  const [failed, setFailed] = useState(false);
-  return (
-    <View style={[style, styles.artFallback]}>
-      {uri && !failed ? <Image source={{ uri }} resizeMode="cover" style={StyleSheet.absoluteFill} onError={() => setFailed(true)} /> : (
-        <View style={styles.fallbackMark}><Ionicons name="image-outline" size={28} color={OWNED_COLORS.blue} /><Text style={styles.fallbackText}>岛屿藏品</Text></View>
-      )}
-    </View>
-  );
-}
+const EMPTY_ALBUM_ART = require('../assets/owned-collection/f-card-v1/runtime/empty-collection-album.webp');
+const EMPTY_SEARCH_ART = require('../assets/owned-collection/f-card-v1/runtime/empty-search-map.webp');
+const EMPTY_NETWORK_ART = require('../assets/owned-collection/f-card-v1/runtime/empty-network-lighthouse.webp');
 
 export default function MyCollectionListScreen() {
   const router = useRouter();
@@ -208,6 +203,7 @@ export default function MyCollectionListScreen() {
     const isSelected = selectedIds.includes(item.id);
     const imageUri = imageOf(item);
     const status = itemStatus(item.status);
+    const statusKey = item.status === 'idle' ? 'idle' : item.status === 'listed' ? 'listed' : 'other';
     return (
       <Pressable
         accessibilityRole="button"
@@ -215,17 +211,10 @@ export default function MyCollectionListScreen() {
         onPress={() => selectItem(item)}
         style={[styles.cardShell, { width: cardWidth }, isSelected && styles.cardShellSelected]}
       >
-        <View style={styles.cardShadowBack} />
-        <View style={styles.cardShadowFront} />
-        <View style={[styles.collectionCard, { width: cardWidth - 14 }]}>
+        <FolioPaperSurface kind="texture" style={[styles.collectionCard, { width: cardWidth - 14 }]}>
           <View style={styles.coverMount}>
-            <FallbackArt uri={imageUri} style={styles.coverArt} />
-            <View style={styles.coverInset} pointerEvents="none" />
-            <View style={[styles.cardStatus, item.status === 'listed' ? styles.statusListed : item.status === 'idle' ? styles.statusIdle : styles.statusOther]}>
-              <Text style={styles.cardStatusText}>{status}</Text>
-            </View>
+            <FolioArtwork uri={imageUri} style={styles.coverArt} accessibilityLabel={`${collectionOf(item)?.name || '藏品'}封面`} />
             {batchMode ? <View style={[styles.selectionMark, isSelected && styles.selectionMarkSelected]}>{isSelected ? <Ionicons name="checkmark" size={16} color="#fff" /> : null}</View> : null}
-            <View style={styles.coverSerial}><Text style={[styles.coverSerialText, { fontFamily: fonts.semibold }]}>{serialLabel(item.serial_number)}</Text></View>
           </View>
           <View style={styles.cardCaption}>
             <View style={styles.captionMain}>
@@ -234,9 +223,9 @@ export default function MyCollectionListScreen() {
             </View>
             <Ionicons name={batchMode ? (isSelected ? 'checkmark-circle' : 'ellipse-outline') : 'chevron-forward'} size={19} color={isSelected ? OWNED_COLORS.blue : '#B6A99B'} />
           </View>
-        </View>
-        <View style={styles.sideNumber}><Text style={styles.sideNumberText}>{serialLabel(item.serial_number)}</Text></View>
-        <View style={styles.sideStatus}><Text style={styles.sideStatusText}>{status}</Text></View>
+        </FolioPaperSurface>
+        <FolioSerialTag value={serialLabel(item.serial_number)} style={styles.sideNumber} fontFamily={fonts.semibold} />
+        <FolioStateTag state={statusKey} label={status} style={styles.sideStatus} fontFamily={fonts.semibold} />
       </Pressable>
     );
   };
@@ -249,10 +238,14 @@ export default function MyCollectionListScreen() {
             <Text accessibilityRole="header" style={[styles.title, { fontFamily: fonts.semibold }]}>{batchMode ? '批量管理' : '我的藏品'}</Text>
             <Text style={styles.subtitle}>持有 {items.length.toLocaleString('zh-CN')} 件{collectionName ? ' ' + collectionName : ''}</Text>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel={batchMode ? '退出批量管理' : '批量管理'} onPress={toggleBatchMode} style={styles.batchButton}>
-            <Ionicons name={batchMode ? 'close' : 'checkbox-outline'} size={17} color={OWNED_COLORS.ink} />
-            <Text style={[styles.batchButtonText, { fontFamily: fonts.semibold }]}>{batchMode ? '退出' : '批量管理'}</Text>
-          </Pressable>
+          <FolioButton
+            label={batchMode ? '退出' : '批量管理'}
+            tone="paper"
+            icon={batchMode ? 'close' : 'checkbox-outline'}
+            onPress={toggleBatchMode}
+            style={styles.batchButton}
+            fontFamily={fonts.semibold}
+          />
         </View>
 
         <View style={styles.statusRail} accessibilityRole="tablist">
@@ -293,16 +286,16 @@ export default function MyCollectionListScreen() {
           <View style={styles.loadingState}><ActivityIndicator size="large" color={OWNED_COLORS.blue} /><Text style={styles.loadingText}>正在翻开藏品册…</Text></View>
         ) : error ? (
           <View style={styles.emptyState}>
-            <Ionicons name="cloud-offline-outline" size={32} color={OWNED_COLORS.blue} />
+            <Image source={EMPTY_NETWORK_ART} resizeMode="contain" style={styles.emptyArt} accessible={false} />
             <Text style={[styles.emptyTitle, { fontFamily: fonts.semibold }]}>{error}</Text>
-            <Pressable onPress={() => void fetchItems()} style={styles.retryButton}><Text style={[styles.retryText, { fontFamily: fonts.semibold }]}>重新载入</Text></Pressable>
+            <FolioButton label="重新载入" tone="paper" onPress={() => void fetchItems()} style={styles.retryButton} fontFamily={fonts.semibold} />
           </View>
         ) : visibleItems.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name={search ? 'search-outline' : 'albums-outline'} size={34} color={OWNED_COLORS.blue} />
+            <Image source={search ? EMPTY_SEARCH_ART : EMPTY_ALBUM_ART} resizeMode="contain" style={styles.emptyArt} accessible={false} />
             <Text style={[styles.emptyTitle, { fontFamily: fonts.semibold }]}>{search ? '没有找到这张藏品' : filter === 'listed' ? '目前还没有寄售藏品' : '这一页藏品册还是空白'}</Text>
             <Text style={styles.emptyHint}>{search ? '试试藏品名称或完整编号的一部分' : filter === 'idle' ? '已寄售或暂不可操作的藏品不会出现在这里' : '获得藏品后，会在这里逐张归档'}</Text>
-            {search ? <Pressable onPress={() => setSearch('')} style={styles.retryButton}><Text style={[styles.retryText, { fontFamily: fonts.semibold }]}>清除搜索</Text></Pressable> : null}
+            {search ? <FolioButton label="清除搜索" tone="paper" onPress={() => setSearch('')} style={styles.retryButton} fontFamily={fonts.semibold} /> : null}
           </View>
         ) : (
           <>
@@ -342,7 +335,7 @@ export default function MyCollectionListScreen() {
                 const selected = activeIndex === index;
                 return (
                   <Pressable accessibilityRole="button" accessibilityLabel={'跳到' + serialLabel(item.serial_number)} onPress={() => { setActiveIndex(index); carouselRef.current?.scrollToOffset({ offset: index * cardInterval, animated: true }); }} style={[styles.filmItem, selected && styles.filmItemSelected]}>
-                    <FallbackArt uri={imageOf(item)} style={styles.filmArt} />
+                    <FolioArtwork uri={imageOf(item)} style={styles.filmArt} accessibilityLabel={`${collectionOf(item)?.name || '藏品'}缩略图`} />
                     <View style={[styles.filmStatus, item.status === 'listed' && styles.filmStatusListed]} />
                   </Pressable>
                 );
@@ -357,7 +350,7 @@ export default function MyCollectionListScreen() {
         {batchMode && !loading && visibleItems.length > 0 ? (
           <View style={[styles.batchBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
             <View style={styles.batchSummary}><Text style={[styles.batchCount, { fontFamily: fonts.semibold }]}>已选 {selectedIds.length}<Text style={styles.batchLimit}> / 20</Text></Text><Text style={styles.batchNote}>仅在库藏品可上架</Text></View>
-            <FolioButton label="统一标价" tone="gold" icon="pricetag-outline" onPress={openConsignSheet} disabled={!selectedIds.length || busy} style={styles.batchAction} fontFamily={fonts.semibold} />
+              <FolioButton label="统一标价" tone="gold" pencilIcon="consign" onPress={openConsignSheet} disabled={!selectedIds.length || busy} style={styles.batchAction} fontFamily={fonts.semibold} />
           </View>
         ) : null}
       </View>
@@ -367,7 +360,7 @@ export default function MyCollectionListScreen() {
       <Modal visible={priceSheetOpen} transparent animationType="slide" onRequestClose={() => !busy && setPriceSheetOpen(false)}>
         <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <Pressable accessibilityLabel="关闭寄售设置" style={styles.scrim} onPress={() => !busy && setPriceSheetOpen(false)} />
-          <View style={[styles.priceSheet, { paddingBottom: Math.max(insets.bottom, 18) }]}>
+          <FolioPaperSurface kind="paper" style={[styles.priceSheet, { paddingBottom: Math.max(insets.bottom, 18) }]}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
               <View><Text style={[styles.sheetTitle, { fontFamily: fonts.semibold }]}>批量寄售</Text><Text style={styles.sheetSubtitle}>为 {selectedIds.length} 张藏品设置相同的单件价格</Text></View>
@@ -375,7 +368,7 @@ export default function MyCollectionListScreen() {
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetContent}>
               <View style={styles.batchPreviewCard}>
-                {activeItem ? <FallbackArt uri={imageOf(activeItem)} style={styles.sheetPreviewArt} /> : <View style={styles.sheetPreviewArt} />}
+                {activeItem ? <FolioArtwork uri={imageOf(activeItem)} style={styles.sheetPreviewArt} accessibilityLabel={`${collectionOf(activeItem)?.name || '藏品'}缩略图`} /> : <View style={styles.sheetPreviewArt} />}
                 <View style={styles.batchPreviewCopy}><Text style={[styles.previewCollection, { fontFamily: fonts.semibold }]}>{collectionName || activeCollection?.name || '我的藏品'}</Text><Text style={styles.previewCount}>{selectedIds.length} 件藏品 · 统一寄售价</Text></View>
                 <Ionicons name="albums-outline" size={20} color={OWNED_COLORS.blue} />
               </View>
@@ -384,10 +377,10 @@ export default function MyCollectionListScreen() {
               {activeCollection?.max_consign_price ? <Text style={styles.priceLimit}>系列最高寄售价 {money(activeCollection.max_consign_price)} 土豆币</Text> : null}
               <View style={styles.priceTotal}><Text style={styles.priceTotalLabel}>挂单总额参考</Text><Text style={[styles.priceTotalValue, { fontFamily: fonts.semibold }]}>{money(Number(batchPrice || 0) * selectedIds.length)} <Text style={styles.currency}>土豆币</Text></Text></View>
               <Text style={styles.noticeText}>提交后藏品会进入寄售状态。批量寄售权益由平台规则校验。</Text>
-              <FolioButton label="确认批量寄售" tone="blue" icon="pricetag-outline" onPress={submitBatchConsign} loading={busy} disabled={!batchPrice.trim()} style={styles.submitButton} fontFamily={fonts.semibold} />
+              <FolioButton label="确认批量寄售" tone="blue" pencilIcon="consign" onPress={submitBatchConsign} loading={busy} disabled={!batchPrice.trim()} style={styles.submitButton} fontFamily={fonts.semibold} />
               <Pressable accessibilityRole="button" onPress={() => setPriceSheetOpen(false)} disabled={busy} style={styles.sheetCancel}><Text style={[styles.sheetCancelText, { fontFamily: fonts.semibold }]}>再检查一下</Text></Pressable>
             </ScrollView>
-          </View>
+          </FolioPaperSurface>
         </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
@@ -401,8 +394,7 @@ const styles = StyleSheet.create({
   headerCopy: { flex: 1, paddingRight: 12 },
   title: { color: OWNED_COLORS.ink, fontSize: 22, lineHeight: 28 },
   subtitle: { color: OWNED_COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 3 },
-  batchButton: { minHeight: 42, paddingHorizontal: 12, borderRadius: 13, borderWidth: 1, borderColor: '#D8CBBB', backgroundColor: '#FCFAF6', flexDirection: 'row', alignItems: 'center', gap: 7 },
-  batchButtonText: { color: OWNED_COLORS.ink, fontSize: 13 },
+  batchButton: { minWidth: 102, minHeight: 42, paddingHorizontal: 10 },
   statusRail: { marginHorizontal: 20, padding: 4, borderRadius: 14, backgroundColor: '#F5F1EB', flexDirection: 'row', gap: 4 },
   statusTab: { minHeight: 43, flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 11 },
   statusTabSelected: { backgroundColor: OWNED_COLORS.blue, shadowColor: '#6C8EA2', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.14, shadowRadius: 5, elevation: 2 },
@@ -423,32 +415,17 @@ const styles = StyleSheet.create({
   carouselFrame: { width: '100%', position: 'relative', height: undefined },
   cardShell: { height: undefined, alignItems: 'center', paddingTop: 8, paddingBottom: 7 },
   cardShellSelected: { opacity: 0.94 },
-  cardShadowBack: { position: 'absolute', top: 16, left: 9, right: 22, aspectRatio: 0.98, borderRadius: 14, backgroundColor: '#E6EEF1', borderWidth: 1, borderColor: '#D9E5E9', transform: [{ rotate: '-4deg' }] },
-  cardShadowFront: { position: 'absolute', top: 12, left: 17, right: 15, aspectRatio: 0.98, borderRadius: 14, backgroundColor: '#FAF5E9', borderWidth: 1, borderColor: '#E9DDC8', transform: [{ rotate: '2.5deg' }] },
-  collectionCard: { borderRadius: 14, backgroundColor: '#FFFFFF', padding: 9, borderWidth: 1, borderColor: '#D9CCBB', shadowColor: '#554638', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.11, shadowRadius: 10, elevation: 4 },
-  coverMount: { width: '100%', aspectRatio: 1, position: 'relative', borderRadius: 8, overflow: 'hidden', padding: 4, backgroundColor: '#F8F3EA', borderWidth: 1, borderColor: '#CFC0AD' },
-  coverArt: { flex: 1, width: '100%', height: '100%', borderRadius: 5, overflow: 'hidden' },
-  coverInset: { ...StyleSheet.absoluteFillObject, borderWidth: 1, borderRadius: 7, borderColor: 'rgba(255,255,255,0.48)' },
-  artFallback: { justifyContent: 'center', alignItems: 'center', overflow: 'hidden', backgroundColor: '#EAF1F2' },
-  fallbackMark: { alignItems: 'center', gap: 7 },
-  fallbackText: { color: '#8D8175', fontSize: 12 },
-  cardStatus: { position: 'absolute', top: 14, left: 14, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.75)' },
-  statusIdle: { backgroundColor: 'rgba(79,121,148,0.94)' },
-  statusListed: { backgroundColor: 'rgba(169,124,67,0.94)' },
-  statusOther: { backgroundColor: 'rgba(120,112,103,0.88)' },
-  cardStatusText: { color: '#FFFFFF', fontSize: 11, lineHeight: 15 },
+  collectionCard: { position: 'relative', overflow: 'hidden', paddingHorizontal: 13, paddingTop: 13, paddingBottom: 9, alignSelf: 'center' },
+  coverMount: { width: '100%', position: 'relative' },
+  coverArt: { width: '100%' },
   selectionMark: { position: 'absolute', top: 12, right: 12, width: 27, height: 27, borderRadius: 14, borderWidth: 1.5, borderColor: '#FFF', backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center' },
   selectionMarkSelected: { backgroundColor: OWNED_COLORS.blue, borderColor: '#FFFFFF' },
-  coverSerial: { position: 'absolute', right: 10, bottom: 11, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 7, backgroundColor: 'rgba(255,255,255,0.88)' },
-  coverSerialText: { color: OWNED_COLORS.ink, fontSize: 11, lineHeight: 15 },
-  cardCaption: { minHeight: 48, paddingHorizontal: 3, paddingTop: 9, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cardCaption: { minHeight: 58, paddingHorizontal: 5, paddingTop: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   captionMain: { flex: 1, paddingRight: 10 },
   cardName: { color: OWNED_COLORS.ink, fontSize: 15, lineHeight: 20 },
   cardSerial: { color: '#8E8175', fontSize: 12, lineHeight: 17, marginTop: 2 },
-  sideNumber: { position: 'absolute', right: -3, top: '29%', paddingHorizontal: 5, paddingVertical: 9, borderTopLeftRadius: 5, borderBottomLeftRadius: 5, backgroundColor: '#F6F1E8', borderWidth: 1, borderColor: '#D7C9B5' },
-  sideNumberText: { color: OWNED_COLORS.ink, fontSize: 10, writingDirection: 'ltr' },
-  sideStatus: { position: 'absolute', right: -3, top: '49%', paddingHorizontal: 5, paddingVertical: 9, borderTopLeftRadius: 5, borderBottomLeftRadius: 5, backgroundColor: '#6C8EA2' },
-  sideStatusText: { color: '#FFFFFF', fontSize: 10, writingDirection: 'ltr' },
+  sideNumber: { position: 'absolute', right: -4, top: '19%', width: 28, height: 82, zIndex: 2 },
+  sideStatus: { position: 'absolute', right: -4, top: '48%', width: 30, height: 84, zIndex: 2 },
   carouselArrow: { position: 'absolute', top: '44%', zIndex: 5, width: 35, height: 35, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.95)', borderWidth: 1, borderColor: '#E7DED2', alignItems: 'center', justifyContent: 'center', shadowColor: '#4D3D31', shadowOpacity: 0.08, shadowRadius: 5, elevation: 2 },
   carouselArrowLeft: { left: 9 },
   carouselArrowRight: { right: 9 },
@@ -466,10 +443,10 @@ const styles = StyleSheet.create({
   loadingState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingBottom: 80 },
   loadingText: { color: '#8D8175', fontSize: 13 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36, paddingBottom: 70, gap: 11 },
+  emptyArt: { width: 190, height: 145, marginBottom: 3 },
   emptyTitle: { color: OWNED_COLORS.ink, fontSize: 17, lineHeight: 24, textAlign: 'center' },
   emptyHint: { color: OWNED_COLORS.muted, fontSize: 13, lineHeight: 20, textAlign: 'center' },
-  retryButton: { minHeight: 42, minWidth: 120, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#D4C4AF', borderRadius: 12, marginTop: 9, paddingHorizontal: 18, backgroundColor: '#FCFAF6' },
-  retryText: { color: OWNED_COLORS.blue, fontSize: 14 },
+  retryButton: { minWidth: 146, minHeight: 46, marginTop: 9 },
   batchBar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 12, borderTopWidth: 1, borderColor: '#EAE4DC', backgroundColor: 'rgba(255,255,255,0.98)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   batchSummary: { flex: 1 },
   batchCount: { color: OWNED_COLORS.ink, fontSize: 15, lineHeight: 20 },
@@ -480,7 +457,7 @@ const styles = StyleSheet.create({
   toastText: { color: '#FFFFFF', textAlign: 'center', fontSize: 13, lineHeight: 18 },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(42,37,31,0.28)' },
-  priceSheet: { maxHeight: '88%', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9E1D6' },
+  priceSheet: { width: '100%', maxHeight: '88%', paddingHorizontal: 25, paddingTop: 17 },
   sheetHandle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 3, backgroundColor: '#D9D1C6', marginBottom: 15 },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 16, borderBottomWidth: 1, borderColor: '#F0EBE4' },
   sheetTitle: { color: OWNED_COLORS.ink, fontSize: 19, lineHeight: 26 },

@@ -1,0 +1,76 @@
+import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+
+const FRAME = require('../assets/owned-collection/f-card-v1/runtime/album-card-frame-v3.webp');
+const PAPER = require('../assets/owned-collection/f-card-v1/runtime/paper-texture.webp');
+const SERIAL_TAG = require('../assets/owned-collection/f-card-v1/runtime/serial-number-tag.webp');
+const STATE_TAGS = {
+  idle: require('../assets/owned-collection/f-card-v1/runtime/status-in-vault.webp'),
+  listed: require('../assets/owned-collection/f-card-v1/runtime/status-listed.webp'),
+  other: require('../assets/owned-collection/f-card-v1/runtime/status-unavailable.webp'),
+};
+
+type ArtworkProps = {
+  uri: string | null;
+  style?: StyleProp<ViewStyle>;
+  accessibilityLabel?: string;
+};
+
+export function FolioArtwork({ uri, style, accessibilityLabel = '藏品封面' }: ArtworkProps) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [uri]);
+
+  return (
+    <View style={[styles.artwork, style]}>
+      <Image source={FRAME} resizeMode="stretch" style={StyleSheet.absoluteFill} accessible={false} />
+      <View style={styles.aperture}>
+        {uri && !failed ? (
+          <Image accessibilityLabel={accessibilityLabel} source={{ uri }} resizeMode="cover" style={StyleSheet.absoluteFill} onError={() => setFailed(true)} />
+        ) : (
+          <View style={styles.fallback}>
+            <Image source={PAPER} resizeMode="cover" style={StyleSheet.absoluteFill} accessible={false} />
+            <Ionicons name="image-outline" size={24} color="#537895" />
+            <Text style={styles.fallbackText}>藏品图暂缺</Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+type SerialTagProps = { value: string; style?: StyleProp<ViewStyle>; fontFamily?: string };
+
+export function FolioSerialTag({ value, style, fontFamily }: SerialTagProps) {
+  return (
+    <View accessible accessibilityLabel={`藏品编号 ${value}`} style={[styles.serialTag, style]}>
+      <Image source={SERIAL_TAG} resizeMode="stretch" style={StyleSheet.absoluteFill} accessible={false} />
+      <Text numberOfLines={1} style={[styles.serialText, fontFamily ? { fontFamily } : null]}>{value}</Text>
+    </View>
+  );
+}
+
+type StateTagProps = { state: 'idle' | 'listed' | 'other'; label: string; style?: StyleProp<ViewStyle>; fontFamily?: string };
+
+export function FolioStateTag({ state, label, style, fontFamily }: StateTagProps) {
+  return (
+    <View accessible accessibilityLabel={`藏品状态 ${label}`} style={[styles.stateTag, style]}>
+      <Image source={STATE_TAGS[state]} resizeMode="stretch" style={StyleSheet.absoluteFill} accessible={false} />
+      <View style={styles.stateLabel}>
+        {Array.from(label).map((character, index) => <Text key={`${character}-${index}`} style={[styles.stateCharacter, fontFamily ? { fontFamily } : null]}>{character}</Text>)}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  artwork: { position: 'relative', aspectRatio: 1, overflow: 'visible' },
+  aperture: { position: 'absolute', left: '16%', top: '17%', width: '68%', height: '66%', overflow: 'hidden', borderRadius: 8, backgroundColor: '#F5F0E7' },
+  fallback: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 5, overflow: 'hidden' },
+  fallbackText: { color: '#8D8175', fontSize: 9, lineHeight: 12 },
+  serialTag: { width: 38, height: 112, alignItems: 'center', justifyContent: 'center' },
+  serialText: { position: 'absolute', width: 100, height: 18, left: -31, top: 47, textAlign: 'center', color: '#493D35', fontSize: 9, lineHeight: 16, letterSpacing: 0.35, transform: [{ rotate: '90deg' }] },
+  stateTag: { width: 34, height: 96, alignItems: 'center', justifyContent: 'center' },
+  stateLabel: { alignItems: 'center', justifyContent: 'center' },
+  stateCharacter: { color: '#493D35', fontSize: 9, lineHeight: 11, fontWeight: '600' },
+});
