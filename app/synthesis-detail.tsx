@@ -29,23 +29,21 @@ type SynthesisEvent = Record<string, any> & {
 };
 
 type Nft = { id: string; serial_number: number | string };
-type Stage = 1 | 2 | 3;
-
 const COLORS = {
-  ink: '#27313A',
-  muted: '#7B8490',
-  line: '#E8E9E8',
+  ink: '#493D35',
+  muted: '#94877C',
+  line: '#EEE9E3',
   white: '#FFFFFF',
-  cream: '#FBF7F0',
-  creamDeep: '#F6EFE4',
-  blue: '#6598C6',
-  blueDark: '#467EAF',
-  bluePale: '#EAF3FA',
-  red: '#D96A62',
-  redPale: '#FBF0EF',
-  green: '#4E9B68',
-  greenPale: '#EDF6EF',
-  gold: '#98754A',
+  cream: '#FBFAF8',
+  creamDeep: '#F4EEE5',
+  blue: '#789DB4',
+  blueDark: '#537895',
+  bluePale: '#EEF3F7',
+  red: '#A77868',
+  redPale: '#F7F2EE',
+  green: '#6D8872',
+  greenPale: '#EEF2ED',
+  gold: '#9A6A33',
 };
 
 export default function SynthesisDetailScreen() {
@@ -61,8 +59,9 @@ export default function SynthesisDetailScreen() {
   const [ownedCounts, setOwnedCounts] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
   const [synthesizing, setSynthesizing] = useState(false);
-  const [stage, setStage] = useState<Stage>(1);
   const [showPicker, setShowPicker] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   const [activeReqIndex, setActiveReqIndex] = useState<number | null>(null);
   const [myIdleNfts, setMyIdleNfts] = useState<Nft[]>([]);
   const [tempSelectedNfts, setTempSelectedNfts] = useState<string[]>([]);
@@ -130,9 +129,9 @@ export default function SynthesisDetailScreen() {
         index,
         Array.from({ length: Number(req.req_count) || 0 }, (_, nftIndex) => `preview-${req.id}-${nftIndex}`),
       ])));
-      setStage(2);
+      setShowConfirm(true);
     } else if (preview === 'complete') {
-      setStage(3);
+      setShowSuccess(true);
     }
   }, [preview, requirements]);
 
@@ -198,24 +197,25 @@ export default function SynthesisDetailScreen() {
     setTempSelectedNfts(myIdleNfts.slice(0, required).map((nft) => nft.id));
   };
 
-  const goToMarket = () => {
+  const goToMarket = (searchTerm?: string) => {
     setShowPicker(false);
-    router.push('/(tabs)/market');
+    router.push({ pathname: '/(tabs)/market', params: searchTerm ? { search: searchTerm } : undefined });
   };
 
-  const startReview = () => {
+  const startSynthesis = () => {
     if (!allMaterialsSelected) {
       const firstIncomplete = requirements.findIndex((req, index) => (selectedNfts[index]?.length || 0) < Number(req.req_count));
       if (firstIncomplete >= 0) openMaterialPicker(firstIncomplete);
       else showToast('请先选择全部合成材料');
       return;
     }
-    setStage(2);
+    setShowConfirm(true);
   };
 
   const executeSynthesis = async () => {
     if (isDemoPreview) {
-      setStage(3);
+      setShowConfirm(false);
+      setShowSuccess(true);
       return;
     }
     const materialNftIds = requirements.flatMap((_req, index) => selectedNfts[index] || []);
@@ -229,7 +229,8 @@ export default function SynthesisDetailScreen() {
         p_material_nft_ids: materialNftIds,
       });
       if (error) throw error;
-      setStage(3);
+      setShowConfirm(false);
+      setShowSuccess(true);
     } catch (error: any) {
       showToast(`合成未完成：${error?.message || '请稍后重试'}`);
     } finally {
@@ -254,7 +255,7 @@ export default function SynthesisDetailScreen() {
 
   const shortageItems = requirements.flatMap((req, index) => {
     const shortage = Math.max(0, Number(req.req_count) - (ownedCounts[index] || 0));
-    return shortage > 0 ? [{ name: req.collection?.name || '合成材料', count: shortage }] : [];
+    return shortage > 0 ? [{ name: req.collection?.name || '合成材料', count: shortage, reqIndex: index }] : [];
   });
 
   return (
@@ -269,26 +270,12 @@ export default function SynthesisDetailScreen() {
 
       {toastMsg ? <View style={styles.toast}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
-      {stage === 3 ? (
-        <View style={styles.successState}>
-          <View style={styles.successMark}><Ionicons name="checkmark" size={42} color={COLORS.white} /></View>
-          <Text style={styles.successTitle}>合成完成</Text>
-          <Text style={styles.successDesc}>{isDemoPreview ? '这是完成页效果预览，没有执行合成，也没有消耗材料。' : `${eventData.target_collection?.name || eventData.name} 已放入金库。`}</Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={() => isDemoPreview ? router.replace({ pathname: '/synthesis-detail', params: { id } }) : router.replace('/(tabs)/profile')}>
-            <Text style={styles.primaryButtonText}>{isDemoPreview ? '返回合成详情' : '前往金库'}</Text><Ionicons name="arrow-forward" size={19} color={COLORS.white} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.textButton} onPress={() => router.back()}><Text style={styles.textButtonLabel}>{isDemoPreview ? '完成页预览模式' : '返回合成列表'}</Text></TouchableOpacity>
-        </View>
-      ) : (
-        <>
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={[styles.content, { paddingBottom: stage === 1 ? 28 : 34 }]}
-            showsVerticalScrollIndicator={false}
-          >
-            <StepProgress stage={stage} />
-
-            <View style={styles.targetCard}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 12) + 32 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.targetCard}>
               {eventData.target_collection?.image_url && !targetImageFailed ? (
                 <Image source={{ uri: eventData.target_collection.image_url }} style={[styles.targetImage, { width: targetImageSize, height: targetImageSize }]} resizeMode="cover" onError={() => setTargetImageFailed(true)} />
               ) : (
@@ -300,16 +287,14 @@ export default function SynthesisDetailScreen() {
                 <Text style={styles.targetSeries} numberOfLines={1}>{eventData.name || '土豆岛合成计划'}</Text>
                 <Text style={styles.targetStory} numberOfLines={4}>{eventData.description || '收集所需材料，按照配方完成合成。'}</Text>
               </View>
-            </View>
+        </View>
 
-            {stage === 1 ? (
-              <>
-                <View style={styles.sectionHeading}>
-                  <Text style={styles.sectionTitle}>选择合成材料</Text>
-                  <Text style={styles.sectionHint}>集齐以下材料即可进行合成</Text>
-                </View>
-                <View style={styles.materialList}>
-                  {requirements.map((req, index) => {
+        <View style={styles.sectionHeading}>
+          <Text style={styles.sectionTitle}>所需材料</Text>
+          <Text style={styles.sectionHint}>集齐指定材料即可合成</Text>
+        </View>
+        <View style={styles.materialList}>
+          {requirements.map((req, index) => {
                     const chosen = selectedNfts[index]?.length || 0;
                     const required = Number(req.req_count) || 0;
                     const isFull = chosen >= required;
@@ -331,67 +316,52 @@ export default function SynthesisDetailScreen() {
                         </View>
                       </TouchableOpacity>
                     );
-                  })}
-                </View>
+          })}
+        </View>
 
-                {shortageItems.length > 0 ? (
-                  <View style={styles.shortageCard}>
+        {shortageItems.length > 0 ? (
+          <View style={styles.shortageCard}>
                     <View style={styles.shortageIcon}><Ionicons name="alert" size={19} color={COLORS.white} /></View>
                     <View style={styles.shortageInfo}>
                       <Text style={styles.shortageTitle}>材料还差 {shortageItems.reduce((sum, item) => sum + item.count, 0)} 个</Text>
                       <Text style={styles.shortageSubtitle} numberOfLines={2}>{shortageItems.map((item) => `${item.name} ×${item.count}`).join('、')}</Text>
                     </View>
-                    <TouchableOpacity style={styles.marketButton} onPress={goToMarket}>
+                    <TouchableOpacity style={styles.marketButton} onPress={() => goToMarket(shortageItems[0]?.name)}>
                       <Text style={styles.marketButtonText}>去集市补齐</Text><Ionicons name="chevron-forward" size={17} color={COLORS.gold} />
                     </TouchableOpacity>
-                  </View>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <View style={styles.sectionHeading}>
-                  <Text style={styles.sectionTitle}>核对合成配方</Text>
-                  <Text style={styles.sectionHint}>请确认材料与目标藏品</Text>
-                </View>
-                <View style={styles.reviewList}>
-                  {requirements.map((req, index) => (
-                    <View key={req.id} style={styles.reviewRow}>
-                      {req.collection?.image_url ? <Image source={{ uri: req.collection.image_url }} style={styles.reviewImage} /> : <View style={[styles.reviewImage, styles.materialImagePlaceholder]} />}
-                      <Text style={styles.reviewName} numberOfLines={1}>{req.collection?.name || '未知材料'}</Text>
-                      <Text style={styles.reviewAmount}>已选 {selectedNfts[index]?.length || 0} / {req.req_count}</Text>
-                      <TouchableOpacity onPress={() => openMaterialPicker(index)}><Text style={styles.reviewEdit}>调整</Text></TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-                <View style={styles.warningCard}>
-                  <Ionicons name="information-circle-outline" size={24} color={COLORS.gold} />
-                  <Text style={styles.warningText}>确认合成后，所选材料将被消耗且无法返还。请确认选择无误。</Text>
-                </View>
-              </>
-            )}
-          </ScrollView>
-
-          <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-            <View style={styles.progressBlock}>
-              <Text style={styles.progressLabel}>{stage === 1 ? '合成进度' : '材料已核对'}</Text>
-              <Text style={styles.progressValue}>{stage === 1 ? `${totalSelected} / ${totalRequired || 0}` : `${totalRequired} / ${totalRequired}`}</Text>
-              <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${totalRequired ? Math.min(100, (totalSelected / totalRequired) * 100) : 0}%` }]} /></View>
-            </View>
-            <TouchableOpacity
-              style={[styles.primaryButton, stage === 1 && !allMaterialsSelected && styles.primaryButtonMuted]}
-              activeOpacity={0.85}
-              onPress={stage === 1 ? startReview : executeSynthesis}
-              disabled={synthesizing}
-            >
-              {synthesizing ? <ActivityIndicator color={COLORS.white} /> : <>
-                <Text style={styles.primaryButtonText}>{stage === 1 ? (allMaterialsSelected ? '核对配方' : '选择材料') : (isDemoPreview ? '预览完成页' : '确认并开始合成')}</Text>
-                <Ionicons name="arrow-forward" size={19} color={COLORS.white} />
-              </>}
-            </TouchableOpacity>
           </View>
-          {stage === 2 ? <TouchableOpacity style={styles.backToMaterials} onPress={() => setStage(1)}><Text style={styles.backToMaterialsText}>返回调整材料</Text></TouchableOpacity> : null}
-        </>
-      )}
+        ) : null}
+        <View style={styles.progressBlock}>
+          <View style={styles.progressSummary}>
+            <Text style={styles.progressLabel}>材料进度</Text>
+            <Text style={styles.progressValue}>{totalSelected} / {totalRequired || 0}</Text>
+          </View>
+          <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${totalRequired ? Math.min(100, (totalSelected / totalRequired) * 100) : 0}%` }]} /></View>
+        </View>
+        <TouchableOpacity style={styles.primaryButton} activeOpacity={0.85} onPress={() => {
+          const firstIncomplete = requirements.findIndex((req, index) => (selectedNfts[index]?.length || 0) < Number(req.req_count));
+          if (firstIncomplete >= 0) openMaterialPicker(firstIncomplete);
+          else if (requirements.length) openMaterialPicker(0);
+          else showToast('当前配方尚未配置材料');
+        }}>
+          <Ionicons name="albums-outline" size={19} color={COLORS.white} />
+          <Text style={styles.primaryButtonText}>选择材料</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.secondaryButton, (!allMaterialsSelected || synthesizing) && styles.secondaryButtonDisabled]}
+          activeOpacity={0.85}
+          onPress={startSynthesis}
+          disabled={!allMaterialsSelected || synthesizing}
+        >
+          {synthesizing ? <ActivityIndicator color={COLORS.blueDark} /> : <>
+            <Ionicons name="hammer-outline" size={19} color={allMaterialsSelected ? COLORS.gold : COLORS.muted} />
+            <Text style={[styles.secondaryButtonText, !allMaterialsSelected && styles.secondaryButtonTextDisabled]}>开始合成</Text>
+          </>}
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.textButton} onPress={() => showToast('合成材料可通过集市购买或参与活动获得。')}>
+          <Text style={styles.textButtonLabel}>查看材料获取方式</Text><Ionicons name="chevron-forward" size={17} color={COLORS.blueDark} />
+        </TouchableOpacity>
+      </ScrollView>
 
       <Modal visible={showPicker} transparent animationType="slide" onRequestClose={() => setShowPicker(false)}>
         <View style={styles.modalBackdrop}>
@@ -418,7 +388,7 @@ export default function SynthesisDetailScreen() {
                   <View style={styles.emptyIcon}><Ionicons name="file-tray-outline" size={30} color={COLORS.blue} /></View>
                   <Text style={styles.emptyTitle}>金库里还没有这项材料</Text>
                   <Text style={styles.emptyDescription}>前往集市补齐后，再回来继续合成。</Text>
-                  <TouchableOpacity style={styles.emptyMarketButton} onPress={goToMarket}><Text style={styles.emptyMarketText}>去集市补齐</Text><Ionicons name="arrow-forward" size={17} color={COLORS.blueDark} /></TouchableOpacity>
+                  <TouchableOpacity style={styles.emptyMarketButton} onPress={() => goToMarket(requirements[activeReqIndex ?? 0]?.collection?.name || undefined)}><Text style={styles.emptyMarketText}>去集市补齐</Text><Ionicons name="arrow-forward" size={17} color={COLORS.blueDark} /></TouchableOpacity>
                 </View>
               ) : myIdleNfts.map((nft) => {
                 const chosen = tempSelectedNfts.includes(nft.id);
@@ -448,125 +418,173 @@ export default function SynthesisDetailScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
-  );
-}
 
-function StepProgress({ stage }: { stage: Stage }) {
-  const labels = ['选材料', '核对配方', '完成合成'];
-  return (
-    <View style={styles.steps}>
-      {labels.map((label, index) => {
-        const step = index + 1;
-        const active = step <= stage;
-        return (
-          <React.Fragment key={label}>
-            <View style={styles.stepItem}>
-              <View style={[styles.stepCircle, active && styles.stepCircleActive]}>
-                {step < stage ? <Ionicons name="checkmark" size={16} color={COLORS.white} /> : <Text style={[styles.stepNumber, active && styles.stepNumberActive]}>{step}</Text>}
-              </View>
-              <Text style={[styles.stepLabel, active && styles.stepLabelActive]}>{label}</Text>
+      <Modal visible={showConfirm} transparent animationType="fade" onRequestClose={() => setShowConfirm(false)}>
+        <View style={styles.dialogBackdrop}>
+          <View style={styles.confirmDialog}>
+            <TouchableOpacity style={styles.dialogClose} onPress={() => setShowConfirm(false)} accessibilityLabel="关闭确认弹窗">
+              <Ionicons name="close" size={22} color={COLORS.muted} />
+            </TouchableOpacity>
+            <Text style={styles.dialogTitle}>确认合成</Text>
+            <View style={styles.dialogTarget}>
+              {eventData.target_collection?.image_url && !targetImageFailed ? (
+                <Image source={{ uri: eventData.target_collection.image_url }} style={styles.dialogTargetImage} resizeMode="cover" />
+              ) : <View style={[styles.dialogTargetImage, styles.targetImagePlaceholder]}><Ionicons name="sparkles-outline" size={26} color={COLORS.blue} /></View>}
+              <Text style={styles.dialogTargetName} numberOfLines={2}>{eventData.target_collection?.name || eventData.name}</Text>
             </View>
-            {index < labels.length - 1 ? <View style={[styles.stepConnector, step < stage && styles.stepConnectorActive]} /> : null}
-          </React.Fragment>
-        );
-      })}
-    </View>
+            <View style={styles.dialogMaterials}>
+              {requirements.map((req) => (
+                <View key={req.id} style={styles.dialogMaterialRow}>
+                  {req.collection?.image_url ? <Image source={{ uri: req.collection.image_url }} style={styles.dialogMaterialImage} resizeMode="cover" /> : <View style={[styles.dialogMaterialImage, styles.materialImagePlaceholder]} />}
+                  <Text style={styles.dialogMaterialName} numberOfLines={1}>{req.collection?.name || '合成材料'}</Text>
+                  <Text style={styles.dialogMaterialCount}>× {req.req_count}</Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.dialogWarning}>
+              <Ionicons name="alert-circle-outline" size={18} color={COLORS.gold} />
+              <Text style={styles.dialogWarningText}>材料提交后不可撤回，请确认配方无误。</Text>
+            </View>
+            <View style={styles.dialogActions}>
+              <TouchableOpacity style={styles.dialogSecondaryButton} onPress={() => setShowConfirm(false)}>
+                <Text style={styles.dialogSecondaryText}>返回修改</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.dialogPrimaryButton} onPress={executeSynthesis} disabled={synthesizing}>
+                {synthesizing ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.dialogPrimaryText}>确认合成</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showSuccess} transparent animationType="fade" onRequestClose={() => setShowSuccess(false)}>
+        <View style={styles.dialogBackdrop}>
+          <View style={styles.successDialog}>
+            <View style={styles.successImageWrap}>
+              {eventData.target_collection?.image_url && !targetImageFailed ? (
+                <Image source={{ uri: eventData.target_collection.image_url }} style={styles.successImage} resizeMode="cover" />
+              ) : <View style={[styles.successImage, styles.targetImagePlaceholder]}><Ionicons name="sparkles-outline" size={32} color={COLORS.blue} /></View>}
+              <Ionicons name="sparkles" size={18} color={COLORS.gold} style={styles.successSparkle} />
+            </View>
+            <Text style={styles.successTitle}>合成完成</Text>
+            <Text style={styles.successDesc}>{isDemoPreview ? '预览完成，未消耗材料。' : `${eventData.target_collection?.name || eventData.name} 已收入金库。`}</Text>
+            <TouchableOpacity style={styles.dialogPrimaryButtonWide} onPress={() => {
+              setShowSuccess(false);
+              if (isDemoPreview) router.replace({ pathname: '/synthesis-detail', params: { id } });
+              else router.replace('/(tabs)/profile');
+            }}>
+              <Text style={styles.dialogPrimaryText}>{isDemoPreview ? '返回合成详情' : '去金库'}</Text>
+              <Ionicons name="arrow-forward" size={18} color={COLORS.white} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.successContinue} onPress={() => setShowSuccess(false)}>
+              <Text style={styles.successContinueText}>继续浏览</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   loadingScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.white, padding: 28 },
-  loadingText: { color: COLORS.muted, marginTop: 12, fontSize: 14 },
-  errorTitle: { marginTop: 14, fontSize: 18, fontWeight: '800', color: COLORS.ink },
-  errorMessage: { color: COLORS.muted, marginTop: 8, textAlign: 'center' },
+  loadingText: { color: COLORS.muted, marginTop: 12, fontSize: 14, lineHeight: 20 },
+  errorTitle: { marginTop: 14, fontSize: 18, lineHeight: 24, fontWeight: '700', color: COLORS.ink },
+  errorMessage: { color: COLORS.muted, marginTop: 8, textAlign: 'center', fontSize: 14, lineHeight: 20 },
   retryButton: { marginTop: 20, borderRadius: 14, paddingHorizontal: 20, paddingVertical: 12, backgroundColor: COLORS.bluePale },
-  retryText: { color: COLORS.blueDark, fontWeight: '800' },
+  retryText: { color: COLORS.blueDark, fontSize: 14, fontWeight: '700' },
   container: { flex: 1, backgroundColor: COLORS.white },
   navBar: { height: 48, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.white },
   backButton: { width: 42, height: 42, alignItems: 'flex-start', justifyContent: 'center' },
-  navTitle: { color: COLORS.ink, fontSize: 19, fontWeight: '800', letterSpacing: 0.3 },
+  navTitle: { color: COLORS.ink, fontSize: 22, lineHeight: 28, fontWeight: '700', letterSpacing: 0.2 },
   scrollView: { flex: 1 },
-  content: { paddingHorizontal: 18, paddingTop: 13 },
-  toast: { position: 'absolute', zIndex: 20, top: 58, alignSelf: 'center', maxWidth: '90%', backgroundColor: 'rgba(39,49,58,0.94)', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 11 },
-  toastText: { color: COLORS.white, fontSize: 13, fontWeight: '600', textAlign: 'center' },
-  steps: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', paddingHorizontal: 18, marginBottom: 22 },
-  stepItem: { width: 78, alignItems: 'center' },
-  stepCircle: { height: 34, width: 34, borderRadius: 17, backgroundColor: '#F0F1F2', borderWidth: 1, borderColor: '#E4E7E9', alignItems: 'center', justifyContent: 'center' },
-  stepCircleActive: { backgroundColor: COLORS.blue, borderColor: COLORS.blue },
-  stepNumber: { color: '#9299A1', fontSize: 15, fontWeight: '800' },
-  stepNumberActive: { color: COLORS.white },
-  stepLabel: { color: '#9299A1', fontSize: 12, fontWeight: '600', marginTop: 7 },
-  stepLabelActive: { color: COLORS.blueDark, fontWeight: '800' },
-  stepConnector: { height: 3, borderRadius: 2, backgroundColor: '#E8EAEC', flex: 1, marginHorizontal: 3, marginTop: 16 },
-  stepConnectorActive: { backgroundColor: '#A9C9E4' },
-  targetCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.cream, borderRadius: 22, padding: 13, borderWidth: 1, borderColor: '#F2EBDD', gap: 14, minHeight: 150 },
-  targetImage: { borderRadius: 17, backgroundColor: COLORS.creamDeep },
-  targetImagePlaceholder: { borderRadius: 17, backgroundColor: COLORS.bluePale, alignItems: 'center', justifyContent: 'center' },
+  content: { paddingHorizontal: 16, paddingTop: 12, gap: 12 },
+  toast: { position: 'absolute', zIndex: 20, top: 58, alignSelf: 'center', maxWidth: '90%', backgroundColor: 'rgba(73,61,53,0.94)', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 11 },
+  toastText: { color: COLORS.white, fontSize: 14, lineHeight: 20, fontWeight: '600', textAlign: 'center' },
+  targetCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 20, padding: 12, borderWidth: 1, borderColor: COLORS.line, gap: 14, minHeight: 150 },
+  targetImage: { borderRadius: 14, backgroundColor: COLORS.creamDeep },
+  targetImagePlaceholder: { borderRadius: 14, backgroundColor: COLORS.bluePale, alignItems: 'center', justifyContent: 'center' },
   targetInfo: { flex: 1, paddingVertical: 3 },
-  targetEyebrow: { color: COLORS.gold, backgroundColor: COLORS.creamDeep, alignSelf: 'flex-start', overflow: 'hidden', borderRadius: 13, paddingHorizontal: 10, paddingVertical: 4, fontSize: 11, fontWeight: '700', marginBottom: 8 },
-  targetName: { color: COLORS.ink, fontSize: 20, lineHeight: 26, fontWeight: '900' },
-  targetSeries: { color: COLORS.blueDark, backgroundColor: COLORS.bluePale, alignSelf: 'flex-start', overflow: 'hidden', borderRadius: 12, paddingHorizontal: 9, paddingVertical: 4, marginTop: 7, fontSize: 11, fontWeight: '700' },
-  targetStory: { color: COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 9 },
-  sectionHeading: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 25, marginBottom: 13, gap: 8 },
-  sectionTitle: { color: COLORS.ink, fontSize: 18, fontWeight: '900' },
-  sectionHint: { color: COLORS.muted, fontSize: 11, flexShrink: 1, textAlign: 'right' },
+  targetEyebrow: { color: COLORS.gold, backgroundColor: COLORS.creamDeep, alignSelf: 'flex-start', overflow: 'hidden', borderRadius: 11, paddingHorizontal: 9, paddingVertical: 4, fontSize: 11, lineHeight: 14, fontWeight: '600', marginBottom: 6 },
+  targetName: { color: COLORS.ink, fontSize: 18, lineHeight: 24, fontWeight: '700' },
+  targetSeries: { color: COLORS.blueDark, backgroundColor: COLORS.bluePale, alignSelf: 'flex-start', overflow: 'hidden', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, marginTop: 6, fontSize: 11, lineHeight: 14, fontWeight: '600' },
+  targetStory: { color: COLORS.muted, fontSize: 14, lineHeight: 20, marginTop: 7 },
+  sectionHeading: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 8, marginBottom: 2, gap: 8 },
+  sectionTitle: { color: COLORS.ink, fontSize: 18, lineHeight: 24, fontWeight: '700' },
+  sectionHint: { color: COLORS.muted, fontSize: 11, lineHeight: 14, flexShrink: 1, textAlign: 'right' },
   materialList: { gap: 10 },
-  materialRow: { minHeight: 88, flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 18, padding: 10, gap: 9 },
-  materialImage: { width: 64, height: 64, borderRadius: 12, backgroundColor: COLORS.creamDeep },
+  materialRow: { minHeight: 88, flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 16, padding: 10, gap: 9 },
+  materialImage: { width: 64, height: 64, borderRadius: 11, backgroundColor: COLORS.creamDeep },
   materialImagePlaceholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.bluePale },
   materialInfo: { flex: 1, minWidth: 0 },
-  materialName: { color: COLORS.ink, fontSize: 14, fontWeight: '800' },
-  materialDesc: { color: COLORS.muted, fontSize: 10, marginTop: 5 },
-  materialCount: { fontSize: 16, fontWeight: '900' },
+  materialName: { color: COLORS.ink, fontSize: 15, lineHeight: 20, fontWeight: '700' },
+  materialDesc: { color: COLORS.muted, fontSize: 11, lineHeight: 14, marginTop: 4 },
+  materialCount: { fontSize: 18, lineHeight: 24, fontWeight: '700' },
   countReady: { color: COLORS.green },
   countPartial: { color: COLORS.blueDark },
   countMissing: { color: COLORS.red },
-  materialTotal: { color: COLORS.muted, fontSize: 13, fontWeight: '700', marginLeft: -7, marginRight: 2 },
-  addMaterialButton: { width: 42, height: 42, borderRadius: 14, backgroundColor: COLORS.bluePale, alignItems: 'center', justifyContent: 'center' },
+  materialTotal: { color: COLORS.muted, fontSize: 14, lineHeight: 20, fontWeight: '600', marginLeft: -7, marginRight: 2 },
+  addMaterialButton: { width: 42, height: 42, borderRadius: 13, backgroundColor: COLORS.bluePale, alignItems: 'center', justifyContent: 'center' },
   addMaterialButtonReady: { backgroundColor: COLORS.greenPale },
-  shortageCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: COLORS.redPale, borderRadius: 18, padding: 12, marginTop: 13 },
-  shortageIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.red, alignItems: 'center', justifyContent: 'center' },
+  shortageCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: COLORS.bluePale, borderRadius: 16, padding: 12, marginTop: 2 },
+  shortageIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.blue, alignItems: 'center', justifyContent: 'center' },
   shortageInfo: { flex: 1, minWidth: 0 },
-  shortageTitle: { color: '#B84F49', fontSize: 13, fontWeight: '900' },
-  shortageSubtitle: { color: COLORS.muted, fontSize: 10, marginTop: 4 },
-  marketButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8E8CE', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 10, gap: 2 },
-  marketButtonText: { color: COLORS.gold, fontSize: 11, fontWeight: '800' },
-  reviewList: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 18, paddingHorizontal: 13 },
-  reviewRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.line, gap: 10 },
-  reviewImage: { width: 44, height: 44, borderRadius: 10, backgroundColor: COLORS.creamDeep },
-  reviewName: { flex: 1, color: COLORS.ink, fontSize: 13, fontWeight: '800' },
-  reviewAmount: { color: COLORS.muted, fontSize: 11 },
-  reviewEdit: { color: COLORS.blueDark, fontSize: 12, fontWeight: '800', padding: 5 },
-  warningCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: COLORS.cream, borderRadius: 16, padding: 14, marginTop: 14 },
-  warningText: { flex: 1, color: COLORS.muted, fontSize: 12, lineHeight: 18 },
-  bottomBar: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: '#F1F1EF', paddingHorizontal: 18, paddingTop: 13, shadowColor: '#34414A', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 8 },
-  progressBlock: { flex: 1, minWidth: 0 },
-  progressLabel: { color: COLORS.muted, fontSize: 11, fontWeight: '600' },
-  progressValue: { color: COLORS.blueDark, fontSize: 22, fontWeight: '900', marginTop: 2 },
-  progressTrack: { height: 7, backgroundColor: '#E9EAEC', borderRadius: 5, overflow: 'hidden', marginTop: 6 },
-  progressFill: { height: '100%', borderRadius: 5, backgroundColor: '#83B4DD' },
-  primaryButton: { minHeight: 58, borderRadius: 19, paddingHorizontal: 17, backgroundColor: COLORS.blue, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minWidth: 166 },
-  primaryButtonMuted: { backgroundColor: '#7FA8C9' },
-  primaryButtonText: { color: COLORS.white, fontSize: 14, fontWeight: '900' },
-  backToMaterials: { alignItems: 'center', paddingVertical: 5, backgroundColor: COLORS.white },
-  backToMaterialsText: { color: COLORS.blueDark, fontSize: 12, fontWeight: '700' },
-  successState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30 },
-  successMark: { width: 82, height: 82, borderRadius: 41, backgroundColor: COLORS.green, alignItems: 'center', justifyContent: 'center' },
-  successTitle: { color: COLORS.ink, fontSize: 25, fontWeight: '900', marginTop: 20 },
-  successDesc: { color: COLORS.muted, fontSize: 14, marginTop: 10, textAlign: 'center' },
-  textButton: { padding: 14, marginTop: 5 },
-  textButtonLabel: { color: COLORS.muted, fontSize: 13, fontWeight: '700' },
+  shortageTitle: { color: COLORS.blueDark, fontSize: 14, lineHeight: 20, fontWeight: '700' },
+  shortageSubtitle: { color: COLORS.muted, fontSize: 11, lineHeight: 14, marginTop: 4 },
+  marketButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 10, gap: 2 },
+  marketButtonText: { color: COLORS.blueDark, fontSize: 12, lineHeight: 16, fontWeight: '700' },
+  progressBlock: { backgroundColor: COLORS.cream, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: COLORS.line },
+  progressSummary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  progressLabel: { color: COLORS.muted, fontSize: 14, lineHeight: 20, fontWeight: '500' },
+  progressValue: { color: COLORS.blueDark, fontSize: 18, lineHeight: 24, fontWeight: '700' },
+  progressTrack: { height: 7, backgroundColor: '#E7E5E2', borderRadius: 5, overflow: 'hidden', marginTop: 8 },
+  progressFill: { height: '100%', borderRadius: 5, backgroundColor: COLORS.blue },
+  primaryButton: { minHeight: 54, borderRadius: 16, paddingHorizontal: 17, backgroundColor: COLORS.blue, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  primaryButtonText: { color: COLORS.white, fontSize: 16, lineHeight: 22, fontWeight: '700' },
+  secondaryButton: { minHeight: 54, borderRadius: 16, paddingHorizontal: 17, backgroundColor: '#F7EFE2', borderWidth: 1, borderColor: '#E9DCC5', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  secondaryButtonDisabled: { backgroundColor: '#F5F3F0', borderColor: '#EEE9E3' },
+  secondaryButtonText: { color: COLORS.gold, fontSize: 16, lineHeight: 22, fontWeight: '700' },
+  secondaryButtonTextDisabled: { color: COLORS.muted },
+  textButton: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 12 },
+  textButtonLabel: { color: COLORS.blueDark, fontSize: 14, lineHeight: 20, fontWeight: '600' },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(33,43,51,0.42)' },
+  dialogBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(43,37,32,0.48)', padding: 20 },
+  confirmDialog: { width: '100%', maxWidth: 440, maxHeight: '88%', backgroundColor: COLORS.white, borderRadius: 24, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: '#F2EBDD' },
+  dialogClose: { position: 'absolute', top: 12, right: 12, zIndex: 2, width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.cream, alignItems: 'center', justifyContent: 'center' },
+  dialogTitle: { color: COLORS.ink, fontSize: 20, lineHeight: 26, fontWeight: '700', marginBottom: 14 },
+  dialogTarget: { alignItems: 'center', gap: 8, marginBottom: 14 },
+  dialogTargetImage: { width: 76, height: 76, borderRadius: 14, backgroundColor: COLORS.creamDeep },
+  dialogTargetName: { color: COLORS.ink, fontSize: 15, lineHeight: 20, fontWeight: '700', textAlign: 'center' },
+  dialogMaterials: { width: '100%', maxHeight: 144, borderTopWidth: 1, borderBottomWidth: 1, borderColor: COLORS.line, paddingVertical: 6 },
+  dialogMaterialRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.line },
+  dialogMaterialImage: { width: 38, height: 38, borderRadius: 9, backgroundColor: COLORS.creamDeep },
+  dialogMaterialName: { flex: 1, color: COLORS.ink, fontSize: 14, lineHeight: 20 },
+  dialogMaterialCount: { color: COLORS.ink, fontSize: 15, lineHeight: 20, fontWeight: '700' },
+  dialogWarning: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#F7F2EA', borderRadius: 11, padding: 10, marginTop: 12 },
+  dialogWarningText: { flex: 1, color: COLORS.gold, fontSize: 12, lineHeight: 16, fontWeight: '600' },
+  dialogActions: { width: '100%', flexDirection: 'row', gap: 10, marginTop: 16 },
+  dialogSecondaryButton: { flex: 1, minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.white },
+  dialogSecondaryText: { color: COLORS.muted, fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  dialogPrimaryButton: { flex: 1, minHeight: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.blue },
+  dialogPrimaryButtonWide: { width: '100%', minHeight: 50, borderRadius: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.blue, marginTop: 20 },
+  dialogPrimaryText: { color: COLORS.white, fontSize: 15, lineHeight: 20, fontWeight: '700' },
+  successDialog: { width: '100%', maxWidth: 440, backgroundColor: COLORS.white, borderRadius: 24, padding: 22, alignItems: 'center', borderWidth: 1, borderColor: '#F2EBDD' },
+  successImageWrap: { position: 'relative', marginBottom: 12 },
+  successImage: { width: 96, height: 96, borderRadius: 18, backgroundColor: COLORS.creamDeep },
+  successSparkle: { position: 'absolute', right: -7, top: -6 },
+  successTitle: { color: COLORS.ink, fontSize: 20, lineHeight: 26, fontWeight: '700' },
+  successDesc: { color: COLORS.muted, fontSize: 14, lineHeight: 20, marginTop: 6, textAlign: 'center' },
+  successContinue: { minHeight: 44, minWidth: 140, marginTop: 6, alignItems: 'center', justifyContent: 'center' },
+  successContinueText: { color: COLORS.muted, fontSize: 14, lineHeight: 20, fontWeight: '600' },
   sheet: { height: '72%', backgroundColor: COLORS.white, borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingTop: 10, overflow: 'hidden' },
   sheetHandle: { width: 38, height: 4, borderRadius: 2, backgroundColor: '#D9DDE0', alignSelf: 'center', marginBottom: 12 },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#F0F1F1' },
-  sheetTitle: { color: COLORS.ink, fontSize: 18, fontWeight: '900' },
-  sheetSubtitle: { color: COLORS.muted, fontSize: 12, marginTop: 5 },
+  sheetTitle: { color: COLORS.ink, fontSize: 18, lineHeight: 24, fontWeight: '700' },
+  sheetSubtitle: { color: COLORS.muted, fontSize: 14, lineHeight: 20, marginTop: 5 },
   sheetHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   selectAllButton: { minWidth: 54, height: 36, borderRadius: 12, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.bluePale },
   selectAllButtonDisabled: { backgroundColor: '#F2F3F3' },
-  selectAllText: { color: COLORS.blueDark, fontSize: 12, fontWeight: '800' },
+  selectAllText: { color: COLORS.blueDark, fontSize: 14, lineHeight: 20, fontWeight: '700' },
   sheetClose: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5F6F6' },
   nftScroll: { flex: 1 },
   nftGrid: { padding: 16, flexDirection: 'row', flexWrap: 'wrap', gap: 11 },
@@ -575,16 +593,16 @@ const styles = StyleSheet.create({
   checkbox: { position: 'absolute', top: 12, left: 12, zIndex: 2, width: 21, height: 21, borderRadius: 11, backgroundColor: COLORS.white, borderWidth: 1.5, borderColor: '#CED4D8', alignItems: 'center', justifyContent: 'center' },
   checkboxSelected: { backgroundColor: COLORS.blue, borderColor: COLORS.blue },
   nftImage: { width: '100%', aspectRatio: 1, borderRadius: 9, backgroundColor: COLORS.creamDeep },
-  nftSerial: { color: COLORS.muted, fontSize: 10, fontWeight: '700', marginTop: 7 },
+  nftSerial: { color: COLORS.muted, fontSize: 11, lineHeight: 14, fontWeight: '600', marginTop: 7 },
   emptyInventory: { width: '100%', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 35 },
   emptyIcon: { width: 62, height: 62, borderRadius: 31, backgroundColor: COLORS.bluePale, alignItems: 'center', justifyContent: 'center' },
-  emptyTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '800', marginTop: 14 },
-  emptyDescription: { color: COLORS.muted, fontSize: 12, textAlign: 'center', marginTop: 7 },
+  emptyTitle: { color: COLORS.ink, fontSize: 15, lineHeight: 20, fontWeight: '700', marginTop: 14 },
+  emptyDescription: { color: COLORS.muted, fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 7 },
   emptyMarketButton: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, backgroundColor: COLORS.bluePale, paddingHorizontal: 18, paddingVertical: 12, marginTop: 18 },
-  emptyMarketText: { color: COLORS.blueDark, fontSize: 13, fontWeight: '800' },
+  emptyMarketText: { color: COLORS.blueDark, fontSize: 14, lineHeight: 20, fontWeight: '700' },
   sheetFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#F0F1F1' },
-  sheetSelectionCount: { color: COLORS.muted, fontSize: 13, fontWeight: '700' },
+  sheetSelectionCount: { color: COLORS.muted, fontSize: 14, lineHeight: 20, fontWeight: '600' },
   sheetConfirmButton: { backgroundColor: COLORS.blue, minWidth: 156, minHeight: 48, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   sheetConfirmDisabled: { backgroundColor: '#D8E0E6' },
-  sheetConfirmText: { color: COLORS.white, fontSize: 14, fontWeight: '900' },
+  sheetConfirmText: { color: COLORS.white, fontSize: 14, lineHeight: 20, fontWeight: '700' },
 });

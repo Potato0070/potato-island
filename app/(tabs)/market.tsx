@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -132,6 +132,7 @@ const FallbackImage = ({ uri, style }: { uri?: string; style: any }) => {
 
 export default function MarketScreen() {
   const router = useRouter();
+  const { search: routeSearch } = useLocalSearchParams<{ search?: string }>();
   const insets = useSafeAreaInsets();
   const viewport = useWindowDimensions();
   const [categories, setCategories] = useState<any[]>([]);
@@ -158,6 +159,13 @@ export default function MarketScreen() {
   const [preferencesReady, setPreferencesReady] = useState(false);
   const searchProgress = useRef(new Animated.Value(0)).current;
   const searchInputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    const query = Array.isArray(routeSearch) ? routeSearch[0] : routeSearch;
+    if (!query) return;
+    setSearchQuery(query);
+    setSearchOpen(true);
+  }, [routeSearch]);
 
   const contentWidth = Math.min(viewport.width, CONTENT_MAX_WIDTH);
   const columnCount = viewport.width >= 1100 ? 4 : viewport.width >= 720 ? 3 : 2;
