@@ -1,0 +1,6 @@
+本软件使用 MiSans 字体。
+MiSans 由小米科技有限责任公司提供。
+字体与授权协议来源：https://hyperos.mi.com/font/zh/download/
+字体使用说明：https://hyperos.mi.com/font/zh/faq/
+随本软件提供的完整授权协议：/misans-license.pdf
+本软件使用原始官方字体文件，不对字体字形进行修改，不单独销售字体。

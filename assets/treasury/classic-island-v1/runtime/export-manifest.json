@@ -1,0 +1,67 @@
+[
+  {
+    "source": "treasury/classic-island-v1/orders.png",
+    "output": "assets/treasury/classic-island-v1/runtime/orders.webp",
+    "bytes": 12062
+  },
+  {
+    "source": "treasury/classic-island-v1/invite.png",
+    "output": "assets/treasury/classic-island-v1/runtime/invite.webp",
+    "bytes": 13254
+  },
+  {
+    "source": "treasury/classic-island-v1/buy-request.png",
+    "output": "assets/treasury/classic-island-v1/runtime/buy-request.webp",
+    "bytes": 13682
+  },
+  {
+    "source": "treasury/classic-island-v1/wallet.png",
+    "output": "assets/treasury/classic-island-v1/runtime/wallet.webp",
+    "bytes": 14704
+  },
+  {
+    "source": "treasury/classic-island-v1/settings.png",
+    "output": "assets/treasury/classic-island-v1/runtime/settings.webp",
+    "bytes": 13242
+  },
+  {
+    "source": "empty-states/storybook-pencil-v1/empty-inventory.png",
+    "output": "assets/empty-states/storybook-pencil-v1/runtime/empty-inventory.webp",
+    "bytes": 46276
+  },
+  {
+    "source": "empty-states/storybook-pencil-v1/empty-mailbox.png",
+    "output": "assets/empty-states/storybook-pencil-v1/runtime/empty-mailbox.webp",
+    "bytes": 56350
+  },
+  {
+    "source": "empty-states/storybook-pencil-v1/empty-search.png",
+    "output": "assets/empty-states/storybook-pencil-v1/runtime/empty-search.webp",
+    "bytes": 34236
+  },
+  {
+    "source": "empty-states/storybook-pencil-v1/network-unavailable.png",
+    "output": "assets/empty-states/storybook-pencil-v1/runtime/network-unavailable.webp",
+    "bytes": 39830
+  },
+  {
+    "source": "buttons/colored-pencil-v1/primary-blue.png",
+    "output": "assets/buttons/colored-pencil-v1/runtime/primary-blue.webp",
+    "bytes": 33838
+  },
+  {
+    "source": "buttons/colored-pencil-v1/transaction-gold.png",
+    "output": "assets/buttons/colored-pencil-v1/runtime/transaction-gold.webp",
+    "bytes": 35226
+  },
+  {
+    "source": "buttons/colored-pencil-v1/secondary-ivory.png",
+    "output": "assets/buttons/colored-pencil-v1/runtime/secondary-ivory.webp",
+    "bytes": 26742
+  },
+  {
+    "source": "buttons/colored-pencil-v1/danger-terracotta.png",
+    "output": "assets/buttons/colored-pencil-v1/runtime/danger-terracotta.webp",
+    "bytes": 37450
+  }
+]

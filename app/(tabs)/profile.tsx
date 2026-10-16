@@ -1,304 +1,270 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
-import { Dimensions, Image, ImageBackground, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import PencilButton from '../../components/PencilButton';
+import { useIslandFonts } from '../../hooks/use-island-fonts';
 import { supabase } from '../../supabase';
 
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 48) / 2;
-
-const VAULT_ILLUSTRATION_URL = 'https://images.unsplash.com/photo-1607344645866-009c320b63e0?q=80&w=800&auto=format&fit=crop&blur=5';
-
+const COLORS = { ink: '#493D35', muted: '#94877C', line: '#EEE9E3', blue: '#537895', gold: '#9A6A33' };
 const MENU_GRID = [
-  { name: '订单', icon: '📝', route: '/my-orders' },
-  { name: '邀请', icon: '🤝', route: '' },
-  { name: '求购', icon: '🛒', route: '/create-buy-order' }, 
-  { name: '钱包', icon: '👛', route: '/wallet' },
-  { name: '合成', icon: '🧬', route: '/synthesis-list' },
-  { name: '权益', icon: '💎', route: '/vip-privilege' },
-  { name: '转赠', icon: '🎁', route: '/transfer' },
-  { name: '设置', icon: '⚙️', route: '/change-avatar' },
-];
+  { name: '订单', icon: require('../../assets/treasury/classic-island-v1/runtime/orders.webp'), route: '/my-orders', original: false },
+  { name: '邀请', icon: require('../../assets/treasury/classic-island-v1/runtime/invite.webp'), route: null, original: false },
+  { name: '求购', icon: require('../../assets/treasury/classic-island-v1/runtime/buy-request.webp'), route: '/create-buy-order', original: false },
+  { name: '钱包', icon: require('../../assets/treasury/classic-island-v1/runtime/wallet.webp'), route: '/wallet', original: false },
+  { name: '合成', icon: require('../../assets/homepage/icons/gene.png'), route: '/synthesis-list', original: true },
+  { name: '权益', icon: require('../../assets/homepage/icons/lord.png'), route: '/vip-privilege', original: true },
+  { name: '转赠', icon: require('../../assets/homepage/icons/transfer.png'), route: '/transfer', original: true },
+  { name: '设置', icon: require('../../assets/treasury/classic-island-v1/runtime/settings.webp'), route: '/change-avatar', original: false },
+] as const;
+const VIP_NAMES: Record<number, string> = { 1: '大众会员', 2: '黄金会员', 3: '铂金会员', 4: '钻石会员', 5: '黑钻会员' };
+type Profile = { id: string; nickname: string | null; avatar_url: string | null; is_admin: boolean; vip_level: number | null; potato_coin_balance: number | string | null };
+type Collection = { id: string; name: string; image_url: string | null };
+type OwnedNft = { id: string; status: string; collections: Collection | Collection[] | null };
+type Holding = Collection & { count: number };
 
-const VIP_TIER_NAMES: Record<number, string> = {
-  1: '大众会员', 2: '黄金会员', 3: '铂金会员', 4: '钻石会员', 5: '黑钻会员'
-};
-
-// 💰 千分位金钱格式化
-const formatMoney = (num: number | string) => {
-  const n = Number(num);
-  if (isNaN(n)) return '0.00';
-  let parts = n.toFixed(2).split(".");
-  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return parts.join(".");
-};
+function formatMoney(value: number | string | null | undefined) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const [profile, setProfile] = useState<any>(null);
-  const [collections, setCollections] = useState<any[]>([]);
+  const fonts = useIslandFonts();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const [contentWidth, setContentWidth] = useState(Math.min(width, 720));
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [holdings, setHoldings] = useState<Holding[]>([]);
   const [totalNfts, setTotalNfts] = useState(0);
+  const [earnings, setEarnings] = useState({ today: 0, month: 0 });
   const [refreshing, setRefreshing] = useState(false);
-  
-  // 🌟 新增：真实收益状态
-  const [todayEarnings, setTodayEarnings] = useState(0);
-  const [monthEarnings, setMonthEarnings] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+  const requestId = useRef(0);
+  const loadedProfileId = useRef<string | null>(null);
+  const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const today = new Date();
-  const currentMonth = today.getMonth() + 1;
-  const currentDate = today.getDate();
+  const notify = useCallback((text: string) => {
+    if (notificationTimer.current) clearTimeout(notificationTimer.current);
+    setNotice(text);
+    notificationTimer.current = setTimeout(() => setNotice(null), 3000);
+  }, []);
+  useEffect(() => () => { if (notificationTimer.current) clearTimeout(notificationTimer.current); }, []);
+  useEffect(() => setAvatarFailed(false), [profile?.avatar_url]);
 
-  const fetchProfileData = async () => {
+  const fetchProfileData = useCallback(async () => {
+    const currentRequest = ++requestId.current;
+    setRefreshing(true);
+    setError(null);
     try {
-      setRefreshing(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.replace('/login'); return; }
-
-      const { data: profData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      setProfile(profData);
-
-      // 🌟 修复：真实结算“今日收益”和“本月收益”
-      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
-      
-      const [{ data: todayLogs }, { data: monthLogs }] = await Promise.all([
-         supabase.from('transfer_logs').select('price').eq('seller_id', user.id).gte('created_at', startOfToday),
-         supabase.from('transfer_logs').select('price').eq('seller_id', user.id).gte('created_at', startOfMonth)
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (currentRequest !== requestId.current) return;
+      if (!user) {
+        loadedProfileId.current = null;
+        setProfile(null); setHoldings([]); setTotalNfts(0);
+        router.replace('/login'); return;
+      }
+      if (loadedProfileId.current && loadedProfileId.current !== user.id) {
+        setProfile(null); setHoldings([]); setTotalNfts(0);
+      }
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const fetchAllNfts = async () => {
+        const all: OwnedNft[] = [];
+        for (let page = 0; ; page++) {
+          const { data, error: nftError } = await supabase.from('nfts')
+            .select('id, collection_id, status, collections(id, name, image_url, max_consign_price)')
+            .eq('owner_id', user.id).neq('status', 'burned')
+            .order('id', { ascending: true }).range(page * 1000, (page + 1) * 1000 - 1);
+          if (nftError) throw nftError;
+          if (currentRequest !== requestId.current) return null;
+          const batch = (data || []) as OwnedNft[];
+          all.push(...batch);
+          if (batch.length < 1000) return all;
+        }
+      };
+      const [profileResult, todayResult, monthResult, nfts] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.from('transfer_logs').select('price').eq('seller_id', user.id).gte('created_at', startOfToday),
+        supabase.from('transfer_logs').select('price').eq('seller_id', user.id).gte('created_at', startOfMonth),
+        fetchAllNfts(),
       ]);
-      setTodayEarnings(todayLogs ? todayLogs.reduce((sum, log) => sum + (log.price || 0), 0) : 0);
-      setMonthEarnings(monthLogs ? monthLogs.reduce((sum, log) => sum + (log.price || 0), 0) : 0);
-
-      // 🌟 终极修复：突破 1000 条查询限制，大户金库不再丢失藏品！
-      let allNfts: any[] = [];
-      let fetchMore = true;
-      let step = 0;
-      while (fetchMore) {
-         const { data: nftsPart } = await supabase.from('nfts')
-           .select('id, collection_id, status, collections(id, name, image_url, max_consign_price)')
-           .eq('owner_id', user.id).neq('status', 'burned')
-           .range(step * 1000, (step + 1) * 1000 - 1);
-           
-         if (nftsPart && nftsPart.length > 0) {
-            allNfts = [...allNfts, ...nftsPart];
-            if (nftsPart.length < 1000) fetchMore = false;
-            else step++;
-         } else {
-            fetchMore = false;
-         }
+      if (currentRequest !== requestId.current || nfts === null) return;
+      for (const result of [profileResult, todayResult, monthResult]) { if (result.error) throw result.error; }
+      const grouped = new Map<string, Holding>();
+      for (const nft of nfts) {
+        const col = Array.isArray(nft.collections) ? nft.collections[0] : nft.collections;
+        if (!col) continue;
+        const existing = grouped.get(col.id);
+        if (existing) existing.count++;
+        else grouped.set(col.id, { ...col, count: 1 });
       }
-      
-      if (allNfts.length >= 0) {
-        setTotalNfts(allNfts.length);
-        const counts: Record<string, any> = {};
-        allNfts.forEach(nft => {
-          const col = Array.isArray(nft.collections) ? nft.collections[0] : nft.collections;
-          if (!col) return;
-          if (!counts[col.id]) counts[col.id] = { id: col.id, name: col.name, image_url: col.image_url, count: 0, idleCount: 0 };
-          counts[col.id].count += 1;
-          if (nft.status === 'idle') counts[col.id].idleCount += 1;
-        });
-        setCollections(Object.values(counts));
-      }
-    } catch (e) { console.error(e); } finally { setRefreshing(false); }
-  };
-
-  useFocusEffect(useCallback(() => { fetchProfileData(); }, []));
-
-  const copyToClipboard = async () => {
-    if (profile?.id) {
-       await Clipboard.setStringAsync(profile.id);
-       alert('✅ 土豆岛号已复制到剪贴板！');
+      const sum = (rows: { price: number | string | null }[] | null) => (rows || []).reduce((total, row) => total + (Number(row.price) || 0), 0);
+      setProfile(profileResult.data as Profile);
+      loadedProfileId.current = user.id;
+      setEarnings({ today: sum(todayResult.data), month: sum(monthResult.data) });
+      setTotalNfts(nfts.length);
+      setHoldings([...grouped.values()]);
+      setFailedImages({});
+    } catch {
+      if (currentRequest === requestId.current) setError('金库暂时连接不上，请稍后重试');
+    } finally {
+      if (currentRequest === requestId.current) setRefreshing(false);
     }
+  }, [router]);
+
+  useFocusEffect(useCallback(() => {
+    void fetchProfileData();
+    return () => { requestId.current++; };
+  }, [fetchProfileData]));
+
+  const copyId = async () => {
+    if (!profile) return;
+    try { await Clipboard.setStringAsync(profile.id); notify('土豆岛号已复制'); }
+    catch { notify('复制失败，请重试'); }
   };
 
-  const displayLevel = profile?.is_admin ? 5 : (profile?.vip_level || 1);
-  const displayName = profile?.is_admin ? '创世神' : VIP_TIER_NAMES[displayLevel];
+  const isCompact = contentWidth < 370;
+  const columns = contentWidth >= 640 ? 3 : 2;
+  const collectionWidth = (contentWidth - 64 - (columns - 1) * 12) / columns;
+  const regular = { fontFamily: fonts.regular };
+  const semibold = { fontFamily: fonts.semibold, fontWeight: fonts.semibold ? 'normal' as const : '600' as const };
+  const statusName = profile?.is_admin ? '创世神' : (VIP_NAMES[profile?.vip_level || 1] || '大众会员');
+  const consoleEntry = profile?.is_admin ? (
+    <Pressable accessibilityRole="button" accessibilityLabel="进入创世中枢控制台" onPress={() => router.push('/admin-panel')}
+      style={({ pressed }) => [styles.console, isCompact && styles.consoleCompact, pressed && styles.pressed]}>
+      <Image source={require('../../assets/homepage/icons/lord.png')} style={styles.consoleIcon} accessible={false} />
+      <Text style={[styles.consoleText, semibold]}>创世中枢控制台</Text>
+      <Ionicons name="chevron-forward" size={14} color={COLORS.gold} />
+    </Pressable>
+  ) : null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchProfileData} tintColor="#D49A36" />}>
-        
-        {/* --- 1. 顶部身份档案区 --- */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/change-avatar')}>
-             <Image source={{ uri: profile?.avatar_url || 'https://via.placeholder.com/100' }} style={styles.avatar} />
-          </TouchableOpacity>
-          <View style={styles.userInfo}>
-            <View style={{flexDirection: 'row', alignItems: 'center'}}>
-               <Text style={styles.nickname}>{profile?.nickname || '土豆岛民'}</Text>
-               <View style={styles.vipTag}><Text style={styles.vipText}>V{displayLevel}</Text></View>
-               {profile?.is_admin && <View style={[styles.vipTag, {backgroundColor: '#FF3B30', marginLeft: 4}]}><Text style={[styles.vipText, {color: '#FFF'}]}>Admin</Text></View>}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: 112 + insets.bottom }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchProfileData} tintColor={COLORS.blue} />}>
+        <View testID="treasury-content" style={styles.content} onLayout={event => setContentWidth(event.nativeEvent.layout.width)}>
+          <Text accessibilityRole="header" style={[styles.pageTitle, semibold]}>金库</Text>
+          {!profile ? (
+            <View style={styles.initialState}>
+              {error ? <>
+                <Image source={require('../../assets/empty-states/storybook-pencil-v1/runtime/network-unavailable.webp')} style={styles.stateArt} resizeMode="contain" accessible={false} />
+                <Text style={[styles.emptyText, regular]}>{error}</Text>
+                <PencilButton label="重新加载" onPress={fetchProfileData} fontFamily={fonts.semibold} />
+              </> : <><ActivityIndicator color={COLORS.blue} /><Text style={[styles.loadingText, regular]}>正在打开金库…</Text></>}
             </View>
-            <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 6}}>
-               <Text style={styles.uid}>土豆岛号: td_{profile?.id?.substring(0,8).toUpperCase() || '00000000'}</Text>
-               <TouchableOpacity style={styles.copyBtn} onPress={copyToClipboard}>
-                  <Text style={styles.copyBtnText}>复制</Text>
-               </TouchableOpacity>
+          ) : <>
+            <View style={styles.identity}>
+              <Pressable accessibilityRole="button" accessibilityLabel="修改头像与昵称" onPress={() => router.push('/change-avatar')} style={({ pressed }) => [styles.avatarButton, pressed && styles.pressed]}>
+                <Image source={profile.avatar_url && !avatarFailed ? { uri: profile.avatar_url } : require('../../assets/homepage/logo-b.png')}
+                  style={styles.avatar} onError={() => setAvatarFailed(true)} />
+              </Pressable>
+              <View style={styles.identityInfo}>
+                <View style={styles.nameRow}>
+                  <Text numberOfLines={1} style={[styles.nickname, semibold]}>{profile.nickname || '土豆岛民'}</Text>
+                  {!isCompact ? consoleEntry : null}
+                </View>
+                <View style={[styles.memberBadge, profile.is_admin && styles.creatorBadge]}><Text style={[styles.memberText, semibold]}>{statusName}</Text></View>
+                <Pressable accessibilityRole="button" accessibilityLabel="复制土豆岛号" onPress={copyId} style={({ pressed }) => [styles.idRow, pressed && styles.pressed]}>
+                  <Text numberOfLines={1} style={[styles.idText, regular]}>土豆岛号 td_{profile.id.substring(0, 8).toUpperCase()}</Text>
+                  <Ionicons name="copy-outline" size={15} color={COLORS.muted} />
+                </Pressable>
+              </View>
             </View>
-          </View>
-          <TouchableOpacity style={styles.qrCodeBtn}><Text style={{fontSize: 24}}>🪪</Text></TouchableOpacity>
-        </View>
-
-        {/* --- 专属上帝通道 --- */}
-        {profile?.is_admin && (
-           <TouchableOpacity style={styles.adminBanner} onPress={() => router.push('/admin-panel')} activeOpacity={0.8}>
-              <View style={styles.adminIconBox}><Text style={{fontSize: 20}}>👑</Text></View>
-              <View style={{flex: 1}}>
-                 <Text style={styles.adminTitle}>创世中枢控制台</Text>
-                 <Text style={styles.adminSub}>上帝视角 · 调控全岛资产与经济</Text>
-              </View>
-              <Text style={{color: '#D49A36', fontSize: 16, fontWeight: '900'}}>进入 〉</Text>
-           </TouchableOpacity>
-        )}
-
-        {/* --- 2. 财富与收益看板 (🌟 已接入真实数据) --- */}
-        <TouchableOpacity activeOpacity={0.9} style={styles.wealthCardWrapper}>
-           <ImageBackground source={{ uri: VAULT_ILLUSTRATION_URL }} style={styles.wealthCardBg} imageStyle={{ borderRadius: 16 }}>
-              <View style={styles.wealthOverlay}>
-                 <View style={styles.wealthTop}>
-                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                       <Text style={styles.wealthVipTitle}>👑 {displayName}</Text>
-                       <Text style={styles.wealthVipSub}> | 专属金库 〉</Text>
-                    </View>
-                    <Text style={styles.wealthVipLogo}>ISLAND</Text>
-                 </View>
-                 
-                 <View style={styles.wealthDataRow}>
-                    <View style={styles.wealthDataItem}>
-                       <Text style={styles.wealthDataValue}>{formatMoney(todayEarnings)}</Text>
-                       <Text style={styles.wealthDataLabel}>今日收益</Text>
-                    </View>
-                    <View style={styles.wealthDataItem}>
-                       <Text style={styles.wealthDataValue}>{formatMoney(monthEarnings)}</Text>
-                       <Text style={styles.wealthDataLabel}>本月收益</Text>
-                    </View>
-                    <View style={styles.wealthDataItem}>
-                       <Text style={[styles.wealthDataValue, {color: '#D49A36'}]}>{formatMoney(profile?.potato_coin_balance || 0)}</Text>
-                       <Text style={styles.wealthDataLabel}>土豆币余额</Text>
-                    </View>
-                 </View>
-              </View>
-           </ImageBackground>
-        </TouchableOpacity>
-
-        {/* --- 3. 8宫格操作区 --- */}
-        <View style={styles.gridContainer}>
-          {MENU_GRID.map((item, index) => (
-            <TouchableOpacity key={index} style={styles.gridItem} activeOpacity={0.7} onPress={() => item.route ? router.push(item.route as any) : null}>
-              <View style={styles.gridIconWrapper}><Text style={styles.gridIconEmoji}>{item.icon}</Text></View>
-              <Text style={styles.gridText}>{item.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* --- 4. 抽签日历横幅 --- */}
-        <TouchableOpacity style={styles.bannerAd} activeOpacity={0.9} onPress={() => router.push('/lottery')}>
-           <View style={{flex: 1}}>
-              <Text style={styles.bannerTitle}>命运抽签</Text>
-              <Text style={styles.bannerSub}>每日虔诚祈祷，获取稀有物资</Text>
-           </View>
-           <View style={styles.dynamicCalendar}>
-              <View style={styles.calHeader}><Text style={styles.calMonth}>{currentMonth}月</Text></View>
-              <View style={styles.calBody}><Text style={styles.calDay}>{currentDate}</Text></View>
-           </View>
-        </TouchableOpacity>
-
-        {/* --- 5. 藏品归纳区 --- */}
-        <View style={styles.collectionSection}>
-          <View style={styles.colHeader}>
-             <Text style={styles.sectionTitle}>我的藏品 <Text style={{fontSize: 14, fontWeight: 'normal', color: '#8D6E63'}}>{formatMoney(totalNfts).replace('.00','')}</Text></Text>
-             <Text style={styles.colHeaderLink}>全部藏品 〉</Text>
-          </View>
-
-          <View style={styles.grid}>
-            {collections.map(col => (
-              <TouchableOpacity 
-                key={col.id} 
-                style={styles.colCard} 
-                activeOpacity={0.9}
-                onPress={() => router.push({pathname: '/my-collection-list', params: {collectionId: col.id, collectionName: col.name}})}
-              >
-                <View style={styles.colImgBox}>
-                   <Image source={{ uri: col.image_url }} style={styles.colImg} />
+            {isCompact ? consoleEntry : null}
+            <View style={styles.wealthCard}>
+              {[
+                { label: '今日收益', value: earnings.today },
+                { label: '本月收益', value: earnings.month },
+                { label: '土豆币余额', value: profile.potato_coin_balance },
+              ].map((stat, index) => (
+                <View key={stat.label} style={[styles.stat, index > 0 && styles.statBorder]}>
+                  <Text style={[styles.statLabel, regular]}>{stat.label}</Text>
+                  <Text accessibilityLabel={`${stat.label} ${formatMoney(stat.value)} 土豆币`} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}
+                    style={[styles.statValue, { fontSize: isCompact ? 17 : 20 }, semibold]}>{formatMoney(stat.value)}</Text>
                 </View>
-                <View style={styles.colInfo}>
-                  <Text style={styles.colName} numberOfLines={1}>{col.name}</Text>
-                  <Text style={styles.colCount}>持有量: {formatMoney(col.count).replace('.00','')}</Text>
+              ))}
+            </View>
+            {error ? <Pressable accessibilityRole="button" accessibilityLabel="刷新金库数据" onPress={fetchProfileData} style={styles.refreshError}>
+              <Text style={[styles.errorText, regular]}>刷新失败，当前显示上次加载的数据。点击重试</Text>
+            </Pressable> : null}
+            <View style={styles.menu}>
+              {MENU_GRID.map(item => (
+                <Pressable key={item.name} accessibilityRole="button" accessibilityLabel={item.route ? item.name : '邀请，暂未开放'}
+                  onPress={() => item.route ? router.push(item.route) : notify('邀请功能暂未开放')}
+                  style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}>
+                  <View style={styles.menuIconBox}><Image source={item.icon} style={item.original ? styles.existingMenuIcon : styles.menuIcon} resizeMode="contain" accessible={false} /></View>
+                  <Text style={[styles.menuLabel, semibold]}>{item.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.collectionSection}>
+              <View style={styles.collectionHeader}><Text accessibilityRole="header" style={[styles.sectionTitle, semibold]}>我的藏品 <Text style={[styles.collectionCount, regular]}>({totalNfts.toLocaleString('en-US')})</Text></Text></View>
+              {holdings.length ? (
+                <View style={styles.collectionGrid}>
+                  {holdings.map(col => (
+                    <Pressable key={col.id} accessibilityRole="button" accessibilityLabel={`${col.name}，持有 ${col.count} 件`}
+                      onPress={() => router.push({ pathname: '/my-collection-list', params: { collectionId: col.id, collectionName: col.name } })}
+                      style={({ pressed }) => [styles.collectionCard, { width: collectionWidth }, pressed && styles.pressed]}>
+                      <View testID="treasury-collection-image" style={styles.collectionImageBox}>
+                        {col.image_url && !failedImages[col.id] ? <Image source={{ uri: col.image_url }} style={styles.collectionImage} onError={() => setFailedImages(previous => ({ ...previous, [col.id]: true }))} />
+                          : <Ionicons name="image-outline" size={28} color="#B6A99C" />}
+                      </View>
+                      <Text numberOfLines={1} style={[styles.collectionName, semibold]}>{col.name}</Text>
+                      <Text style={[styles.holdingCount, regular]}>持有 {col.count.toLocaleString('en-US')} 件</Text>
+                    </Pressable>
+                  ))}
                 </View>
-              </TouchableOpacity>
-            ))}
-            {collections.length === 0 && (
-               <View style={styles.emptyBox}>
-                  <Text style={{fontSize: 40, marginBottom: 10}}>🪹</Text>
-                  <Text style={{color: '#8D6E63', fontWeight: '600'}}>金库空空如也，去集市扫货吧！</Text>
-               </View>
-            )}
-          </View>
+              ) : <View style={styles.emptyCollection}>
+                <Image source={require('../../assets/empty-states/storybook-pencil-v1/runtime/empty-inventory.webp')} style={styles.emptyArt} resizeMode="contain" accessible={false} />
+                <Text style={[styles.emptyText, regular]}>这里还没有藏品</Text>
+                <PencilButton label="去集市" onPress={() => router.push('/market')} fontFamily={fonts.semibold} style={styles.marketButton} />
+              </View>}
+            </View>
+          </>}
         </View>
-        <View style={{height: 100}} />
       </ScrollView>
+      {notice ? <View style={styles.notice} accessibilityLiveRegion="polite" pointerEvents="none"><Text style={[styles.noticeText, regular]}>{notice}</Text></View> : null}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FDF8F0' }, 
-  header: { flexDirection: 'row', alignItems: 'center', padding: 20, backgroundColor: '#FDF8F0' },
-  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#EAE0D5', borderWidth: 2, borderColor: '#D49A36' },
-  userInfo: { flex: 1, marginLeft: 16 },
-  nickname: { fontSize: 20, fontWeight: '900', color: '#4E342E' }, 
-  vipTag: { backgroundColor: '#D49A36', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 },
-  vipText: { color: '#4E342E', fontSize: 10, fontWeight: '900', fontStyle: 'italic' },
-  uid: { fontSize: 12, color: '#8D6E63', fontFamily: 'monospace' },
-  qrCodeBtn: { padding: 10 },
-  copyBtn: { marginLeft: 8, backgroundColor: '#F5EFE6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#D49A36' },
-  copyBtnText: { color: '#D49A36', fontSize: 10, fontWeight: '800' },
-
-  adminBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2C1E16', marginHorizontal: 16, marginBottom: 16, padding: 16, borderRadius: 16, shadowColor: '#D49A36', shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: {width: 0, height: 4}, elevation: 5 },
-  adminIconBox: { width: 40, height: 40, backgroundColor: 'rgba(212,154,54,0.2)', borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  adminTitle: { color: '#D49A36', fontSize: 16, fontWeight: '900', marginBottom: 4 },
-  adminSub: { color: '#A1887F', fontSize: 11 },
-
-  wealthCardWrapper: { marginHorizontal: 16, marginBottom: 16, borderRadius: 16, shadowColor: '#4E342E', shadowOpacity: 0.15, shadowRadius: 15, elevation: 4 },
-  wealthCardBg: { width: '100%', borderRadius: 16 },
-  wealthOverlay: { backgroundColor: 'rgba(44, 30, 22, 0.85)', padding: 20, borderRadius: 16 }, 
-  wealthTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-  wealthVipTitle: { fontSize: 16, fontWeight: '900', color: '#D49A36' },
-  wealthVipSub: { fontSize: 12, color: '#A1887F' },
-  wealthVipLogo: { fontSize: 24, fontWeight: '900', color: 'rgba(212,154,54,0.3)', fontStyle: 'italic', letterSpacing: 2 },
-  wealthDataRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  wealthDataItem: { alignItems: 'center', flex: 1 },
-  wealthDataValue: { fontSize: 18, fontWeight: '900', color: '#FFF', marginBottom: 6, fontFamily: 'monospace' },
-  wealthDataLabel: { fontSize: 11, color: '#A1887F', fontWeight: '700' },
-
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 16, paddingVertical: 16, marginBottom: 16, shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2, borderWidth: 1, borderColor: '#F0E6D2' },
-  gridItem: { width: '25%', alignItems: 'center', marginBottom: 16 },
-  gridIconWrapper: { width: 44, height: 44, borderRadius: 16, backgroundColor: '#FDF8F0', justifyContent: 'center', alignItems: 'center', marginBottom: 8, borderWidth: 1, borderColor: '#F0E6D2' },
-  gridIconEmoji: { fontSize: 22 },
-  gridText: { fontSize: 12, color: '#4E342E', fontWeight: '700' },
-
-  bannerAd: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5EFE6', marginHorizontal: 16, borderRadius: 16, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#EAE0D5' },
-  bannerTitle: { fontSize: 20, fontWeight: '900', color: '#4E342E', marginBottom: 4 },
-  bannerSub: { fontSize: 11, color: '#8D6E63', letterSpacing: 1 },
-  
-  dynamicCalendar: { width: 50, height: 50, backgroundColor: '#FFF', borderRadius: 8, overflow: 'hidden', shadowColor: '#4E342E', shadowOpacity: 0.1, shadowRadius: 5, elevation: 2, borderWidth: 1, borderColor: '#EAE0D5' },
-  calHeader: { backgroundColor: '#D49A36', height: 18, justifyContent: 'center', alignItems: 'center' },
-  calMonth: { color: '#FFF', fontSize: 10, fontWeight: '900' },
-  calBody: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  calDay: { color: '#4E342E', fontSize: 20, fontWeight: '900' },
-
-  collectionSection: { paddingHorizontal: 16 },
-  colHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  sectionTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E' },
-  colHeaderLink: { color: '#D49A36', fontSize: 13, fontWeight: '900' }, 
-
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  colCard: { width: CARD_WIDTH, backgroundColor: '#FFF', borderRadius: 16, marginBottom: 16, overflow: 'hidden', shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, borderWidth: 1, borderColor: '#F0E6D2' },
-  colImgBox: { width: '100%', aspectRatio: 1, backgroundColor: '#FDF8F0' },
-  colImg: { width: '100%', height: '100%', resizeMode: 'cover' },
-  colInfo: { padding: 12 },
-  colName: { fontSize: 14, fontWeight: '800', color: '#4E342E', marginBottom: 4 },
-  colCount: { fontSize: 11, color: '#8D6E63', fontWeight: '600' },
-  emptyBox: { width: '100%', alignItems: 'center', paddingVertical: 40, backgroundColor: '#FFF', borderRadius: 16, borderWidth: 1, borderColor: '#F0E6D2' },
+  container: { flex: 1, backgroundColor: '#FFFFFF' }, scrollContent: { flexGrow: 1, alignItems: 'center' },
+  content: { width: '100%', maxWidth: 720, paddingHorizontal: 16 },
+  pageTitle: { fontSize: 22, lineHeight: 28, color: COLORS.ink, textAlign: 'center', paddingTop: 14, paddingBottom: 22 },
+  identity: { flexDirection: 'row', alignItems: 'center', marginBottom: 18, gap: 12 },
+  avatarButton: { width: 64, height: 64, borderRadius: 32, overflow: 'hidden', borderWidth: 1, borderColor: '#EBD6B8', backgroundColor: '#FBF6ED' },
+  avatar: { width: '100%', height: '100%', resizeMode: 'cover' }, identityInfo: { flex: 1, minWidth: 0 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 }, nickname: { flex: 1, fontSize: 18, lineHeight: 24, color: COLORS.ink },
+  memberBadge: { alignSelf: 'flex-start', backgroundColor: '#7193A7', borderRadius: 9, paddingHorizontal: 9, paddingVertical: 2, marginTop: 5 },
+  creatorBadge: { backgroundColor: '#AB813D' }, memberText: { color: '#FFFFFF', fontSize: 11, lineHeight: 16 },
+  idRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, marginBottom: -10, marginTop: -3 },
+  idText: { color: COLORS.muted, fontSize: 11, lineHeight: 16, flexShrink: 1 },
+  console: { flexDirection: 'row', alignItems: 'center', gap: 3, minHeight: 44, paddingHorizontal: 7, borderWidth: 1, borderColor: '#DEC497', borderRadius: 10, backgroundColor: '#FFFDF8', flexShrink: 0 },
+  consoleCompact: { alignSelf: 'flex-end', marginTop: -5, marginBottom: 14 }, consoleIcon: { width: 21, height: 21 }, consoleText: { fontSize: 11, lineHeight: 16, color: COLORS.gold },
+  wealthCard: { flexDirection: 'row', paddingVertical: 17, backgroundColor: '#FCF9F3', borderWidth: 1, borderColor: '#EFE3D2', borderRadius: 14 },
+  stat: { flex: 1, alignItems: 'center', minWidth: 0, paddingHorizontal: 7 }, statBorder: { borderLeftWidth: 1, borderColor: '#E8DECF' },
+  statLabel: { color: '#897A6C', fontSize: 12, lineHeight: 18, marginBottom: 6 }, statValue: { color: COLORS.ink, lineHeight: 26, fontVariant: ['tabular-nums'], maxWidth: '100%' },
+  menu: { flexDirection: 'row', flexWrap: 'wrap', paddingTop: 20, paddingBottom: 8 }, menuItem: { width: '25%', alignItems: 'center', paddingBottom: 17 },
+  menuIconBox: { width: 66, height: 66, alignItems: 'center', justifyContent: 'center' }, menuIcon: { width: 66, height: 66 }, existingMenuIcon: { width: 62, height: 62, borderRadius: 31 },
+  menuLabel: { color: COLORS.ink, fontSize: 13, lineHeight: 20, marginTop: 3 },
+  collectionSection: { borderWidth: 1, borderColor: '#EFE7DB', borderRadius: 16, padding: 15, marginTop: 2 },
+  collectionHeader: { minHeight: 32, marginBottom: 10, justifyContent: 'center' }, sectionTitle: { color: COLORS.ink, fontSize: 18, lineHeight: 24 }, collectionCount: { color: '#897A6C', fontSize: 14 },
+  collectionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 }, collectionCard: { minWidth: 0, marginBottom: 8 },
+  collectionImageBox: { width: '100%', aspectRatio: 1, borderRadius: 12, borderWidth: 1, borderColor: '#ECE2D4', backgroundColor: '#FCF8EF', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  collectionImage: { width: '100%', height: '100%', resizeMode: 'cover' }, collectionName: { color: COLORS.ink, fontSize: 15, lineHeight: 21, marginTop: 8 }, holdingCount: { color: COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 3 },
+  emptyCollection: { alignItems: 'center', paddingTop: 4, paddingBottom: 9 }, emptyArt: { width: 152, height: 112 }, emptyText: { color: COLORS.muted, fontSize: 14, lineHeight: 21, marginTop: 10, marginBottom: 12, textAlign: 'center' },
+  marketButton: { width: 160, marginBottom: 2 }, initialState: { minHeight: 320, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 }, stateArt: { width: 120, height: 120 },
+  loadingText: { color: COLORS.muted, fontSize: 14, lineHeight: 20, marginTop: 14 }, refreshError: { padding: 12, marginTop: 12, backgroundColor: '#FBF3EE', borderRadius: 10, minHeight: 44, justifyContent: 'center' },
+  errorText: { color: '#9A6E51', fontSize: 12, lineHeight: 18 },
+  notice: { position: 'absolute', bottom: 118, alignSelf: 'center', backgroundColor: '#51473F', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 11, maxWidth: '90%' }, noticeText: { color: '#FFFFFF', fontSize: 13, lineHeight: 19 },
+  pressed: { opacity: 0.78, transform: [{ scale: 0.98 }] },
 });

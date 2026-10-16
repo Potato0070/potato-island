@@ -1,0 +1,67 @@
+[
+  {
+    "file": "orders.png",
+    "source": "exec-b902977d-90da-47dd-880d-76aafe745bc5.png",
+    "width": 1254,
+    "height": 1254,
+    "pixelFormat": "Format32bppArgb",
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "invite.png",
+    "source": "exec-8691a82a-e3cd-405a-87c3-6273a9eeb567.png",
+    "width": 1254,
+    "height": 1254,
+    "pixelFormat": "Format32bppArgb",
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "buy-request.png",
+    "source": "exec-642a9abf-aba8-43d0-b5ff-89550a0e78bb.png",
+    "width": 1254,
+    "height": 1254,
+    "pixelFormat": "Format32bppArgb",
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "wallet.png",
+    "source": "exec-8a7d12c6-de11-4627-950c-023bcea4b35d.png",
+    "width": 1254,
+    "height": 1254,
+    "pixelFormat": "Format32bppArgb",
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "settings.png",
+    "source": "exec-1ed74266-b9de-4657-817d-7488b295cff6.png",
+    "width": 1254,
+    "height": 1254,
+    "pixelFormat": "Format32bppArgb",
+    "cornerAlpha": [
+      1,
+      0,
+      0,
+      0
+    ]
+  }
+]

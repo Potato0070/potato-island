@@ -1,0 +1,54 @@
+[
+  {
+    "file": "empty-inventory.png",
+    "source": "exec-b559bc32-5bbd-462a-a9eb-63882ab89117.png",
+    "width": 1536,
+    "height": 1024,
+    "pixelFormat": "Format32bppArgb",
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "empty-mailbox.png",
+    "source": "exec-23910a50-9dd2-42e7-b0d7-0b1ee99b060c.png",
+    "width": 1312,
+    "height": 1199,
+    "pixelFormat": "Format32bppArgb",
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "empty-search.png",
+    "source": "exec-5908604f-beb9-4f35-b233-b7d029fe22ba.png",
+    "width": 1536,
+    "height": 1024,
+    "pixelFormat": "Format32bppArgb",
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "network-unavailable.png",
+    "source": "exec-e55e823f-8b86-4bdb-8c2d-7c2ff95ca7b5.png",
+    "width": 1312,
+    "height": 1199,
+    "pixelFormat": "Format32bppArgb",
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+]

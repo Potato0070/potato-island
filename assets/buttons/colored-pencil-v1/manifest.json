@@ -1,0 +1,54 @@
+[
+  {
+    "file": "primary-blue.png",
+    "width": 1983,
+    "height": 793,
+    "pixelFormat": "Format32bppArgb",
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "centerAlpha": 253
+  },
+  {
+    "file": "transaction-gold.png",
+    "width": 2032,
+    "height": 774,
+    "pixelFormat": "Format32bppArgb",
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "centerAlpha": 253
+  },
+  {
+    "file": "secondary-ivory.png",
+    "width": 2172,
+    "height": 724,
+    "pixelFormat": "Format32bppArgb",
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "centerAlpha": 252
+  },
+  {
+    "file": "danger-terracotta.png",
+    "width": 1993,
+    "height": 789,
+    "pixelFormat": "Format32bppArgb",
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "centerAlpha": 253
+  }
+]
