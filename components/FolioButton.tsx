@@ -1,11 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
+import FolioNineSliceImage from './FolioNineSliceImage';
 
 const SURFACES = {
   blue: require('../assets/owned-collection/f-card-v1/runtime/button-fog-blue.webp'),
   gold: require('../assets/owned-collection/f-card-v1/runtime/button-harvest-gold.webp'),
   paper: require('../assets/owned-collection/f-card-v1/runtime/button-ivory-paper.webp'),
+};
+const BUTTON_INSETS = {
+  top: 30,
+  right: 110,
+  bottom: 30,
+  left: 110,
 };
 const PENCIL_ICONS = {
   transfer: require('../assets/owned-collection/f-card-v1/runtime/icon-transfer-pencil.webp'),
@@ -20,7 +27,7 @@ export default function FolioButton({ label, onPress, tone = 'blue', disabled = 
   const color = tone === 'blue' ? '#FFFFFF' : tone === 'gold' ? '#493D35' : '#493D35';
   return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: inactive, busy: loading }} disabled={inactive} onPress={onPress}
     style={({ pressed }) => [styles.button, style, inactive && styles.disabled, pressed && styles.pressed]}>
-    <Image source={SURFACES[tone]} resizeMode="stretch" style={StyleSheet.absoluteFill} accessible={false} />
+    <FolioNineSliceImage source={SURFACES[tone]} insets={BUTTON_INSETS} />
     {loading ? <ActivityIndicator color={color} size="small" /> : pencilIcon ? <Image source={PENCIL_ICONS[pencilIcon]} resizeMode="contain" style={styles.pencilIcon} accessible={false} /> : icon ? <Ionicons name={icon} size={17} color={color} /> : null}
     <Text numberOfLines={1} style={[styles.text, { color, fontFamily }]}>{label}</Text>
   </Pressable>;

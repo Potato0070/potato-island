@@ -286,13 +286,13 @@ export default function MyCollectionListScreen() {
           <View style={styles.loadingState}><ActivityIndicator size="large" color={OWNED_COLORS.blue} /><Text style={styles.loadingText}>正在翻开藏品册…</Text></View>
         ) : error ? (
           <View style={styles.emptyState}>
-            <Image source={EMPTY_NETWORK_ART} resizeMode="contain" style={styles.emptyArt} accessible={false} />
+            <Image source={EMPTY_NETWORK_ART} resizeMode="contain" style={styles.emptyNetworkArt} accessible={false} />
             <Text style={[styles.emptyTitle, { fontFamily: fonts.semibold }]}>{error}</Text>
             <FolioButton label="重新载入" tone="paper" onPress={() => void fetchItems()} style={styles.retryButton} fontFamily={fonts.semibold} />
           </View>
         ) : visibleItems.length === 0 ? (
           <View style={styles.emptyState}>
-            <Image source={search ? EMPTY_SEARCH_ART : EMPTY_ALBUM_ART} resizeMode="contain" style={styles.emptyArt} accessible={false} />
+            <Image source={search ? EMPTY_SEARCH_ART : EMPTY_ALBUM_ART} resizeMode="contain" style={search ? styles.emptySearchArt : styles.emptyAlbumArt} accessible={false} />
             <Text style={[styles.emptyTitle, { fontFamily: fonts.semibold }]}>{search ? '没有找到这张藏品' : filter === 'listed' ? '目前还没有寄售藏品' : '这一页藏品册还是空白'}</Text>
             <Text style={styles.emptyHint}>{search ? '试试藏品名称或完整编号的一部分' : filter === 'idle' ? '已寄售或暂不可操作的藏品不会出现在这里' : '获得藏品后，会在这里逐张归档'}</Text>
             {search ? <FolioButton label="清除搜索" tone="paper" onPress={() => setSearch('')} style={styles.retryButton} fontFamily={fonts.semibold} /> : null}
@@ -424,8 +424,8 @@ const styles = StyleSheet.create({
   captionMain: { flex: 1, paddingRight: 10 },
   cardName: { color: OWNED_COLORS.ink, fontSize: 15, lineHeight: 20 },
   cardSerial: { color: '#8E8175', fontSize: 12, lineHeight: 17, marginTop: 2 },
-  sideNumber: { position: 'absolute', right: -4, top: '19%', width: 28, height: 82, zIndex: 2 },
-  sideStatus: { position: 'absolute', right: -4, top: '48%', width: 30, height: 84, zIndex: 2 },
+  sideNumber: { position: 'absolute', right: -4, top: '19%', zIndex: 2 },
+  sideStatus: { position: 'absolute', right: -4, top: '48%', zIndex: 2 },
   carouselArrow: { position: 'absolute', top: '44%', zIndex: 5, width: 35, height: 35, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.95)', borderWidth: 1, borderColor: '#E7DED2', alignItems: 'center', justifyContent: 'center', shadowColor: '#4D3D31', shadowOpacity: 0.08, shadowRadius: 5, elevation: 2 },
   carouselArrowLeft: { left: 9 },
   carouselArrowRight: { right: 9 },
@@ -435,15 +435,17 @@ const styles = StyleSheet.create({
   dotActive: { width: 9, height: 9, borderRadius: 5, backgroundColor: OWNED_COLORS.blue },
   pageLabel: { color: '#988B7D', fontSize: 11 },
   filmStrip: { paddingHorizontal: 22, paddingTop: 4, paddingBottom: 18, gap: 9 },
-  filmItem: { width: 62, height: 68, padding: 3, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2D9CD' },
+  filmItem: { width: 62, height: 62, padding: 3, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2D9CD' },
   filmItemSelected: { borderWidth: 2, borderColor: OWNED_COLORS.gold, padding: 2, backgroundColor: '#FCF4E5' },
-  filmArt: { flex: 1, borderRadius: 6 },
+  filmArt: { width: '100%', aspectRatio: 1, borderRadius: 6 },
   filmStatus: { position: 'absolute', right: 2, bottom: 2, width: 10, height: 10, borderRadius: 5, backgroundColor: OWNED_COLORS.blue, borderWidth: 1.5, borderColor: '#FFFFFF' },
   filmStatusListed: { backgroundColor: OWNED_COLORS.gold },
   loadingState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingBottom: 80 },
   loadingText: { color: '#8D8175', fontSize: 13 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36, paddingBottom: 70, gap: 11 },
-  emptyArt: { width: 190, height: 145, marginBottom: 3 },
+  emptyAlbumArt: { width: 190, height: 127, marginBottom: 3 },
+  emptySearchArt: { width: 190, height: 155, marginBottom: 3 },
+  emptyNetworkArt: { width: 190, height: 194, marginBottom: 3 },
   emptyTitle: { color: OWNED_COLORS.ink, fontSize: 17, lineHeight: 24, textAlign: 'center' },
   emptyHint: { color: OWNED_COLORS.muted, fontSize: 13, lineHeight: 20, textAlign: 'center' },
   retryButton: { minWidth: 146, minHeight: 46, marginTop: 9 },

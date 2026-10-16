@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
 
   confirmBox: { width: '100%', maxWidth: 420, paddingHorizontal: 28, paddingVertical: 24, alignItems: 'center' },
   modalArtIcon: { width: 58, height: 58, marginBottom: 9 },
-  transferSuccessArt: { width: 210, height: 186, marginBottom: 2 },
+  transferSuccessArt: { width: 188, height: 188, aspectRatio: 1, marginBottom: 2 },
   confirmTitle: { fontSize: 19, color: OWNED_COLORS.ink, marginBottom: 10 },
   confirmDesc: { fontSize: 13, color: OWNED_COLORS.muted, textAlign: 'center', lineHeight: 21, marginBottom: 18 },
   warningText: { fontWeight: '700', color: OWNED_COLORS.gold },
