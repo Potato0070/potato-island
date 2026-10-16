@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
@@ -22,6 +22,7 @@ const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
 
 export default function TransferScreen() {
   const router = useRouter();
+  const { nftId } = useLocalSearchParams<{ nftId?: string }>();
   const [receiverId, setReceiverId] = useState('');
   const [transferCards, setTransferCards] = useState(0);
   const [publishing, setPublishing] = useState(false);
@@ -43,10 +44,33 @@ export default function TransferScreen() {
     });
   }, []);
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 2500);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!nftId) return;
+    let active = true;
+    const loadSelectedNft = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data, error } = await supabase.from('nfts')
+        .select('*, collections(name, image_url)')
+        .eq('id', nftId)
+        .eq('owner_id', user.id)
+        .eq('status', 'idle')
+        .maybeSingle();
+      if (!active) return;
+      if (error || !data) {
+        showToast('这张藏品暂时不能转赠，请返回金库刷新状态');
+        return;
+      }
+      setSelectedNft(data);
+    };
+    void loadSelectedNft();
+    return () => { active = false; };
+  }, [nftId, showToast]);
 
   const openNftPicker = async () => {
     setShowPicker(true);

@@ -1,542 +1,466 @@
-import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import FolioButton from '../components/FolioButton';
+import { OWNED_COLORS, formatIslandTime, itemStatus, money, serialLabel, validateConsignPrice, type OwnedHistory, type OwnedItem } from '../constants/owned-collection';
+import { useIslandFonts } from '../hooks/use-island-fonts';
 import { supabase } from '../supabase';
 
-const { width } = Dimensions.get('window');
-
-// 💰 千分位金额
-const formatMoney = (num: number | string) => {
-  const n = Number(num);
-  if (isNaN(n)) return '0.00';
-  let parts = n.toFixed(2).split(".");
-  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return parts.join(".");
+const HISTORY_LABELS: Record<string, string> = {
+  direct_buy: '集市成交',
+  bid_match: '求购撮合',
+  launch_mint: '首发获得',
+  system_airdrop: '岛屿赠礼',
+  '好友转赠': '岛民转赠',
+  genesis_mint: '藏品生成',
 };
 
-const TYPE_MAP: Record<string, string> = {
-  'direct_buy': '现货扫单',
-  'bid_match': '求购撮合',
-  'launch_mint': '首发盲盒',
-  'system_airdrop': '系统空投',
-  '好友转赠': '私下转赠',
-  'genesis_mint': '创世发行'
-};
+type ResultKind = 'listed' | 'withdrawn';
+type ResultState = { kind: ResultKind; price: number };
 
-const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
-  const [hasError, setHasError] = useState(false);
-  const [loading, setLoading] = useState(true);
+function artUri(item: OwnedItem) {
+  const record = item as OwnedItem & { image_url?: string | null };
+  const collection = Array.isArray(item.collections) ? item.collections[0] : item.collections;
+  return record.image_url || collection?.image_url || null;
+}
 
+function CollectionImage({ uri, style }: { uri: string | null; style?: object }) {
+  const [failed, setFailed] = useState(false);
   return (
-    <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0', overflow: 'hidden' }]}>
-      {loading && !hasError && <ActivityIndicator color="#D49A36" style={{ position: 'absolute' }} />}
-      {!hasError ? (
-        <Image
-          source={{ uri: uri || 'invalid_url' }}
-          style={[{ position: 'absolute', width: '100%', height: '100%' }]}
-          resizeMode="cover"
-          onLoadEnd={() => setLoading(false)}
-          onError={() => { setHasError(true); setLoading(false); }}
-        />
-      ) : (
-        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-           <Text style={{ fontSize: 32 }}>🥔</Text>
-        </View>
+    <View style={[styles.imageFallback, style]}>
+      {uri && !failed ? <Image source={{ uri }} resizeMode="cover" style={StyleSheet.absoluteFill} onError={() => setFailed(true)} /> : (
+        <View style={styles.imageFallbackMark}><Ionicons name="image-outline" size={28} color={OWNED_COLORS.blue} /><Text style={styles.imageFallbackText}>岛屿藏品</Text></View>
       )}
     </View>
   );
-};
+}
 
-export default function ItemDetailScreen() {
+function collectionRecord(item: OwnedItem) {
+  return Array.isArray(item.collections) ? item.collections[0] : item.collections;
+}
+
+export default function MyNftDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
-  const insets = useSafeAreaInsets(); 
-
-  const [nft, setNft] = useState<any>(null);
-  const [myUserId, setMyUserId] = useState<string>('');
-  
-  const [currentHistory, setCurrentHistory] = useState<any[]>([]);
-  const [allHistory, setAllHistory] = useState<any[]>([]);
-  const [historyMode, setHistoryMode] = useState<'current' | 'all'>('current');
-  
-  const [showPayModal, setShowPayModal] = useState(false);
-  const [userBalance, setUserBalance] = useState(0);
-  
-  const [listModalVisible, setListModalVisible] = useState(false);
-  const [listStep, setListStep] = useState<1 | 2>(1);
-  const [listPrice, setListPrice] = useState('');
-  
-  const [cancelListModal, setCancelListModal] = useState(false);
-  const [transferTipModal, setTransferTipModal] = useState(false);
-
-  const [listing, setListing] = useState(false);
+  const params = useLocalSearchParams<{ id?: string | string[] }>();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const fonts = useIslandFonts();
+  const [item, setItem] = useState<OwnedItem | null>(null);
+  const [logs, setLogs] = useState<OwnedHistory[]>([]);
+  const [userId, setUserId] = useState('');
   const [loading, setLoading] = useState(true);
-  const [buying, setBuying] = useState(false);
-  
-  const [toastMsg, setToastMsg] = useState('');
-  const [successModal, setSuccessModal] = useState<{title: string, msg: string} | null>(null);
+  const [pageError, setPageError] = useState('');
+  const [priceSheetOpen, setPriceSheetOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [result, setResult] = useState<ResultState | null>(null);
+  const [price, setPrice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [inlineError, setInlineError] = useState('');
+  const mutationLock = useRef(false);
 
-  useEffect(() => {
-    fetchData();
+  const fetchData = useCallback(async () => {
+    if (!id) {
+      setPageError('没有找到这张藏品的编号');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setPageError('');
+    try {
+      const [{ data: { user }, error: authError }, { data, error: itemError }] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase.from('nfts').select('*, collections(id, name, image_url, max_consign_price, total_minted, circulating_supply)').eq('id', id).maybeSingle(),
+      ]);
+      if (authError) throw authError;
+      if (itemError) throw itemError;
+      setUserId(user?.id || '');
+      if (!data) throw new Error('这张藏品档案暂时无法读取');
+      setItem(data as unknown as OwnedItem);
+      const { data: transferLogs, error: historyError } = await supabase.from('transfer_logs')
+        .select('id, nft_id, buyer_id, transfer_type, transfer_time, price')
+        .eq('nft_id', id)
+        .order('transfer_time', { ascending: false })
+        .limit(30);
+      if (historyError) console.warn('流转记录暂不可用', historyError.message);
+      const events: OwnedHistory[] = [...((transferLogs || []) as OwnedHistory[])];
+      if (data.created_at && !events.some((event) => event.transfer_type === 'genesis_mint')) {
+        events.push({
+          id: 'origin-' + data.id,
+          nft_id: data.id,
+          buyer_id: null,
+          transfer_type: 'genesis_mint',
+          transfer_time: data.created_at,
+          price: 0,
+        });
+      }
+      setLogs(events.sort((left, right) => new Date(right.transfer_time).getTime() - new Date(left.transfer_time).getTime()));
+    } catch (cause) {
+      console.error('藏品档案读取失败', cause);
+      setPageError(cause instanceof Error ? cause.message : '藏品档案暂时无法打开');
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
-  const showToast = (msg: string) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 2500);
+  useEffect(() => { void fetchData(); }, [fetchData]);
+
+  const closePriceSheet = () => {
+    if (busy) return;
+    setPriceSheetOpen(false);
+    setInlineError('');
   };
 
-  const fetchData = async () => {
+  const publishConsign = async () => {
+    if (!item || mutationLock.current || busy) return;
+    const problem = validateConsignPrice(price, collectionRecord(item)?.max_consign_price);
+    if (problem) {
+      setInlineError(problem);
+      return;
+    }
+    mutationLock.current = true;
+    setBusy(true);
+    setInlineError('');
     try {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-         setMyUserId(user.id);
-         const { data: prof } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
-         if (prof) setUserBalance(prof.potato_coin_balance);
-      }
-
-      const { data: nftData, error: nftErr } = await supabase.from('nfts').select('*, collections(*)').eq('id', id).single();
-      if (nftErr) throw new Error(`藏品查询失败: ${nftErr.message}`);
-      setNft(nftData);
-
-      // 1. 当前卡片的流水 + 创世出生记录
-      const { data: currHist } = await supabase.from('transfer_logs')
-        .select('*') 
-        .eq('nft_id', id)
-        .order('transfer_time', { ascending: false });
-      
-      const genesisLog = {
-         id: 'genesis_' + nftData.id,
-         buyer_id: 'system', 
-         transfer_type: 'genesis_mint',
-         transfer_time: nftData.created_at, 
-         price: 0,
-         nft_id: nftData.id
-      };
-      setCurrentHistory([...(currHist || []), genesisLog]);
-
-      // 2. 整个系列的流水 + 创世记录混编
-      if (nftData?.collection_id) {
-         const { data: realAllHist } = await supabase.from('transfer_logs')
-           .select('*')
-           .eq('collection_id', nftData.collection_id)
-           .order('transfer_time', { ascending: false })
-           .limit(30);
-           
-         const { data: allNfts } = await supabase.from('nfts')
-           .select('id, created_at')
-           .eq('collection_id', nftData.collection_id)
-           .order('created_at', { ascending: false })
-           .limit(30);
-           
-         const genesisAllHist = (allNfts || []).map(n => ({
-            id: 'genesis_' + n.id,
-            buyer_id: 'system',
-            transfer_type: 'genesis_mint',
-            transfer_time: n.created_at,
-            price: 0,
-            nft_id: n.id
-         }));
-
-         const combinedAll = [...(realAllHist || []), ...genesisAllHist]
-            .sort((a, b) => new Date(b.transfer_time).getTime() - new Date(a.transfer_time).getTime())
-            .slice(0, 30);
-
-         setAllHistory(combinedAll);
-      }
-    } catch(e: any) { 
-      Alert.alert("详情页加载异常", e.message || JSON.stringify(e));
-    } finally { setLoading(false); }
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user || user.id !== userId) throw new Error('登录状态已变化，请重新载入档案');
+      const { data: updated, error: updateError } = await supabase.from('nfts')
+        .update({ status: 'listed', consign_price: Number(price) })
+        .eq('id', item.id)
+        .eq('owner_id', user.id)
+        .eq('status', 'idle')
+        .select('id, status, consign_price')
+        .maybeSingle();
+      if (updateError) throw updateError;
+      if (!updated) throw new Error('这张藏品的状态已变化，请重新载入后再试');
+      setItem((current) => current ? { ...current, status: 'listed', consign_price: Number(price) } : current);
+      setPriceSheetOpen(false);
+      setResult({ kind: 'listed', price: Number(price) });
+    } catch (cause) {
+      setInlineError(cause instanceof Error ? cause.message : '上架没有完成，请重试');
+    } finally {
+      mutationLock.current = false;
+      setBusy(false);
+    }
   };
 
-  const executeBuy = async () => {
-    setBuying(true);
+  const withdrawConsign = async () => {
+    if (!item || mutationLock.current || busy) return;
+    mutationLock.current = true;
+    setBusy(true);
+    setInlineError('');
     try {
-      if (userBalance < nft.consign_price) throw new Error('您的钱包余额不足，请先充值！');
-      const { error } = await supabase.rpc('execute_trade', { p_nft_id: nft.id, p_buyer_id: myUserId });
-      if (error) throw error;
-      setShowPayModal(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setTimeout(() => {
-         setSuccessModal({ title: '✅ 交易成功', msg: '您已成功买下该藏品，资产已打入您的金库！' });
-      }, 400);
-    } catch (err: any) { 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('交易失败', err.message || JSON.stringify(err)); 
-    } finally { setBuying(false); }
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user || user.id !== userId) throw new Error('登录状态已变化，请重新载入档案');
+      const { data: updated, error: updateError } = await supabase.from('nfts')
+        .update({ status: 'idle', consign_price: null })
+        .eq('id', item.id)
+        .eq('owner_id', user.id)
+        .eq('status', 'listed')
+        .select('id, status')
+        .maybeSingle();
+      if (updateError) throw updateError;
+      if (!updated) throw new Error('寄售状态已变化，请重新载入后再试');
+      setItem((current) => current ? { ...current, status: 'idle', consign_price: null } : current);
+      setWithdrawOpen(false);
+      setResult({ kind: 'withdrawn', price: Number(item.consign_price || 0) });
+    } catch (cause) {
+      setInlineError(cause instanceof Error ? cause.message : '撤回没有完成，请重试');
+    } finally {
+      mutationLock.current = false;
+      setBusy(false);
+    }
   };
 
-  const handleListNextStep = () => {
-     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-     const p = parseFloat(listPrice);
-     if (isNaN(p) || p <= 0) return showToast('请输入有效的寄售价格！');
-     const maxLimit = nft.collections?.max_consign_price;
-     if (maxLimit && p > maxLimit) {
-        return showToast(`违规拦截：寄售价格不得高于最高限价 ¥${formatMoney(maxLimit)}`);
-     }
-     setListStep(2);
+  const openConsign = () => {
+    setPrice('');
+    setInlineError('');
+    setPriceSheetOpen(true);
   };
 
-  const executeList = async () => {
-     setListing(true);
-     try {
-        const { error } = await supabase.from('nfts').update({ status: 'listed', consign_price: parseFloat(listPrice) }).eq('id', nft.id);
-        if (error) throw error;
-        setListModalVisible(false);
-        setListPrice('');
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setTimeout(() => {
-           setSuccessModal({ title: '✅ 挂单成功', msg: '您的藏品已成功上架至交易大盘！' });
-           fetchData(); 
-        }, 400);
-     } catch(e: any) { Alert.alert('挂单失败', e.message); } finally { setListing(false); }
-  };
-
-  const executeCancelList = async () => {
-     setListing(true);
-     try {
-       const { error } = await supabase.from('nfts').update({ status: 'idle', consign_price: null }).eq('id', nft.id);
-       if (error) throw error;
-       setCancelListModal(false);
-       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-       setTimeout(() => {
-          setSuccessModal({ title: '📦 撤销成功', msg: '已成功撤销寄售，藏品已退回您的金库锁定！' });
-          fetchData();
-       }, 400);
-     } catch (e: any) { Alert.alert('撤销失败', e.message); } finally { setListing(false); }
-  };
-
-  const handleTransfer = () => {
-     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-     try { router.push({ pathname: '/transfer', params: { nftId: nft.id } }); } catch (e: any) { Alert.alert("路由报错", e.message); }
-  };
-
-  const getAnonymousName = (uid: string) => {
-     if (uid === 'system') return '创世中枢网络';
-     if (!uid) return '神秘岛民';
-     if (uid === myUserId) return '您自己';
-     return `匿名藏友_${uid.substring(0, 4).toUpperCase()}`;
-  };
-
-  if (!nft) return <View style={styles.center}><ActivityIndicator color="#D49A36" /></View>;
-
-  const hashString = (nft.id || '').replace(/-/g, '').toUpperCase();
-  const displayHistory = historyMode === 'current' ? currentHistory : allHistory;
-  
-  // 🌟 核心：四大状态全方位研判
-  const isOwner = myUserId === nft.owner_id;
-  const isListed = nft.status === 'listed';
+  const isOwner = Boolean(item && userId && item.owner_id === userId);
+  const isIdle = item?.status === 'idle';
+  const isListed = item?.status === 'listed';
+  const collection = item ? collectionRecord(item) : null;
+  const collectionTitle = collection?.name || '藏品档案';
+  const serial = item ? serialLabel(item.serial_number) : '';
+  const imageUri = item ? artUri(item) : null;
+  const currencyValue = Number(item?.consign_price || 0);
+  const history = logs.length ? logs : [];
+  const contentWidth = Math.min(width, 760);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.navBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}><Text style={styles.iconText}>〈</Text></TouchableOpacity>
-        <Text style={styles.navTitle}>藏品档案</Text>
-        <View style={styles.navBtn} />
+    <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
+      <View style={[styles.page, { maxWidth: 760 }]}>
+        <View style={styles.navBar}>
+          <Pressable accessibilityRole="button" accessibilityLabel="返回藏品册" onPress={() => router.back()} style={styles.backButton}><Ionicons name="chevron-back" size={25} color={OWNED_COLORS.ink} /></Pressable>
+          <Text accessibilityRole="header" style={[styles.navTitle, { fontFamily: fonts.semibold }]}>藏品详情</Text>
+          <View style={styles.navSpacer} />
+        </View>
+
+        {loading ? <View style={styles.loading}><ActivityIndicator size="large" color={OWNED_COLORS.blue} /><Text style={styles.loadingText}>正在整理藏品档案…</Text></View> : pageError || !item ? (
+          <View style={styles.loading}>
+            <Ionicons name="albums-outline" size={34} color={OWNED_COLORS.blue} />
+            <Text style={[styles.errorText, { fontFamily: fonts.semibold }]}>{pageError || '藏品档案未找到'}</Text>
+            <Pressable accessibilityRole="button" onPress={() => void fetchData()} style={styles.retryButton}><Text style={[styles.retryText, { fontFamily: fonts.semibold }]}>重新载入</Text></Pressable>
+          </View>
+        ) : (
+          <>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: 30 }]}>
+              {!isOwner ? <View style={styles.notice}><Ionicons name="information-circle-outline" size={18} color={OWNED_COLORS.gold} /><Text style={styles.noticeText}>这张藏品已不在当前金库，操作入口已关闭。</Text></View> : null}
+              <View style={[styles.cardStage, { width: Math.min(contentWidth - 38, 540) }]}>
+                <View style={styles.cardBack} />
+                <View style={styles.cardBack2} />
+                <View style={styles.detailCard}>
+                  <View style={styles.detailArtFrame}>
+                    <CollectionImage uri={imageUri} style={styles.detailArt} />
+                    <View pointerEvents="none" style={styles.artFrameInset} />
+                    <View style={[styles.detailStatus, isListed ? styles.statusListed : isIdle ? styles.statusIdle : styles.statusOther]}>
+                      <View style={styles.statusDot} />
+                      <Text style={[styles.detailStatusText, { fontFamily: fonts.semibold }]}>{itemStatus(item.status)}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.detailCardCopy}>
+                    <Text style={[styles.detailName, { fontFamily: fonts.semibold }]}>{collectionTitle}</Text>
+                    <Text style={styles.detailSerial}>{serial}</Text>
+                    <View style={styles.ruleLine} />
+                    <View style={styles.cardDataRow}><Text style={styles.dataLabel}>当前状态</Text><Text style={[styles.dataValue, { color: isListed ? OWNED_COLORS.gold : OWNED_COLORS.blue }]}>{itemStatus(item.status)}</Text></View>
+                    <View style={styles.cardDataRow}><Text style={styles.dataLabel}>持有人</Text><Text style={styles.dataValue}>{isOwner ? '您自己' : '已转出'}</Text></View>
+                    {item.created_at ? <View style={styles.cardDataRow}><Text style={styles.dataLabel}>生成时间</Text><Text style={styles.dataValue}>{formatIslandTime(item.created_at)}</Text></View> : null}
+                  </View>
+                  {isListed ? <View style={styles.listedPrice}><Text style={styles.listedPriceLabel}>当前寄售价格</Text><Text style={[styles.listedPriceValue, { fontFamily: fonts.semibold }]}>{money(currencyValue)} <Text style={styles.coinUnit}>土豆币</Text></Text></View> : null}
+                </View>
+                <View style={styles.serialTab}><Text style={styles.serialTabText}>{serial}</Text></View>
+              </View>
+
+              <View style={styles.provenance}>
+                <View style={styles.sectionHeading}>
+                  <View><Text style={[styles.sectionTitle, { fontFamily: fonts.semibold }]}>流转记录</Text><Text style={styles.sectionSubtitle}>这张藏品在岛上的足迹</Text></View>
+                  <View style={styles.recordCount}><Text style={styles.recordCountText}>{history.length} 条</Text></View>
+                </View>
+                {history.length === 0 ? <View style={styles.emptyHistory}><Ionicons name="time-outline" size={18} color="#9A8E82" /><Text style={styles.emptyHistoryText}>暂时还没有流转记录</Text></View> : history.map((entry, index) => {
+                  const origin = entry.transfer_type === 'genesis_mint';
+                  const label = HISTORY_LABELS[entry.transfer_type || ''] || '藏品流转';
+                  return (
+                    <View key={entry.id} style={styles.historyItem}>
+                      <View style={styles.timelineColumn}><View style={[styles.timelineDot, origin && styles.timelineDotOrigin, index === history.length - 1 && styles.timelineDotLast]} />{index < history.length - 1 ? <View style={styles.timelineLine} /> : null}</View>
+                      <View style={styles.historyCopy}>
+                        <View style={styles.historyTitleRow}><Text style={[styles.historyTitle, { fontFamily: fonts.semibold }]}>{label}</Text>{Number(entry.price || 0) > 0 ? <Text style={[styles.historyPrice, { fontFamily: fonts.semibold }]}>{money(entry.price)} 土豆币</Text> : null}</View>
+                        <Text style={styles.historyDate}>{formatIslandTime(entry.transfer_time)}</Text>
+                        {origin ? <Text style={styles.historyHint}>在土豆岛生成</Text> : null}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            {isOwner ? (
+              <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+                {isIdle ? (
+                  <>
+                    <FolioButton label="转赠" tone="paper" icon="paper-plane-outline" onPress={() => router.push({ pathname: '/transfer', params: { nftId: item.id } })} style={styles.actionButton} fontFamily={fonts.semibold} />
+                    <FolioButton label="寄售" tone="blue" icon="pricetag-outline" onPress={openConsign} style={styles.actionButton} fontFamily={fonts.semibold} />
+                  </>
+                ) : isListed ? (
+                  <FolioButton label="撤回寄售" tone="gold" icon="arrow-undo-outline" onPress={() => { setInlineError(''); setWithdrawOpen(true); }} style={styles.fullAction} fontFamily={fonts.semibold} />
+                ) : (
+                  <View style={styles.unavailableAction}><Ionicons name="lock-closed-outline" size={16} color="#93877D" /><Text style={styles.unavailableText}>当前状态暂不支持操作</Text></View>
+                )}
+              </View>
+            ) : null}
+          </>
+        )}
       </View>
 
-      {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
-
-      <ScrollView contentContainerStyle={{ paddingBottom: 150 }} showsVerticalScrollIndicator={false}>
-        <View style={styles.stageContainer}>
-           <View style={styles.floatBox}><FallbackImage uri={nft.collections?.image_url} style={styles.mainImg} /></View>
-           <View style={styles.shadowOval} />
-           
-           <View style={[styles.statusBadge, isListed ? {backgroundColor: '#FF3B30'} : {backgroundColor: '#D49A36'}]}>
-               <Text style={styles.statusBadgeText}>{isListed ? `大盘寄售中 (¥${formatMoney(nft.consign_price)})` : '金库锁定状态'}</Text>
-           </View>
-        </View>
-
-        <View style={styles.infoSection}>
-           <Text style={styles.colName}>{nft.collections?.name}</Text>
-           <Text style={styles.supplyText}>发行 {formatMoney(nft.collections?.total_minted).replace('.00','')} | 流通 {formatMoney(nft.collections?.circulating_supply).replace('.00','')}</Text>
-           <View style={styles.infoRow}><Text style={styles.infoLabel}>唯一编码</Text><Text style={styles.infoValueHigh}>#{String(nft.serial_number).padStart(6, '0')}</Text></View>
-           <View style={styles.infoRow}><Text style={styles.infoLabel}>持有人</Text><Text style={[styles.infoValue, isOwner && {color: '#D49A36'}]}>{isOwner ? '👑 您自己' : '🔒 其他藏友'}</Text></View>
-           <View style={styles.infoRow}><Text style={styles.infoLabel}>底层哈希</Text><Text style={styles.infoHash} numberOfLines={1}>{hashString.substring(0, 10)}...{hashString.substring(hashString.length - 10)}</Text></View>
-        </View>
-
-        <View style={styles.historySection}>
-           <View style={styles.historyHeader}>
-              <Text style={styles.sectionTitle}>流转溯源</Text>
-              <TouchableOpacity style={styles.historySwitch} onPress={() => { Haptics.selectionAsync(); setHistoryMode(historyMode === 'current' ? 'all' : 'current'); }}>
-                 <Text style={styles.historySwitchText}>{historyMode === 'current' ? '当前单卡溯源 ⇌' : '全系列大盘溯源 ⇌'}</Text>
-              </TouchableOpacity>
-           </View>
-
-           {displayHistory.length === 0 ? (
-             <Text style={{textAlign: 'center', color: '#A1887F', paddingVertical: 20, fontWeight: '700'}}>暂无流转记录</Text>
-           ) : (
-             displayHistory.map((log) => (
-                <View key={log.id} style={styles.historyRow}>
-                   <View style={styles.historyLeft}>
-                      <Text style={[styles.historyUser, log.buyer_id === 'system' && {color: '#D49A36'}, log.buyer_id === myUserId && {color: '#FF3B30'}]}>
-                          {getAnonymousName(log.buyer_id)}
-                      </Text>
-                      <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                         <View style={[styles.historyTypeTag, log.transfer_type === 'genesis_mint' && {backgroundColor: '#FFFDF5', borderColor: '#D49A36'}]}>
-                            <Text style={[styles.historyTypeText, log.transfer_type === 'genesis_mint' && {color: '#D49A36'}]}>
-                               {TYPE_MAP[log.transfer_type] || '交易流转'}
-                            </Text>
-                         </View>
-                         <Text style={styles.historyTime}>{new Date(log.transfer_time).toLocaleString()}</Text>
-                      </View>
-                   </View>
-                   <View style={{alignItems: 'flex-end'}}>
-                      <Text style={[styles.historyPrice, log.price === 0 && {color: '#A1887F', fontSize: 14}]}>
-                         {log.price > 0 ? `¥ ${formatMoney(log.price)}` : '-'}
-                      </Text>
-                      {historyMode === 'all' && (
-                         <Text style={{fontSize: 10, color: '#A1887F', fontFamily: 'monospace', marginTop: 2, fontWeight: '600'}}>
-                            #{log.nft_id.substring(0,6).toUpperCase()}
-                         </Text>
-                      )}
-                   </View>
-                </View>
-             ))
-           )}
-        </View>
-      </ScrollView>
-
-      {/* ================= 🌟 核心：四大状态自适应动作栏 ================= */}
-      
-      {/* 状态 1：别人的卡 + 正在寄售 -> 显示购买 */}
-      {(!isOwner && isListed) && (
-        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-           <View><Text style={{color: '#8D6E63', fontSize: 12, fontWeight: '800'}}>寄售一口价</Text><Text style={{color: '#FF3B30', fontSize: 24, fontWeight: '900'}}>¥ {formatMoney(nft.consign_price)}</Text></View>
-           <TouchableOpacity style={styles.buyBtn} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowPayModal(true); }}><Text style={styles.buyText}>立即购买</Text></TouchableOpacity>
-        </View>
-      )}
-
-      {/* 状态 2：别人的卡 + 不在寄售 -> 显示求购 */}
-      {(!isOwner && !isListed) && (
-        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-           <View><Text style={{color: '#8D6E63', fontSize: 12, fontWeight: '800'}}>当前状态</Text><Text style={{color: '#4E342E', fontSize: 18, fontWeight: '900'}}>暂不出售</Text></View>
-           <TouchableOpacity style={styles.buyBtn} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push({pathname: '/create-buy-order', params: {colId: nft.collection_id}}); }}><Text style={styles.buyText}>发起求购拿货</Text></TouchableOpacity>
-        </View>
-      )}
-
-      {/* 状态 3：我的卡 + 闲置中 -> 显示转赠和挂单 */}
-      {(isOwner && !isListed) && (
-        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-           <TouchableOpacity style={[styles.actionBtn, {flex: 0.35, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#D49A36'}]} onPress={() => setTransferTipModal(true)}>
-              <Text style={[styles.buyText, {color: '#D49A36'}]}>🎁 转赠</Text>
-           </TouchableOpacity>
-           <TouchableOpacity style={[styles.buyBtn, {flex: 0.6, backgroundColor: '#D49A36', marginLeft: 12}]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setListStep(1); setListPrice(''); setListModalVisible(true); }}>
-              <Text style={styles.buyText}>发布上架寄售</Text>
-           </TouchableOpacity>
-        </View>
-      )}
-
-      {/* 状态 4：我的卡 + 正在寄售 -> 显示撤销 */}
-      {(isOwner && isListed) && (
-        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-           <View><Text style={{color: '#8D6E63', fontSize: 12, fontWeight: '800'}}>大盘展示价</Text><Text style={{color: '#D49A36', fontSize: 24, fontWeight: '900'}}>¥ {formatMoney(nft.consign_price)}</Text></View>
-           {/* 🌟 这里的 processing 已经完美替换为 listing */}
-           <TouchableOpacity style={[styles.buyBtn, {backgroundColor: '#FFF', borderColor: '#FF3B30', borderWidth: 2}]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setCancelListModal(true); }} disabled={listing}>
-              {listing ? <ActivityIndicator color="#FF3B30" /> : <Text style={[styles.buyText, {color: '#FF3B30'}]}>撤回金库</Text>}
-           </TouchableOpacity>
-        </View>
-      )}
-
-      {/* ================= 💎 所有关联模态框 ================= */}
-
-      {/* 上架挂单弹窗 */}
-      <Modal visible={listModalVisible} transparent animationType="slide">
-        {listStep === 1 ? (
-           <View style={styles.modalOverlay}>
-             <View style={[styles.listSheet, {paddingBottom: Math.max(insets.bottom, 40)}]}>
-                <View style={styles.sheetHeader}>
-                   <Text style={styles.sheetTitle}>发布寄售</Text>
-                   <TouchableOpacity onPress={() => setListModalVisible(false)}><Text style={{color: '#8D6E63', fontSize: 24, fontWeight: '900'}}>×</Text></TouchableOpacity>
-                </View>
-                <View style={{padding: 20}}>
-                   <Text style={{fontSize: 13, color: '#8D6E63', marginBottom: 12, fontWeight: '700'}}>当前系列最高限价: ¥{nft.collections?.max_consign_price ? formatMoney(nft.collections.max_consign_price) : '无'}</Text>
-                   <TextInput style={styles.inputField} keyboardType="decimal-pad" value={listPrice} onChangeText={(val) => setListPrice(val.replace(/[^0-9.]/g, ''))} placeholder="请输入寄售价格" placeholderTextColor="#A1887F" textAlign="center" autoFocus />
-                   <TouchableOpacity style={[styles.confirmPayBtn, {backgroundColor: '#D49A36', marginTop: 24}]} onPress={handleListNextStep}>
-                      <Text style={{color: '#FFF', fontWeight: '900', fontSize: 16}}>下一步</Text>
-                   </TouchableOpacity>
-                </View>
-             </View>
-           </View>
-        ) : (
-           <View style={styles.modalOverlayCenter}>
-             <View style={styles.confirmBox}>
-                <Text style={styles.confirmTitle}>📝 寄售确认</Text>
-                <Text style={styles.confirmDesc}>您即将以 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{formatMoney(listPrice)}</Text> 的一口价挂单。期间该卡牌将被锁定，是否继续？</Text>
-                <View style={styles.confirmBtnRow}>
-                   <TouchableOpacity style={styles.cancelBtnOutline} onPress={() => setListStep(1)}><Text style={styles.cancelBtnOutlineText}>修改价格</Text></TouchableOpacity>
-                   <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#D49A36'}]} onPress={executeList} disabled={listing}>
-                      {listing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认上架</Text>}
-                   </TouchableOpacity>
-                </View>
-             </View>
-           </View>
-        )}
-      </Modal>
-
-      {/* 购买支付弹窗 */}
-      <Modal visible={showPayModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <RNSafeAreaView style={[styles.bottomSheet, {paddingBottom: Math.max(insets.bottom, 20)}]}>
-             <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>订单结算</Text>
-                <TouchableOpacity onPress={() => setShowPayModal(false)}><Text style={{color: '#8D6E63', fontSize: 24, fontWeight: '900'}}>×</Text></TouchableOpacity>
-             </View>
-
-             <View style={styles.sheetContent}>
-                <View style={styles.orderItemRow}>
-                   <FallbackImage uri={nft.collections?.image_url} style={styles.orderImg} />
-                   <View style={{flex: 1}}>
-                      <Text style={styles.orderName}>{nft.collections?.name}</Text>
-                      <Text style={styles.orderSerial}>#{String(nft.serial_number).padStart(6, '0')}</Text>
-                   </View>
-                   <Text style={styles.orderPrice}>¥ {formatMoney(nft.consign_price)}</Text>
-                </View>
-
-                <Text style={styles.payMethodTitle}>支付方式</Text>
-                <View style={styles.payMethodRow}>
-                   <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                      <Text style={{fontSize: 24, marginRight: 10}}>💳</Text>
-                      <View>
-                         <Text style={styles.payMethodName}>土豆币专属金库</Text>
-                         <Text style={styles.payMethodSub}>当前可用余额: ¥ {formatMoney(userBalance)}</Text>
-                      </View>
-                   </View>
-                   <View style={styles.radioChecked}><View style={styles.radioInner} /></View>
-                </View>
-             </View>
-
-             <View style={styles.sheetFooter}>
-                <TouchableOpacity style={[styles.confirmPayBtn, userBalance < nft.consign_price && {backgroundColor: '#EAE0D5'}]} onPress={executeBuy} disabled={userBalance < nft.consign_price || buying}>
-                   {buying ? <ActivityIndicator color="#FFF" /> : <Text style={[{color: '#FFF', fontWeight: '900', fontSize: 16}, userBalance < nft.consign_price && {color: '#A1887F'}]}>{userBalance < nft.consign_price ? '土豆币余额不足' : `安全支付 ¥ ${formatMoney(nft.consign_price)}`}</Text>}
-                </TouchableOpacity>
-             </View>
-          </RNSafeAreaView>
-        </View>
-      </Modal>
-
-      {/* 🌟 核心：这里的 processing 也完美替换为了 listing */}
-      <Modal visible={cancelListModal} transparent animationType="fade">
-         <View style={styles.modalOverlayCenter}>
-            <View style={styles.confirmBox}>
-               <Text style={styles.confirmTitle}>🚨 撤回确认</Text>
-               <Text style={styles.confirmDesc}>您确定要将【<Text style={{fontWeight:'900', color:'#4E342E'}}>{nft?.collections?.name}</Text>】从大盘撤下吗？</Text>
-               <View style={styles.confirmBtnRow}>
-                  <TouchableOpacity style={styles.cancelBtnOutline} onPress={() => setCancelListModal(false)}><Text style={styles.cancelBtnOutlineText}>保留挂单</Text></TouchableOpacity>
-                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#FF3B30'}]} onPress={executeCancelList} disabled={listing}>
-                     {listing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>强制撤回</Text>}
-                  </TouchableOpacity>
-               </View>
+      <Modal visible={priceSheetOpen} transparent animationType="slide" onRequestClose={closePriceSheet}>
+        <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Pressable accessibilityLabel="关闭寄售面板" style={styles.scrim} onPress={closePriceSheet} />
+          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) }]}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <View><Text style={[styles.sheetTitle, { fontFamily: fonts.semibold }]}>发布寄售</Text><Text style={styles.sheetSubtitle}>将这张藏品放入土豆岛集市</Text></View>
+              <Pressable accessibilityRole="button" accessibilityLabel="关闭寄售面板" onPress={closePriceSheet} disabled={busy} style={styles.sheetClose}><Ionicons name="close" size={20} color={OWNED_COLORS.ink} /></Pressable>
             </View>
-         </View>
+            {item ? <View style={styles.sheetItem}>
+              <CollectionImage uri={imageUri} style={styles.sheetArt} />
+              <View style={styles.sheetItemCopy}><Text numberOfLines={1} style={[styles.sheetItemName, { fontFamily: fonts.semibold }]}>{collectionTitle}</Text><Text style={styles.sheetItemSerial}>{serial}</Text><Text style={styles.sheetItemStatus}>{itemStatus(item.status)}</Text></View>
+            </View> : null}
+            <Text style={[styles.inputLabel, { fontFamily: fonts.semibold }]}>寄售价格 <Text style={styles.inputUnit}>土豆币</Text></Text>
+            <View style={[styles.inputWrap, Boolean(inlineError) && styles.inputWrapError]}>
+              <TextInput accessibilityLabel="寄售价格" value={price} onChangeText={(value) => { setPrice(value); setInlineError(''); }} placeholder="填写藏品价格" placeholderTextColor="#B0A497" keyboardType="decimal-pad" maxLength={14} style={[styles.priceInput, { fontFamily: fonts.semibold }]} underlineColorAndroid="transparent" selectionColor={OWNED_COLORS.blue} />
+              <Text style={styles.inputUnit}>土豆币</Text>
+            </View>
+            {inlineError ? <Text accessibilityLiveRegion="polite" style={styles.inlineError}>{inlineError}</Text> : collection?.max_consign_price ? <Text style={styles.priceCap}>该系列最高寄售价为 {money(collection.max_consign_price)} 土豆币</Text> : null}
+            <View style={styles.listingNotice}><Ionicons name="leaf-outline" size={16} color={OWNED_COLORS.blue} /><Text style={styles.listingNoticeText}>上架后暂时不能转赠；撤回寄售后会回到金库。</Text></View>
+            <FolioButton label="确认上架" tone="blue" icon="pricetag-outline" onPress={publishConsign} loading={busy} style={styles.submitButton} fontFamily={fonts.semibold} />
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={transferTipModal} transparent animationType="fade">
-         <View style={styles.modalOverlayCenter}>
-            <View style={styles.confirmBox}>
-               <Text style={styles.confirmTitle}>🎁 流转提示</Text>
-               <Text style={styles.confirmDesc}>即将启动资产跨区划转，此操作将燃烧 <Text style={{fontWeight:'900', color:'#FF3B30'}}>1 张转赠卡</Text> 作为介质，是否同意？</Text>
-               <View style={styles.confirmBtnRow}>
-                  <TouchableOpacity style={styles.cancelBtnOutline} onPress={() => setTransferTipModal(false)}><Text style={styles.cancelBtnOutlineText}>拒绝</Text></TouchableOpacity>
-                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#D49A36'}]} onPress={() => { setTransferTipModal(false); handleTransfer(); }}>
-                     <Text style={styles.confirmBtnText}>同意并划转</Text>
-                  </TouchableOpacity>
-               </View>
+      <Modal visible={withdrawOpen} transparent animationType="fade" onRequestClose={() => !busy && setWithdrawOpen(false)}>
+        <View style={styles.centerOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIllustration}><Ionicons name="boat-outline" size={28} color={OWNED_COLORS.blue} /><View style={styles.confirmSun} /></View>
+            <Text style={[styles.confirmTitle, { fontFamily: fonts.semibold }]}>撤回这张寄售藏品？</Text>
+            <Text style={styles.confirmDescription}>撤回后，藏品会回到金库并恢复转赠。当前寄售价将一并取消。</Text>
+            {item ? <View style={styles.confirmItem}>
+              <CollectionImage uri={imageUri} style={styles.confirmArt} />
+              <View style={styles.confirmItemCopy}><Text numberOfLines={1} style={[styles.confirmItemName, { fontFamily: fonts.semibold }]}>{collectionTitle}</Text><Text style={styles.confirmItemSerial}>{serial}</Text></View>
+              <Text style={[styles.confirmItemPrice, { fontFamily: fonts.semibold }]}>{money(currencyValue)}</Text>
+            </View> : null}
+            {inlineError ? <Text accessibilityLiveRegion="polite" style={styles.inlineError}>{inlineError}</Text> : null}
+            <View style={styles.confirmActions}>
+              <FolioButton label="保留寄售" tone="paper" onPress={() => setWithdrawOpen(false)} disabled={busy} style={styles.confirmButton} fontFamily={fonts.semibold} />
+              <FolioButton label="确认撤回" tone="gold" icon="arrow-undo-outline" onPress={withdrawConsign} loading={busy} style={styles.confirmButton} fontFamily={fonts.semibold} />
             </View>
-         </View>
+          </View>
+        </View>
       </Modal>
 
-      <Modal visible={!!successModal} transparent animationType="fade">
-         <View style={styles.modalOverlayCenter}>
-            <View style={[styles.confirmBox, {borderColor: '#D49A36', borderWidth: 2}]}>
-               <Text style={[styles.confirmTitle, {color: '#D49A36', fontSize: 22}]}>{successModal?.title}</Text>
-               <Text style={[styles.confirmDesc, {fontSize: 15, color: '#4E342E', fontWeight: '900', lineHeight: 22}]}>{successModal?.msg}</Text>
-               <TouchableOpacity style={[styles.confirmBtn, {width: '100%', backgroundColor: '#D49A36'}]} onPress={() => { setSuccessModal(null); router.replace('/(tabs)/profile'); }}>
-                  <Text style={styles.confirmBtnText}>回金库</Text>
-               </TouchableOpacity>
+      <Modal visible={Boolean(result)} transparent animationType="fade" onRequestClose={() => setResult(null)}>
+        <View style={styles.centerOverlay}>
+          <View style={styles.resultCard}>
+            <Image source={result?.kind === 'listed' ? require('../assets/owned-collection/f-card-v1/runtime/island-market-stall.webp') : require('../assets/owned-collection/f-card-v1/runtime/island-archive-tray.webp')} resizeMode="contain" style={styles.resultArt} accessible={false} />
+            <Text style={[styles.resultTitle, { fontFamily: fonts.semibold }]}>{result?.kind === 'listed' ? '上架成功' : '已收回金库'}</Text>
+            <Text style={styles.resultSubtitle}>{result?.kind === 'listed' ? '这张藏品已经加入土豆岛集市' : '寄售已撤回，藏品回到了你的金库'}</Text>
+            {item ? <View style={styles.resultSummary}>
+              <CollectionImage uri={imageUri} style={styles.resultThumb} />
+              <View style={styles.resultCopy}><Text numberOfLines={1} style={[styles.resultName, { fontFamily: fonts.semibold }]}>{collectionTitle} · {serial}</Text><Text style={styles.resultMeta}>{result?.kind === 'listed' ? '寄售价格' : '原寄售价'}</Text></View>
+              <Text style={[styles.resultPrice, { fontFamily: fonts.semibold }]}>{money(result?.price || 0)}</Text>
+            </View> : null}
+            <View style={styles.resultActions}>
+              <FolioButton label="继续查看" tone="paper" icon="book-outline" onPress={() => setResult(null)} style={styles.resultButton} fontFamily={fonts.semibold} />
+              <FolioButton label="返回藏品册" tone="blue" icon="albums-outline" onPress={() => { setResult(null); router.back(); }} style={styles.resultButton} fontFamily={fonts.semibold} />
             </View>
-         </View>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' },
-  container: { flex: 1, backgroundColor: '#FDF8F0' },
-  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FDF8F0', borderBottomWidth: 1, borderColor: '#EAE0D5' },
-  navBtn: { width: 40, justifyContent: 'center' },
-  iconText: { fontSize: 22, color: '#4E342E', fontWeight: '900' },
-  navTitle: { fontSize: 17, fontWeight: '900', color: '#4E342E' },
-
-  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(78,52,46,0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
-  toastText: { color: '#FFF', fontSize: 14, fontWeight: '900' },
-
-  stageContainer: { alignItems: 'center', backgroundColor: '#FFF', paddingVertical: 40, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, marginBottom: 20, borderWidth: 1, borderColor: '#EAE0D5', shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
-  floatBox: { padding: 10, backgroundColor: '#FDF8F0', borderRadius: 16, shadowColor: '#4E342E', shadowOpacity: 0.15, shadowRadius: 20, shadowOffset: {width: 0, height: 10}, elevation: 10, zIndex: 2, borderWidth: 1, borderColor: '#D49A36' },
-  mainImg: { width: width * 0.45, height: width * 0.45, borderRadius: 8, overflow: 'hidden' },
-  shadowOval: { width: width * 0.35, height: 15, backgroundColor: 'rgba(78,52,46,0.1)', borderRadius: '50%', marginTop: 20, marginBottom: 16 },
-  statusBadge: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 },
-  statusBadgeText: { color: '#FFF', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
-
-  infoSection: { backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#EAE0D5', marginBottom: 20 },
-  colName: { fontSize: 20, fontWeight: '900', color: '#4E342E', marginBottom: 4 },
-  supplyText: { fontSize: 12, color: '#8D6E63', marginBottom: 16, fontWeight: '700' },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderTopWidth: 1, borderColor: '#F5EFE6' },
-  infoLabel: { fontSize: 13, color: '#8D6E63', fontWeight: '700' },
-  infoValue: { fontSize: 14, color: '#4E342E', fontWeight: '900' },
-  infoValueHigh: { fontSize: 16, color: '#D49A36', fontWeight: '900', fontFamily: 'monospace' },
-  infoHash: { fontSize: 11, color: '#A1887F', fontFamily: 'monospace', width: 180, textAlign: 'right', fontWeight: '600' },
-
-  historySection: { backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#EAE0D5' },
-  historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  sectionTitle: { fontSize: 16, fontWeight: '900', color: '#4E342E' },
-  historySwitch: { backgroundColor: '#FDF8F0', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: '#EAE0D5' },
-  historySwitchText: { fontSize: 11, color: '#D49A36', fontWeight: '900' },
-  historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderColor: '#F5EFE6' },
-  historyLeft: { flex: 1 },
-  historyUser: { fontSize: 14, fontWeight: '900', color: '#4E342E', marginBottom: 6 },
-  historyTypeTag: { backgroundColor: '#F5EFE6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8, borderWidth: 1, borderColor: '#EAE0D5' },
-  historyTypeText: { fontSize: 9, color: '#8D6E63', fontWeight: '900' },
-  historyTime: { fontSize: 11, color: '#A1887F', fontWeight: '600' },
-  historyPrice: { fontSize: 16, fontWeight: '900', color: '#FF3B30', fontFamily: 'monospace' },
-
-  bottomBar: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', shadowColor: '#4E342E', shadowOffset: {width: 0, height: -5}, shadowOpacity: 0.05, elevation: 10, borderTopWidth: 1, borderColor: '#EAE0D5' },
-  buyBtn: { flex: 1, backgroundColor: '#D49A36', paddingVertical: 14, borderRadius: 25, alignItems: 'center', shadowColor: '#D49A36', shadowOpacity: 0.3, shadowRadius: 8, elevation: 2 },
-  buyText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
-  actionBtn: { paddingVertical: 14, borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
-  
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.6)', justifyContent: 'flex-end' },
-  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(44,30,22,0.7)', justifyContent: 'center', alignItems: 'center' },
-  listSheet: { backgroundColor: '#FDF8F0', borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  bottomSheet: { backgroundColor: '#FDF8F0', borderTopLeftRadius: 24, borderTopRightRadius: 24, minHeight: 400 },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderColor: '#EAE0D5', backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  sheetTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E' },
-  sheetContent: { padding: 20 },
-  orderItemRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 12, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#F0E6D2' },
-  orderImg: { width: 50, height: 50, borderRadius: 8, marginRight: 12, overflow: 'hidden' },
-  orderName: { fontSize: 15, fontWeight: '900', color: '#4E342E', marginBottom: 4 },
-  orderSerial: { fontSize: 12, color: '#8D6E63', fontFamily: 'monospace', fontWeight: '700' },
-  orderPrice: { fontSize: 18, fontWeight: '900', color: '#FF3B30' },
-  payMethodTitle: { fontSize: 14, fontWeight: '900', color: '#4E342E', marginBottom: 12 },
-  payMethodRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 2, borderColor: '#D49A36', padding: 16, borderRadius: 12, backgroundColor: '#FFFDF5' },
-  payMethodName: { fontSize: 15, fontWeight: '900', color: '#D49A36', marginBottom: 4 },
-  payMethodSub: { fontSize: 12, color: '#8D6E63', fontWeight: '700' },
-  radioChecked: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#D49A36', justifyContent: 'center', alignItems: 'center' },
-  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#D49A36' },
-  sheetFooter: { padding: 20, borderTopWidth: 1, borderColor: '#EAE0D5', backgroundColor: '#FFF' },
-  confirmPayBtn: { backgroundColor: '#D49A36', height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', shadowColor: '#D49A36', shadowOpacity: 0.3, shadowRadius: 8, elevation: 2 },
-  inputField: { backgroundColor: '#FFF', padding: 16, borderRadius: 12, fontSize: 24, fontWeight: '900', color: '#FF3B30', borderWidth: 1, borderColor: '#EAE0D5' },
-  
-  confirmBox: { width: '85%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
-  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E', marginBottom: 16 },
-  confirmDesc: { fontSize: 14, color: '#8D6E63', textAlign: 'center', lineHeight: 22, marginBottom: 24, fontWeight: '700' },
-  confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  cancelBtnOutline: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FDF8F0', alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
-  cancelBtnOutlineText: { color: '#8D6E63', fontSize: 15, fontWeight: '800' },
-  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, alignItems: 'center', backgroundColor: '#D49A36' },
-  confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
+  screen: { flex: 1, backgroundColor: '#FFFFFF' },
+  page: { flex: 1, alignSelf: 'center', width: '100%', backgroundColor: '#FFFFFF' },
+  navBar: { minHeight: 52, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  backButton: { width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' },
+  navTitle: { color: OWNED_COLORS.ink, fontSize: 19, lineHeight: 26 },
+  navSpacer: { width: 44, height: 44 },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 32 },
+  loadingText: { color: '#8D8175', fontSize: 13, lineHeight: 18 },
+  errorText: { color: OWNED_COLORS.ink, fontSize: 16, textAlign: 'center' },
+  retryButton: { minHeight: 42, minWidth: 120, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#D4C4AF', borderRadius: 12, marginTop: 6, paddingHorizontal: 18, backgroundColor: '#FCFAF6' },
+  retryText: { color: OWNED_COLORS.blue, fontSize: 14 },
+  scrollContent: { alignItems: 'center', paddingTop: 5, paddingHorizontal: 20 },
+  notice: { width: '100%', maxWidth: 540, minHeight: 42, padding: 10, borderRadius: 11, backgroundColor: '#FCF6E9', flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  noticeText: { color: '#7F6C4F', flex: 1, fontSize: 12, lineHeight: 17 },
+  cardStage: { alignSelf: 'center', minHeight: 500, paddingHorizontal: 12, paddingTop: 9, paddingBottom: 15, justifyContent: 'center', alignItems: 'center' },
+  cardBack: { position: 'absolute', top: 21, left: 22, right: 31, bottom: 27, borderRadius: 18, backgroundColor: '#E8F0F2', borderWidth: 1, borderColor: '#D4E1E5', transform: [{ rotate: '-4deg' }] },
+  cardBack2: { position: 'absolute', top: 13, left: 30, right: 23, bottom: 35, borderRadius: 18, backgroundColor: '#FBF2E1', borderWidth: 1, borderColor: '#E8D8BE', transform: [{ rotate: '2deg' }] },
+  detailCard: { width: '100%', padding: 10, borderRadius: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#D9CCBB', shadowColor: '#514236', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 5 },
+  detailArtFrame: { width: '100%', aspectRatio: 1, position: 'relative', padding: 5, borderRadius: 11, backgroundColor: '#F7F2E9', borderWidth: 1, borderColor: '#CCBCA7', overflow: 'hidden' },
+  detailArt: { flex: 1, width: '100%', height: '100%', borderRadius: 7, overflow: 'hidden' },
+  imageFallback: { justifyContent: 'center', alignItems: 'center', overflow: 'hidden', backgroundColor: '#EAF1F2' },
+  imageFallbackMark: { alignItems: 'center', gap: 7 },
+  imageFallbackText: { color: '#8D8175', fontSize: 12 },
+  artFrameInset: { ...StyleSheet.absoluteFillObject, borderWidth: 1, borderRadius: 10, borderColor: 'rgba(255,255,255,0.5)' },
+  detailStatus: { position: 'absolute', left: 17, top: 17, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: 'rgba(255,255,255,0.8)' },
+  statusIdle: { backgroundColor: 'rgba(79,121,148,0.94)' },
+  statusListed: { backgroundColor: 'rgba(169,124,67,0.94)' },
+  statusOther: { backgroundColor: 'rgba(120,112,103,0.9)' },
+  statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#FFFFFF' },
+  detailStatusText: { color: '#FFFFFF', fontSize: 11, lineHeight: 15 },
+  detailCardCopy: { paddingHorizontal: 5, paddingTop: 12 },
+  detailName: { color: OWNED_COLORS.ink, fontSize: 19, lineHeight: 26 },
+  detailSerial: { color: OWNED_COLORS.blue, fontSize: 13, lineHeight: 19, marginTop: 2 },
+  ruleLine: { height: 1, backgroundColor: '#ECE5DC', marginVertical: 10 },
+  cardDataRow: { minHeight: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dataLabel: { color: '#95887B', fontSize: 12 },
+  dataValue: { color: OWNED_COLORS.ink, fontSize: 12, textAlign: 'right', flexShrink: 1 },
+  listedPrice: { marginTop: 8, paddingTop: 10, borderTopWidth: 1, borderColor: '#ECE5DC', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  listedPriceLabel: { color: '#8D8175', fontSize: 12 },
+  listedPriceValue: { color: OWNED_COLORS.gold, fontSize: 19 },
+  coinUnit: { color: '#8D8175', fontSize: 11 },
+  serialTab: { position: 'absolute', right: 3, top: '24%', paddingHorizontal: 6, paddingVertical: 11, borderRadius: 6, backgroundColor: '#F8F2E7', borderWidth: 1, borderColor: '#D5C5AE' },
+  serialTabText: { color: OWNED_COLORS.ink, fontSize: 10, writingDirection: 'ltr' },
+  provenance: { width: '100%', maxWidth: 540, paddingHorizontal: 6, paddingTop: 15, paddingBottom: 11 },
+  sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 },
+  sectionTitle: { color: OWNED_COLORS.ink, fontSize: 18, lineHeight: 24 },
+  sectionSubtitle: { color: '#968A7D', fontSize: 12, lineHeight: 17, marginTop: 2 },
+  recordCount: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 10, backgroundColor: '#F4F0EA' },
+  recordCountText: { color: '#8D8175', fontSize: 11 },
+  emptyHistory: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 11, backgroundColor: '#FAF8F4' },
+  emptyHistoryText: { color: '#95887B', fontSize: 12 },
+  historyItem: { minHeight: 53, flexDirection: 'row' },
+  timelineColumn: { width: 22, alignItems: 'center' },
+  timelineDot: { width: 9, height: 9, borderRadius: 5, marginTop: 4, backgroundColor: OWNED_COLORS.blue, borderWidth: 1, borderColor: '#FFFFFF', zIndex: 1 },
+  timelineDotOrigin: { backgroundColor: OWNED_COLORS.gold },
+  timelineDotLast: { borderColor: '#EAE4DC' },
+  timelineLine: { position: 'absolute', top: 11, bottom: -2, width: 1, backgroundColor: '#E3DACE' },
+  historyCopy: { flex: 1, paddingBottom: 12, paddingLeft: 2 },
+  historyTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  historyTitle: { color: OWNED_COLORS.ink, fontSize: 13, lineHeight: 18 },
+  historyPrice: { color: OWNED_COLORS.gold, fontSize: 12, lineHeight: 17 },
+  historyDate: { color: '#988B7D', fontSize: 11, lineHeight: 16, marginTop: 2 },
+  historyHint: { color: '#9A8E82', fontSize: 11, lineHeight: 16 },
+  bottomBar: { minHeight: 68, paddingHorizontal: 18, paddingTop: 10, borderTopWidth: 1, borderColor: '#EBE5DD', backgroundColor: 'rgba(255,255,255,0.98)', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  actionButton: { flex: 1, minHeight: 48 },
+  fullAction: { flex: 1, minHeight: 48 },
+  unavailableAction: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
+  unavailableText: { color: '#93877D', fontSize: 13 },
+  modalRoot: { flex: 1, justifyContent: 'flex-end' },
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(42,37,31,0.28)' },
+  sheet: { maxHeight: '90%', paddingHorizontal: 20, paddingTop: 8, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9E1D6' },
+  sheetHandle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 3, backgroundColor: '#D9D1C6', marginBottom: 15 },
+  sheetHeader: { minHeight: 53, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 14, borderBottomWidth: 1, borderColor: '#F0EBE4' },
+  sheetTitle: { color: OWNED_COLORS.ink, fontSize: 19, lineHeight: 26 },
+  sheetSubtitle: { color: '#8E8175', fontSize: 12, lineHeight: 18, marginTop: 3 },
+  sheetClose: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F7F4EF', alignItems: 'center', justifyContent: 'center' },
+  sheetItem: { minHeight: 68, marginVertical: 17, padding: 8, borderRadius: 13, borderWidth: 1, borderColor: '#EAE3D9', backgroundColor: '#FCFAF6', flexDirection: 'row', alignItems: 'center' },
+  sheetArt: { width: 51, height: 51, borderRadius: 8 },
+  sheetItemCopy: { flex: 1, paddingHorizontal: 11 },
+  sheetItemName: { color: OWNED_COLORS.ink, fontSize: 14, lineHeight: 19 },
+  sheetItemSerial: { color: OWNED_COLORS.blue, fontSize: 11, lineHeight: 16, marginTop: 1 },
+  sheetItemStatus: { color: '#988B7D', fontSize: 10, lineHeight: 14, marginTop: 1 },
+  inputLabel: { color: OWNED_COLORS.ink, fontSize: 14, lineHeight: 20, marginBottom: 9 },
+  inputUnit: { color: '#95887B', fontSize: 12 },
+  inputWrap: { minHeight: 55, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: '#D8CBBB', backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center' },
+  inputWrapError: { borderColor: '#C8907D', backgroundColor: '#FFFBF9' },
+  priceInput: { flex: 1, height: 52, padding: 0, borderWidth: 0, color: OWNED_COLORS.ink, fontSize: 22 },
+  inlineError: { color: '#A65349', fontSize: 12, lineHeight: 18, marginTop: 8 },
+  priceCap: { color: OWNED_COLORS.blue, fontSize: 12, lineHeight: 18, marginTop: 8 },
+  listingNotice: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 15, marginBottom: 15, paddingHorizontal: 11, borderRadius: 10, backgroundColor: '#EFF5F8' },
+  listingNoticeText: { flex: 1, color: '#617C8D', fontSize: 11, lineHeight: 16 },
+  submitButton: { width: '100%', minHeight: 50 },
+  centerOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20, backgroundColor: 'rgba(42,37,31,0.30)' },
+  confirmCard: { width: '100%', maxWidth: 440, padding: 20, borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9E1D6' },
+  confirmIllustration: { width: 56, height: 56, alignSelf: 'center', borderRadius: 17, backgroundColor: '#EEF4F6', alignItems: 'center', justifyContent: 'center', marginBottom: 10, position: 'relative' },
+  confirmSun: { position: 'absolute', top: 8, right: 9, width: 7, height: 7, borderRadius: 4, backgroundColor: '#D4A663' },
+  confirmTitle: { color: OWNED_COLORS.ink, fontSize: 18, lineHeight: 24, textAlign: 'center' },
+  confirmDescription: { color: '#8C8074', fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 6, marginBottom: 15 },
+  confirmItem: { minHeight: 67, padding: 8, flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, borderColor: '#ECE5DC', backgroundColor: '#FCFAF6' },
+  confirmArt: { width: 49, height: 49, borderRadius: 7 },
+  confirmItemCopy: { flex: 1, paddingHorizontal: 10 },
+  confirmItemName: { color: OWNED_COLORS.ink, fontSize: 13, lineHeight: 18 },
+  confirmItemSerial: { color: '#95887B', fontSize: 11, lineHeight: 16 },
+  confirmItemPrice: { color: OWNED_COLORS.gold, fontSize: 13 },
+  confirmActions: { flexDirection: 'row', gap: 9, marginTop: 18 },
+  confirmButton: { flex: 1, minHeight: 46, minWidth: 0 },
+  resultCard: { width: '100%', maxWidth: 440, padding: 20, borderRadius: 22, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9E1D6', alignItems: 'center' },
+  resultArt: { width: 174, height: 146, marginTop: 2 },
+  resultTitle: { color: OWNED_COLORS.ink, fontSize: 22, lineHeight: 29, marginTop: 1 },
+  resultSubtitle: { color: '#8B7E72', fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 2, marginBottom: 15 },
+  resultSummary: { width: '100%', minHeight: 68, padding: 8, borderRadius: 12, borderWidth: 1, borderColor: '#EAE3D9', backgroundColor: '#FCFAF6', flexDirection: 'row', alignItems: 'center' },
+  resultThumb: { width: 50, height: 50, borderRadius: 8 },
+  resultCopy: { flex: 1, paddingHorizontal: 9 },
+  resultName: { color: OWNED_COLORS.ink, fontSize: 12, lineHeight: 17 },
+  resultMeta: { color: '#93877D', fontSize: 11, lineHeight: 15, marginTop: 2 },
+  resultPrice: { color: OWNED_COLORS.gold, fontSize: 13 },
+  resultActions: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 18 },
+  resultButton: { flex: 1, minWidth: 0, minHeight: 46 },
 });
