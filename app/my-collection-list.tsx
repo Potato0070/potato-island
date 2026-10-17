@@ -10,10 +10,17 @@ import { OWNED_COLORS, itemStatus, money, serialLabel, validateConsignPrice, typ
 import { supabase } from '../supabase';
 
 type StatusFilter = 'all' | 'idle' | 'listed';
+type CollectionSort = 'serial_asc' | 'serial_desc' | 'acquired_newest' | 'acquired_oldest';
 const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'all', label: '全部' },
   { key: 'idle', label: '在库' },
   { key: 'listed', label: '寄售中' },
+];
+const SORT_OPTIONS: { key: CollectionSort; title: string; hint: string }[] = [
+  { key: 'serial_asc', title: '编号从小到大', hint: '按藏品编号升序排列' },
+  { key: 'serial_desc', title: '编号从大到小', hint: '按藏品编号降序排列' },
+  { key: 'acquired_newest', title: '获取时间由新到旧', hint: '转入按进入金库时间；初始生成按生成时间' },
+  { key: 'acquired_oldest', title: '获取时间由旧到新', hint: '转入按进入金库时间；初始生成按生成时间' },
 ];
 
 function collectionOf(item: OwnedItem) {
@@ -46,12 +53,17 @@ export default function MyCollectionListScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const carouselRef = useRef<FlatList<OwnedItem>>(null);
+  const filmRef = useRef<FlatList<OwnedItem>>(null);
   const [items, setItems] = useState<OwnedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
-  const [sortNewestFirst, setSortNewestFirst] = useState(false);
+  const [sortBy, setSortBy] = useState<CollectionSort>('serial_asc');
+  const [sortOpen, setSortOpen] = useState(false);
+  const [acquiredAtById, setAcquiredAtById] = useState<Record<string, number>>({});
+  const [acquisitionTimesLoaded, setAcquisitionTimesLoaded] = useState(false);
+  const [acquisitionSortLoading, setAcquisitionSortLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -89,6 +101,8 @@ export default function MyCollectionListScreen() {
       if (collectionId) query = query.eq('collection_id', collectionId);
       const { data, error: queryError } = await withTimeout(query, 12000);
       if (queryError) throw queryError;
+      setAcquiredAtById({});
+      setAcquisitionTimesLoaded(false);
       setItems((data || []) as unknown as OwnedItem[]);
     } catch (cause) {
       console.error('读取持仓藏品失败', cause);
@@ -113,15 +127,34 @@ export default function MyCollectionListScreen() {
       const name = (collectionOf(item)?.name || '').toLocaleLowerCase();
       return matchesStatus && (!needle || serial.includes(needle) || name.includes(needle));
     });
-    if (sortNewestFirst) result.reverse();
+    result.sort((a, b) => {
+      if (sortBy === 'serial_asc' || sortBy === 'serial_desc') {
+        const left = Number(a.serial_number);
+        const right = Number(b.serial_number);
+        const comparison = Number.isFinite(left) && Number.isFinite(right)
+          ? left - right
+          : String(a.serial_number).localeCompare(String(b.serial_number), 'zh-CN', { numeric: true });
+        return sortBy === 'serial_asc' ? comparison : -comparison;
+      }
+      const left = acquiredAtById[a.id] ?? new Date(a.created_at || 0).getTime();
+      const right = acquiredAtById[b.id] ?? new Date(b.created_at || 0).getTime();
+      const comparison = (Number.isFinite(left) ? left : 0) - (Number.isFinite(right) ? right : 0);
+      return sortBy === 'acquired_newest' ? -comparison : comparison;
+    });
     return result;
-  }, [filter, items, search, sortNewestFirst]);
+  }, [acquiredAtById, filter, items, search, sortBy]);
 
   React.useEffect(() => {
     setActiveIndex(0);
     carouselRef.current?.scrollToOffset({ offset: 0, animated: false });
+    filmRef.current?.scrollToOffset({ offset: 0, animated: false });
     setSelectedIds((current) => current.filter((id) => items.some((item) => item.id === id && item.status === 'idle')));
-  }, [filter, search, items]);
+  }, [filter, search, items, sortBy]);
+
+  React.useEffect(() => {
+    const centeredOffset = activeIndex * 71 - Math.max(0, (contentWidth - 62) / 2);
+    filmRef.current?.scrollToOffset({ offset: Math.max(0, centeredOffset), animated: true });
+  }, [activeIndex, contentWidth]);
 
   const activeItem = visibleItems[activeIndex] || null;
   const activeCollection = activeItem ? collectionOf(activeItem) : items[0] ? collectionOf(items[0]) : null;
@@ -129,6 +162,44 @@ export default function MyCollectionListScreen() {
   const listedCount = items.filter((item) => item.status === 'listed').length;
   const getCount = (key: StatusFilter) => key === 'all' ? items.length : key === 'idle' ? idleCount : listedCount;
   const batchAllowed = (item: OwnedItem) => item.status === 'idle';
+
+  const chooseSort = async (nextSort: CollectionSort) => {
+    if ((nextSort === 'acquired_newest' || nextSort === 'acquired_oldest') && !acquisitionTimesLoaded && items.length > 0) {
+      setAcquisitionSortLoading(true);
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+        if (!user) throw new Error('请先登录后查看藏品获取时间');
+        const nftIds = items.map((item) => item.id);
+        const transferQueries = [];
+        for (let offset = 0; offset < nftIds.length; offset += 100) {
+          transferQueries.push(supabase.from('transfer_logs')
+            .select('nft_id, transfer_time')
+            .eq('buyer_id', user.id)
+            .in('nft_id', nftIds.slice(offset, offset + 100))
+            .order('transfer_time', { ascending: false }));
+        }
+        const transferResults = await withTimeout(Promise.all(transferQueries), 12000);
+        const acquiredAt: Record<string, number> = {};
+        transferResults.forEach(({ data, error: historyError }) => {
+          if (historyError) throw historyError;
+          (data || []).forEach((entry) => {
+            const timestamp = new Date(entry.transfer_time).getTime();
+            if (!(entry.nft_id in acquiredAt) && entry.transfer_time && Number.isFinite(timestamp)) acquiredAt[entry.nft_id] = timestamp;
+          });
+        });
+        setAcquiredAtById(acquiredAt);
+        setAcquisitionTimesLoaded(true);
+      } catch (cause) {
+        notify(cause instanceof Error ? cause.message : '获取时间记录暂时无法读取');
+        setAcquisitionSortLoading(false);
+        return;
+      }
+      setAcquisitionSortLoading(false);
+    }
+    setSortBy(nextSort);
+    setSortOpen(false);
+  };
   const selectItem = (item: OwnedItem) => {
     if (!batchMode) {
       router.push({ pathname: '/my-nft-detail', params: { id: item.id } });
@@ -222,7 +293,7 @@ export default function MyCollectionListScreen() {
         onPress={() => selectItem(item)}
         style={[styles.cardShell, { width: cardWidth }, isSelected && styles.cardShellSelected]}
       >
-        <FolioPaperSurface kind="texture" style={[styles.collectionCard, { width: cardWidth - 14 }]}>
+        <View style={[styles.collectionCard, { width: cardWidth - 14 }]}>
           <View style={styles.coverMount}>
             <FolioArtwork uri={imageUri} style={styles.coverArt} accessibilityLabel={`${collectionOf(item)?.name || '藏品'}封面`} />
             {batchMode ? <View style={[styles.selectionMark, isSelected && styles.selectionMarkSelected]}>{isSelected ? <Ionicons name="checkmark" size={16} color="#fff" /> : null}</View> : null}
@@ -234,7 +305,7 @@ export default function MyCollectionListScreen() {
             </View>
             <Ionicons name={batchMode ? (isSelected ? 'checkmark-circle' : 'ellipse-outline') : 'chevron-forward'} size={19} color={isSelected ? OWNED_COLORS.blue : '#B6A99B'} />
           </View>
-        </FolioPaperSurface>
+        </View>
         <FolioSerialTag value={serialLabel(item.serial_number)} style={styles.sideNumber} />
         <FolioStateTag state={statusKey} label={status} style={styles.sideStatus} />
       </Pressable>
@@ -287,7 +358,7 @@ export default function MyCollectionListScreen() {
             />
             {search ? <Pressable accessibilityRole="button" accessibilityLabel="清除搜索" onPress={() => setSearch('')} style={styles.clearSearch}><Ionicons name="close-circle" size={18} color="#A89C8E" /></Pressable> : null}
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel={sortNewestFirst ? '按编号从小到大排序' : '按编号从大到小排序'} onPress={() => setSortNewestFirst((value) => !value)} style={styles.sortButton}>
+          <Pressable accessibilityRole="button" accessibilityLabel="选择排序方式" onPress={() => setSortOpen(true)} style={styles.sortButton}>
             <Ionicons name="options-outline" size={20} color={OWNED_COLORS.ink} />
           </Pressable>
         </View>
@@ -320,6 +391,7 @@ export default function MyCollectionListScreen() {
                 horizontal
                 data={visibleItems}
                 renderItem={renderCard}
+                extraData={batchMode ? selectedIds : undefined}
                 keyExtractor={(item) => item.id}
                 showsHorizontalScrollIndicator={false}
                 decelerationRate="fast"
@@ -329,28 +401,44 @@ export default function MyCollectionListScreen() {
                 contentContainerStyle={{ paddingHorizontal: Math.max(16, (contentWidth - cardWidth) / 2) }}
                 ItemSeparatorComponent={() => <View style={{ width: 18 }} />}
                 getItemLayout={(_, index) => ({ length: cardInterval, offset: cardInterval * index, index })}
-                onMomentumScrollEnd={(event) => setActiveIndex(Math.max(0, Math.min(visibleItems.length - 1, Math.round(event.nativeEvent.contentOffset.x / cardInterval))))}
+                scrollEventThrottle={16}
+                onScroll={(event) => {
+                  const next = Math.max(0, Math.min(visibleItems.length - 1, Math.round(event.nativeEvent.contentOffset.x / cardInterval)));
+                  setActiveIndex((current) => current === next ? current : next);
+                }}
+                onMomentumScrollEnd={(event) => {
+                  const next = Math.max(0, Math.min(visibleItems.length - 1, Math.round(event.nativeEvent.contentOffset.x / cardInterval)));
+                  setActiveIndex(next);
+                }}
                 onScrollToIndexFailed={({ index }) => setTimeout(() => carouselRef.current?.scrollToIndex({ index, animated: true }), 80)}
               />
               {visibleItems.length > 1 ? <Pressable accessibilityRole="button" accessibilityLabel="下一件藏品" onPress={() => moveCarousel(1)} style={[styles.carouselArrow, styles.carouselArrowRight]}><Ionicons name="chevron-forward" size={20} color={OWNED_COLORS.ink} /></Pressable> : null}
             </View>
             <View style={styles.pageIndicator}>
-              <View style={styles.dots}>{visibleItems.slice(0, Math.min(8, visibleItems.length)).map((item, index) => <View key={item.id} style={[styles.dot, index === activeIndex % 8 && styles.dotActive]} />)}</View>
+              <View style={styles.dots}>{visibleItems.slice(0, Math.min(8, visibleItems.length)).map((item, index) => {
+                const dotCount = Math.min(8, visibleItems.length);
+                const dotIndex = Math.min(dotCount - 1, Math.floor((activeIndex / Math.max(1, visibleItems.length)) * dotCount));
+                return <View key={item.id} style={[styles.dot, index === dotIndex && styles.dotActive]} />;
+              })}</View>
               <Text style={styles.pageLabel}>{activeItem ? serialLabel(activeItem.serial_number) : ''}</Text>
             </View>
             <FlatList
+              ref={filmRef}
               horizontal
               data={visibleItems}
+              extraData={activeIndex}
               renderItem={({ item, index }) => {
                 const selected = activeIndex === index;
                 return (
                   <Pressable accessibilityRole="button" accessibilityLabel={'跳到' + serialLabel(item.serial_number)} onPress={() => { setActiveIndex(index); carouselRef.current?.scrollToOffset({ offset: index * cardInterval, animated: true }); }} style={[styles.filmItem, selected && styles.filmItemSelected]}>
-                    <FolioArtwork uri={imageOf(item)} style={styles.filmArt} accessibilityLabel={`${collectionOf(item)?.name || '藏品'}缩略图`} />
+                    <FolioArtwork uri={imageOf(item)} framed={false} style={styles.filmArt} accessibilityLabel={`${collectionOf(item)?.name || '藏品'}缩略图`} />
                     <View style={[styles.filmStatus, item.status === 'listed' && styles.filmStatusListed]} />
                   </Pressable>
                 );
               }}
               keyExtractor={(item) => 'film-' + item.id}
+              getItemLayout={(_, index) => ({ length: 62, offset: 71 * index, index })}
+              onScrollToIndexFailed={({ index }) => setTimeout(() => filmRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true }), 80)}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filmStrip}
             />
@@ -367,6 +455,28 @@ export default function MyCollectionListScreen() {
 
       {toast ? <View accessibilityLiveRegion="polite" style={[styles.toast, { bottom: Math.max(insets.bottom, 18) + (batchMode ? 82 : 12) }]}><Text style={styles.toastText}>{toast}</Text></View> : null}
 
+      <Modal visible={sortOpen} transparent animationType="slide" onRequestClose={() => setSortOpen(false)}>
+        <View style={styles.modalRoot}>
+          <Pressable accessibilityLabel="关闭排序方式" style={styles.scrim} onPress={() => setSortOpen(false)} />
+          <View style={[styles.sortSheet, { paddingBottom: Math.max(insets.bottom, 18) }]}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <View><Text style={styles.sheetTitle}>排序方式</Text><Text style={styles.sheetSubtitle}>{acquisitionSortLoading ? '正在读取藏品进入金库的时间…' : '按编号或进入金库的时间整理'}</Text></View>
+              <Pressable accessibilityRole="button" accessibilityLabel="关闭" onPress={() => setSortOpen(false)} style={styles.sheetClose}><Ionicons name="close" size={20} color={OWNED_COLORS.ink} /></Pressable>
+            </View>
+            <View style={styles.sortOptions}>
+              {SORT_OPTIONS.map((option) => {
+                const selected = sortBy === option.key;
+                return <Pressable key={option.key} accessibilityRole="radio" accessibilityState={{ checked: selected, disabled: acquisitionSortLoading }} disabled={acquisitionSortLoading} onPress={() => { void chooseSort(option.key); }} style={[styles.sortOption, selected && styles.sortOptionSelected, acquisitionSortLoading && styles.sortOptionDisabled]}>
+                  <View style={styles.sortOptionCopy}><Text style={[styles.sortOptionTitle, selected && styles.sortOptionTitleSelected]}>{option.title}</Text><Text style={styles.sortOptionHint}>{option.hint}</Text></View>
+                  <View style={[styles.sortRadio, selected && styles.sortRadioSelected]}>{selected ? <View style={styles.sortRadioDot} /> : null}</View>
+                </Pressable>;
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={priceSheetOpen} transparent animationType="slide" onRequestClose={() => !busy && setPriceSheetOpen(false)}>
         <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <Pressable accessibilityLabel="关闭寄售设置" style={styles.scrim} onPress={() => !busy && setPriceSheetOpen(false)} />
@@ -378,7 +488,7 @@ export default function MyCollectionListScreen() {
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetContent}>
               <View style={styles.batchPreviewCard}>
-                {activeItem ? <FolioArtwork uri={imageOf(activeItem)} style={styles.sheetPreviewArt} accessibilityLabel={`${collectionOf(activeItem)?.name || '藏品'}缩略图`} /> : <View style={styles.sheetPreviewArt} />}
+                {activeItem ? <FolioArtwork uri={imageOf(activeItem)} framed={false} style={styles.sheetPreviewArt} accessibilityLabel={`${collectionOf(activeItem)?.name || '藏品'}缩略图`} /> : <View style={styles.sheetPreviewArt} />}
                 <View style={styles.batchPreviewCopy}><Text style={styles.previewCollection}>{collectionName || activeCollection?.name || '我的藏品'}</Text><Text style={styles.previewCount}>{selectedIds.length} 件藏品 · 统一寄售价</Text></View>
                 <Ionicons name="albums-outline" size={20} color={OWNED_COLORS.blue} />
               </View>
@@ -414,7 +524,7 @@ const styles = StyleSheet.create({
   statusCountSelected: { backgroundColor: 'rgba(255,255,255,0.22)', color: '#FFFFFF' },
   searchRow: { marginHorizontal: 20, marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 9 },
   searchBox: { height: 43, flex: 1, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E9E2D9', backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', gap: 9 },
-  searchInput: { flex: 1, height: 42, padding: 0, margin: 0, borderWidth: 0, outlineWidth: 0, backgroundColor: 'transparent', color: OWNED_COLORS.ink, fontSize: 14, lineHeight: 20 },
+  searchInput: { flex: 1, minWidth: 0, height: 42, padding: 0, margin: 0, borderWidth: 0, outlineStyle: 'solid', outlineWidth: 0, outlineColor: 'transparent', boxShadow: 'none', backgroundColor: 'transparent', color: OWNED_COLORS.ink, fontSize: 16, lineHeight: 22 },
   clearSearch: { width: 32, height: 40, alignItems: 'center', justifyContent: 'center' },
   sortButton: { width: 43, height: 43, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E9E2D9', backgroundColor: '#FCFAF6' },
   deckHeader: { paddingHorizontal: 25, marginTop: 22, marginBottom: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -425,7 +535,7 @@ const styles = StyleSheet.create({
   carouselFrame: { width: '100%', position: 'relative', height: undefined },
   cardShell: { height: undefined, alignItems: 'center', paddingTop: 8, paddingBottom: 7 },
   cardShellSelected: { opacity: 0.94 },
-  collectionCard: { position: 'relative', overflow: 'hidden', paddingHorizontal: 13, paddingTop: 13, paddingBottom: 9, alignSelf: 'center' },
+  collectionCard: { position: 'relative', overflow: 'hidden', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8, alignSelf: 'center', borderRadius: 18, borderWidth: 1, borderColor: '#ECE6DE', backgroundColor: '#FFFFFF', shadowColor: '#594A3D', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 1 },
   coverMount: { width: '100%', aspectRatio: 1, position: 'relative' },
   coverArt: { width: '100%', height: '100%' },
   selectionMark: { position: 'absolute', top: 12, right: 12, width: 27, height: 27, borderRadius: 14, borderWidth: 1.5, borderColor: '#FFF', backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center' },
@@ -434,8 +544,8 @@ const styles = StyleSheet.create({
   captionMain: { flex: 1, paddingRight: 10 },
   cardName: { color: OWNED_COLORS.ink, fontSize: 15, lineHeight: 20 },
   cardSerial: { color: '#8E8175', fontSize: 12, lineHeight: 17, marginTop: 2 },
-  sideNumber: { position: 'absolute', right: -4, top: '19%', zIndex: 2 },
-  sideStatus: { position: 'absolute', right: -4, top: '48%', zIndex: 2 },
+  sideNumber: { position: 'absolute', right: 8, top: '17%', zIndex: 2 },
+  sideStatus: { position: 'absolute', right: 8, top: '45%', zIndex: 2 },
   carouselArrow: { position: 'absolute', top: '44%', zIndex: 5, width: 35, height: 35, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.95)', borderWidth: 1, borderColor: '#E7DED2', alignItems: 'center', justifyContent: 'center', shadowColor: '#4D3D31', shadowOpacity: 0.08, shadowRadius: 5, elevation: 2 },
   carouselArrowLeft: { left: 9 },
   carouselArrowRight: { right: 9 },
@@ -484,7 +594,7 @@ const styles = StyleSheet.create({
   inputLabel: { color: OWNED_COLORS.ink, fontSize: 14, lineHeight: 20, marginBottom: 9 },
   currency: { color: '#95887B', fontSize: 12 },
   priceInputWrap: { minHeight: 55, borderRadius: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: '#D8CBBB', backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center' },
-  priceInput: { flex: 1, height: 52, padding: 0, color: OWNED_COLORS.ink, fontSize: 22, outlineWidth: 0 },
+  priceInput: { flex: 1, minWidth: 0, height: 52, padding: 0, borderWidth: 0, outlineStyle: 'solid', outlineWidth: 0, outlineColor: 'transparent', boxShadow: 'none', color: OWNED_COLORS.ink, fontSize: 22 },
   currencySuffix: { color: '#8D8175', fontSize: 13 },
   priceLimit: { color: OWNED_COLORS.blue, fontSize: 12, lineHeight: 18, marginTop: 8 },
   priceTotal: { marginTop: 18, paddingTop: 14, borderTopWidth: 1, borderColor: '#F0EBE4', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -494,4 +604,16 @@ const styles = StyleSheet.create({
   submitButton: { width: '100%', minHeight: 50 },
   sheetCancel: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   sheetCancelText: { color: '#8D8175', fontSize: 13 },
+  sortSheet: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 16, backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, borderColor: '#EAE4DC' },
+  sortOptions: { paddingTop: 12, gap: 8 },
+  sortOption: { minHeight: 66, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, borderWidth: 1, borderColor: '#EEE8E0', backgroundColor: '#FCFAF6', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  sortOptionSelected: { borderColor: '#B6CAD5', backgroundColor: '#F0F5F7' },
+  sortOptionCopy: { flex: 1 },
+  sortOptionTitle: { color: OWNED_COLORS.ink, fontSize: 14, lineHeight: 20 },
+  sortOptionTitleSelected: { color: OWNED_COLORS.blue },
+  sortOptionHint: { color: '#988B7D', fontSize: 11, lineHeight: 16, marginTop: 2 },
+  sortOptionDisabled: { opacity: 0.6 },
+  sortRadio: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#C9BEB2', alignItems: 'center', justifyContent: 'center' },
+  sortRadioSelected: { borderColor: OWNED_COLORS.blue },
+  sortRadioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: OWNED_COLORS.blue },
 });

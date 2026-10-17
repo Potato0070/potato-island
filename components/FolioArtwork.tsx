@@ -3,7 +3,6 @@ import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 const FRAME = require('../assets/owned-collection/f-card-v1/runtime/album-card-frame-v3.webp');
-const PAPER = require('../assets/owned-collection/f-card-v1/runtime/paper-texture.webp');
 const SERIAL_TAG = require('../assets/owned-collection/f-card-v1/runtime/serial-number-tag.webp');
 const STATE_TAGS = {
   idle: require('../assets/owned-collection/f-card-v1/runtime/status-in-vault.webp'),
@@ -20,26 +19,29 @@ type ArtworkProps = {
   uri: string | null;
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
+  /** Use the layered scrapbook frame only when the artwork is large enough to carry it. */
+  framed?: boolean;
 };
 
-export function FolioArtwork({ uri, style, accessibilityLabel = '藏品封面' }: ArtworkProps) {
+export function FolioArtwork({ uri, style, accessibilityLabel = '藏品封面', framed = true }: ArtworkProps) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [uri]);
 
+  const artwork = uri && !failed ? (
+    <Image accessibilityLabel={accessibilityLabel} source={{ uri }} resizeMode="cover" style={StyleSheet.absoluteFill} onError={() => setFailed(true)} />
+  ) : (
+    <View style={styles.fallback}>
+      <Ionicons name="image-outline" size={24} color="#537895" />
+      <Text style={styles.fallbackText}>藏品图暂缺</Text>
+    </View>
+  );
+
   return (
     <View style={[styles.artwork, style]}>
-      <Image source={FRAME} resizeMode="contain" style={StyleSheet.absoluteFill} accessible={false} />
-      <View style={styles.aperture}>
-        {uri && !failed ? (
-          <Image accessibilityLabel={accessibilityLabel} source={{ uri }} resizeMode="cover" style={StyleSheet.absoluteFill} onError={() => setFailed(true)} />
-        ) : (
-          <View style={styles.fallback}>
-            <Image source={PAPER} resizeMode="cover" style={StyleSheet.absoluteFill} accessible={false} />
-            <Ionicons name="image-outline" size={24} color="#537895" />
-            <Text style={styles.fallbackText}>藏品图暂缺</Text>
-          </View>
-        )}
-      </View>
+      {framed ? <>
+        <Image source={FRAME} resizeMode="contain" style={StyleSheet.absoluteFill} accessible={false} />
+        <View style={styles.aperture}>{artwork}</View>
+      </> : artwork}
     </View>
   );
 }
@@ -69,9 +71,9 @@ export function FolioStateTag({ state, label, style, fontFamily }: StateTagProps
 }
 
 const styles = StyleSheet.create({
-  artwork: { position: 'relative', width: '100%', aspectRatio: 1, overflow: 'hidden' },
+  artwork: { position: 'relative', width: '100%', aspectRatio: 1, overflow: 'hidden', backgroundColor: '#F5F0E7' },
   aperture: { position: 'absolute', left: '15.5%', top: '16.7%', width: '70.2%', height: '66.8%', overflow: 'hidden', borderRadius: 8, backgroundColor: '#F5F0E7' },
-  fallback: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 5, overflow: 'hidden' },
+  fallback: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 5, overflow: 'hidden', backgroundColor: '#F5F0E7' },
   fallbackText: { color: '#8D8175', fontSize: 9, lineHeight: 12 },
   serialTag: { alignItems: 'center', justifyContent: 'center' },
   serialText: { position: 'absolute', width: 62, height: 14, left: -15, top: 26, textAlign: 'center', color: '#493D35', fontSize: 8, lineHeight: 12, letterSpacing: 0.2, transform: [{ rotate: '90deg' }] },

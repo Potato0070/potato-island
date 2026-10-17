@@ -22,6 +22,7 @@ const HISTORY_LABELS: Record<string, string> = {
 type ResultKind = 'listed' | 'withdrawn';
 type ResultState = { kind: ResultKind; price: number };
 const EMPTY_NETWORK_ART = require('../assets/owned-collection/f-card-v1/runtime/empty-network-lighthouse.webp');
+const CONSIGN_NOTICE_ART = require('../assets/owned-collection/f-card-v1/runtime/consignment-vault-ticket.png');
 
 function artUri(item: OwnedItem) {
   const record = item as OwnedItem & { image_url?: string | null };
@@ -207,7 +208,7 @@ export default function MyNftDetailScreen() {
               {!isOwner ? <View style={styles.notice}><Ionicons name="information-circle-outline" size={18} color={OWNED_COLORS.gold} /><Text style={styles.noticeText}>这张藏品已不在当前金库，操作入口已关闭。</Text></View> : null}
               <View style={[styles.cardStage, { width: Math.min(contentWidth - 38, 540) }]}>
                 <FolioPaperSurface kind="paper" style={styles.detailCard}>
-                  <FolioArtwork uri={imageUri} style={styles.detailArtFrame} accessibilityLabel={`${collectionTitle}封面`} />
+                  <FolioArtwork uri={imageUri} framed={false} style={styles.detailArtFrame} accessibilityLabel={`${collectionTitle}封面`} />
                   <View style={styles.detailCardCopy}>
                     <Text style={[styles.detailName, { fontFamily: fonts.semibold }]}>{collectionTitle}</Text>
                     <Text style={styles.detailSerial}>{serial}</Text>
@@ -272,7 +273,7 @@ export default function MyNftDetailScreen() {
               <Pressable accessibilityRole="button" accessibilityLabel="关闭寄售面板" onPress={closePriceSheet} disabled={busy} style={styles.sheetClose}><Ionicons name="close" size={20} color={OWNED_COLORS.ink} /></Pressable>
             </View>
             {item ? <View style={styles.sheetItem}>
-              <FolioArtwork uri={imageUri} style={styles.sheetArt} accessibilityLabel={`${collectionTitle}封面`} />
+              <FolioArtwork uri={imageUri} framed={false} style={styles.sheetArt} accessibilityLabel={`${collectionTitle}封面`} />
               <View style={styles.sheetItemCopy}><Text numberOfLines={1} style={[styles.sheetItemName, { fontFamily: fonts.semibold }]}>{collectionTitle}</Text><Text style={styles.sheetItemSerial}>{serial}</Text><Text style={styles.sheetItemStatus}>{itemStatus(item.status)}</Text></View>
             </View> : null}
             <Text style={[styles.inputLabel, { fontFamily: fonts.semibold }]}>寄售价格 <Text style={styles.inputUnit}>土豆币</Text></Text>
@@ -281,7 +282,7 @@ export default function MyNftDetailScreen() {
               <Text style={styles.inputUnit}>土豆币</Text>
             </View>
             {inlineError ? <Text accessibilityLiveRegion="polite" style={styles.inlineError}>{inlineError}</Text> : collection?.max_consign_price ? <Text style={styles.priceCap}>该系列最高寄售价为 {money(collection.max_consign_price)} 土豆币</Text> : null}
-            <View style={styles.listingNotice}><Ionicons name="leaf-outline" size={16} color={OWNED_COLORS.blue} /><Text style={styles.listingNoticeText}>上架后暂时不能转赠；撤回寄售后会回到金库。</Text></View>
+            <View style={styles.listingNotice}><Image source={CONSIGN_NOTICE_ART} resizeMode="contain" style={styles.listingNoticeArt} accessible={false} /><Text style={styles.listingNoticeText}>上架后暂时不能转赠；撤回寄售后会回到金库。</Text></View>
             <FolioButton label="确认上架" tone="blue" pencilIcon="consign" onPress={publishConsign} loading={busy} style={styles.submitButton} fontFamily={fonts.semibold} />
           </FolioPaperSurface>
         </KeyboardAvoidingView>
@@ -293,11 +294,11 @@ export default function MyNftDetailScreen() {
             <Image source={require('../assets/owned-collection/f-card-v1/runtime/icon-withdraw-pencil.webp')} resizeMode="contain" style={styles.confirmIllustration} accessible={false} />
             <Text style={[styles.confirmTitle, { fontFamily: fonts.semibold }]}>撤回这张寄售藏品？</Text>
             <Text style={styles.confirmDescription}>撤回后，藏品会回到金库并恢复转赠。当前寄售价将一并取消。</Text>
-            {item ? <FolioPaperSurface kind="texture" style={styles.confirmItem}>
-              <FolioArtwork uri={imageUri} style={styles.confirmArt} accessibilityLabel={`${collectionTitle}封面`} />
+            {item ? <View style={styles.confirmItem}>
+              <FolioArtwork uri={imageUri} framed={false} style={styles.confirmArt} accessibilityLabel={`${collectionTitle}封面`} />
               <View style={styles.confirmItemCopy}><Text numberOfLines={1} style={[styles.confirmItemName, { fontFamily: fonts.semibold }]}>{collectionTitle}</Text><Text style={styles.confirmItemSerial}>{serial}</Text></View>
               <Text style={[styles.confirmItemPrice, { fontFamily: fonts.semibold }]}>{money(currencyValue)}</Text>
-            </FolioPaperSurface> : null}
+            </View> : null}
             {inlineError ? <Text accessibilityLiveRegion="polite" style={styles.inlineError}>{inlineError}</Text> : null}
             <View style={styles.confirmActions}>
               <FolioButton label="保留寄售" tone="paper" onPress={() => setWithdrawOpen(false)} disabled={busy} style={styles.confirmButton} fontFamily={fonts.semibold} />
@@ -313,11 +314,11 @@ export default function MyNftDetailScreen() {
             <Image source={result?.kind === 'listed' ? require('../assets/owned-collection/f-card-v1/runtime/island-market-stall.webp') : require('../assets/owned-collection/f-card-v1/runtime/island-archive-tray.webp')} resizeMode="contain" style={styles.resultArt} accessible={false} />
             <Text style={[styles.resultTitle, { fontFamily: fonts.semibold }]}>{result?.kind === 'listed' ? '上架成功' : '已收回金库'}</Text>
             <Text style={styles.resultSubtitle}>{result?.kind === 'listed' ? '这张藏品已经加入土豆岛集市' : '寄售已撤回，藏品回到了你的金库'}</Text>
-            {item ? <FolioPaperSurface kind="texture" style={styles.resultSummary}>
-              <FolioArtwork uri={imageUri} style={styles.resultThumb} accessibilityLabel={`${collectionTitle}封面`} />
+            {item ? <View style={styles.resultSummary}>
+              <FolioArtwork uri={imageUri} framed={false} style={styles.resultThumb} accessibilityLabel={`${collectionTitle}封面`} />
               <View style={styles.resultCopy}><Text numberOfLines={1} style={[styles.resultName, { fontFamily: fonts.semibold }]}>{collectionTitle} · {serial}</Text><Text style={styles.resultMeta}>{result?.kind === 'listed' ? '寄售价格' : '原寄售价'}</Text></View>
               <Text style={[styles.resultPrice, { fontFamily: fonts.semibold }]}>{money(result?.price || 0)}</Text>
-            </FolioPaperSurface> : null}
+            </View> : null}
             <View style={styles.resultActions}>
               <FolioButton label="继续查看" tone="paper" pencilIcon="album" onPress={() => setResult(null)} style={styles.resultButton} fontFamily={fonts.semibold} />
               <FolioButton label="返回藏品册" tone="blue" pencilIcon="collection" onPress={() => { setResult(null); router.back(); }} style={styles.resultButton} fontFamily={fonts.semibold} />
@@ -387,7 +388,7 @@ const styles = StyleSheet.create({
   unavailableText: { color: '#93877D', fontSize: 13 },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(42,37,31,0.28)' },
-  sheet: { width: '100%', maxHeight: '90%', paddingHorizontal: 25, paddingTop: 16 },
+  sheet: { width: '100%', maxHeight: '90%', paddingHorizontal: 31, paddingTop: 16 },
   sheetHandle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 3, backgroundColor: '#D9D1C6', marginBottom: 15 },
   sheetHeader: { minHeight: 53, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 14, borderBottomWidth: 1, borderColor: '#F0EBE4' },
   sheetTitle: { color: OWNED_COLORS.ink, fontSize: 19, lineHeight: 26 },
@@ -403,18 +404,19 @@ const styles = StyleSheet.create({
   inputUnit: { color: '#95887B', fontSize: 12 },
   inputWrap: { minHeight: 55, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: '#D8CBBB', backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center' },
   inputWrapError: { borderColor: '#C8907D', backgroundColor: '#FFFBF9' },
-  priceInput: { flex: 1, height: 52, padding: 0, borderWidth: 0, color: OWNED_COLORS.ink, fontSize: 22 },
+  priceInput: { flex: 1, minWidth: 0, height: 52, padding: 0, borderWidth: 0, outlineStyle: 'solid', outlineWidth: 0, outlineColor: 'transparent', boxShadow: 'none', color: OWNED_COLORS.ink, fontSize: 22 },
   inlineError: { color: '#A65349', fontSize: 12, lineHeight: 18, marginTop: 8 },
   priceCap: { color: OWNED_COLORS.blue, fontSize: 12, lineHeight: 18, marginTop: 8 },
-  listingNotice: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 15, marginBottom: 15, paddingHorizontal: 11, borderRadius: 10, backgroundColor: '#EFF5F8' },
-  listingNoticeText: { flex: 1, color: '#617C8D', fontSize: 11, lineHeight: 16 },
+  listingNotice: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 15, marginBottom: 15, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 13, borderWidth: 1, borderColor: '#E9E0D4', backgroundColor: '#FCFAF6' },
+  listingNoticeArt: { width: 39, height: 39, flexShrink: 0 },
+  listingNoticeText: { flex: 1, color: '#74685E', fontSize: 12, lineHeight: 17 },
   submitButton: { width: '100%', minHeight: 50 },
   centerOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20, backgroundColor: 'rgba(42,37,31,0.30)' },
   confirmCard: { width: '100%', maxWidth: 440, paddingHorizontal: 29, paddingVertical: 26, alignItems: 'stretch' },
   confirmIllustration: { width: 56, height: 56, alignSelf: 'center', marginBottom: 10 },
   confirmTitle: { color: OWNED_COLORS.ink, fontSize: 18, lineHeight: 24, textAlign: 'center' },
   confirmDescription: { color: '#8C8074', fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 6, marginBottom: 15 },
-  confirmItem: { minHeight: 67, padding: 8, flexDirection: 'row', alignItems: 'center' },
+  confirmItem: { minHeight: 67, padding: 8, flexDirection: 'row', alignItems: 'center', borderRadius: 13, borderWidth: 1, borderColor: '#EAE3D9', backgroundColor: '#FCFAF6' },
   confirmArt: { width: 49, height: 49, borderRadius: 7 },
   confirmItemCopy: { flex: 1, paddingHorizontal: 10 },
   confirmItemName: { color: OWNED_COLORS.ink, fontSize: 13, lineHeight: 18 },
@@ -426,7 +428,7 @@ const styles = StyleSheet.create({
   resultArt: { width: 174, height: 146, marginTop: 2 },
   resultTitle: { color: OWNED_COLORS.ink, fontSize: 22, lineHeight: 29, marginTop: 1 },
   resultSubtitle: { color: '#8B7E72', fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 2, marginBottom: 15 },
-  resultSummary: { width: '100%', minHeight: 68, padding: 8, flexDirection: 'row', alignItems: 'center' },
+  resultSummary: { width: '100%', minHeight: 68, padding: 8, flexDirection: 'row', alignItems: 'center', borderRadius: 13, borderWidth: 1, borderColor: '#EAE3D9', backgroundColor: '#FCFAF6' },
   resultThumb: { width: 50, height: 50, borderRadius: 8 },
   resultCopy: { flex: 1, paddingHorizontal: 9 },
   resultName: { color: OWNED_COLORS.ink, fontSize: 12, lineHeight: 17 },

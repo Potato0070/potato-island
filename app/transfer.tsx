@@ -117,18 +117,18 @@ export default function TransferScreen() {
       {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
 
       <ScrollView contentContainerStyle={{padding: 20}}>
-         <FolioPaperSurface kind="texture" style={styles.inputGroup}>
+         <View style={styles.inputGroup}>
             <View style={styles.inputRow}>
                <Text style={[styles.inputLabel, { fontFamily: fonts.semibold }]}>受赠人</Text>
                <TextInput accessibilityLabel="受赠人一岛号" style={[styles.inputField, { fontFamily: fonts.regular }]} placeholder="请输入接收人ID" placeholderTextColor="#A1887F" value={receiverId} onChangeText={setReceiverId} textAlign="right" />
             </View>
-         </FolioPaperSurface>
+         </View>
 
          <TouchableOpacity accessibilityRole="button" accessibilityLabel="选择要转赠的藏品" style={styles.selectNftPressable} onPress={openNftPicker} activeOpacity={0.8}>
           <FolioPaperSurface kind="plaque" style={styles.selectNftBox}>
             {selectedNft ? (
               <View style={{alignItems: 'center'}}>
-                  <FolioArtwork uri={selectedNft.image_url || selectedNft.collections?.image_url || null} style={styles.selectedImg} accessibilityLabel={`${selectedNft.collections?.name || '藏品'}封面`} />
+                  <FolioArtwork uri={selectedNft.image_url || selectedNft.collections?.image_url || null} framed={false} style={styles.selectedImg} accessibilityLabel={`${selectedNft.collections?.name || '藏品'}封面`} />
                   <Text style={[styles.selectedName, { fontFamily: fonts.semibold }]}>{selectedNft.collections?.name}</Text>
                   <Text style={styles.selectedSerial}>#{String(selectedNft.serial_number).padStart(6, '0')}</Text>
               </View>
@@ -141,7 +141,7 @@ export default function TransferScreen() {
           </FolioPaperSurface>
          </TouchableOpacity>
 
-         <FolioPaperSurface kind="texture" style={styles.costBox}>
+         <View style={styles.costBox}>
             <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12}}>
                 <Text style={[styles.costLabel, { fontFamily: fonts.semibold }]}>消耗转赠卡</Text>
                <Text style={styles.costValue}>- 1</Text>
@@ -152,7 +152,7 @@ export default function TransferScreen() {
                {/* 🌟 清洗科技蓝！换成尊贵的琥珀金 */}
                <FolioButton label="去兑换" tone="gold" icon="swap-horizontal-outline" onPress={() => router.push('/exchange')} style={styles.exchangeBtn} fontFamily={fonts.semibold} />
             </View>
-         </FolioPaperSurface>
+         </View>
 
          <FolioPaperSurface kind="plaque" style={styles.ruleBox}>
             <Text style={[styles.ruleTitle, { fontFamily: fonts.semibold }]}>转赠说明</Text>
@@ -176,7 +176,7 @@ export default function TransferScreen() {
                 {myNfts.length === 0 ? <View style={styles.noNfts}><Image source={EMPTY_TRANSFER_ART} resizeMode="contain" style={styles.noNftsArt} accessible={false} /><Text style={[styles.noNftsText, { fontFamily: fonts.semibold }]}>金库里还没有可转赠的藏品</Text></View> : null}
                 {myNfts.map(nft => (
                    <TouchableOpacity key={nft.id} style={[styles.nftPickRow, selectedNft?.id === nft.id && styles.nftPickRowActive]} onPress={() => { setSelectedNft(nft); setShowPicker(false); }}>
-                       <FolioArtwork uri={nft.image_url || nft.collections?.image_url || null} style={styles.pickImg} accessibilityLabel={`${nft.collections?.name || '藏品'}封面`} />
+                       <FolioArtwork uri={nft.image_url || nft.collections?.image_url || null} framed={false} style={styles.pickImg} accessibilityLabel={`${nft.collections?.name || '藏品'}封面`} />
                       <View style={{flex: 1}}>
                           <Text style={[styles.pickName, { fontFamily: fonts.semibold }, selectedNft?.id === nft.id && {color: OWNED_COLORS.gold}]}>{nft.collections?.name}</Text>
                           <Text style={styles.pickSerial}>编号: #{nft.serial_number}</Text>
@@ -226,10 +226,10 @@ const styles = StyleSheet.create({
   toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(78, 52, 46, 0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
   toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
 
-  inputGroup: { paddingHorizontal: 18, marginBottom: 18 },
+  inputGroup: { paddingHorizontal: 18, marginBottom: 18, borderRadius: 14, borderWidth: 1, borderColor: '#EAE4DC', backgroundColor: '#FCFAF6' },
   inputRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16 },
   inputLabel: { fontSize: 14, color: OWNED_COLORS.ink },
-  inputField: { flex: 1, fontSize: 16, color: OWNED_COLORS.ink, outlineWidth: 0 },
+  inputField: { flex: 1, minWidth: 0, fontSize: 16, color: OWNED_COLORS.ink, borderWidth: 0, outlineStyle: 'solid', outlineWidth: 0, outlineColor: 'transparent', boxShadow: 'none' },
 
   selectNftPressable: { marginBottom: 18 },
   selectNftBox: { padding: 25, alignItems: 'center', minHeight: 160 },
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   selectedName: { fontSize: 16, color: OWNED_COLORS.ink, marginBottom: 3 },
   selectedSerial: { fontSize: 12, color: OWNED_COLORS.muted, fontVariant: ['tabular-nums'] },
 
-  costBox: { padding: 17, marginBottom: 18 },
+  costBox: { padding: 17, marginBottom: 18, borderRadius: 14, borderWidth: 1, borderColor: '#EAE4DC', backgroundColor: '#FCFAF6' },
   costLabel: { fontSize: 14, color: OWNED_COLORS.muted },
   costValue: { fontSize: 16, fontWeight: '700', color: OWNED_COLORS.gold },
   ownedText: { fontSize: 13, color: OWNED_COLORS.ink },
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.28)', justifyContent: 'flex-end' },
   modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(44,30,22,0.3)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 18 },
   pickerSafeArea: { flex: 1, justifyContent: 'flex-end' },
-  bottomSheet: { width: '100%', height: height * 0.65, paddingHorizontal: 20, paddingTop: 16 },
+  bottomSheet: { width: '100%', height: height * 0.65, paddingHorizontal: 30, paddingTop: 16 },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 8, paddingBottom: 14, borderBottomWidth: 1, borderColor: '#EAE0D5' },
   sheetTitle: { fontSize: 18, color: OWNED_COLORS.ink },
   nftPickRow: { flexDirection: 'row', alignItems: 'center', padding: 10, marginBottom: 9 },
