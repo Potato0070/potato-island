@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-const FRAME = require('../assets/owned-collection/f-card-v1/runtime/album-card-frame-v3.webp');
+// Exact card frame archived with the approved F concept board.
+const FRAME = require('../assets/owned-collection/f-card-v1/runtime/album-card-frame-v2.webp');
 const SERIAL_TAG = require('../assets/owned-collection/f-card-v1/runtime/serial-number-tag.webp');
 const STATE_TAGS = {
   idle: require('../assets/owned-collection/f-card-v1/runtime/status-in-vault.webp'),
@@ -19,16 +20,18 @@ type ArtworkProps = {
   uri: string | null;
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
-  /** Use the layered scrapbook frame only when the artwork is large enough to carry it. */
+  /** Use the layered scrapbook frame from the approved F album concept. */
   framed?: boolean;
+  /** Gently tilt the square artwork inside the frame while keeping its full bounds visible. */
+  tiltArtwork?: boolean;
 };
 
-export function FolioArtwork({ uri, style, accessibilityLabel = '藏品封面', framed = false }: ArtworkProps) {
+export function FolioArtwork({ uri, style, accessibilityLabel = '藏品封面', framed = false, tiltArtwork = false }: ArtworkProps) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [uri]);
 
   const artwork = uri && !failed ? (
-    <Image accessibilityLabel={accessibilityLabel} source={{ uri }} resizeMode="cover" style={StyleSheet.absoluteFill} onError={() => setFailed(true)} />
+    <Image accessibilityLabel={accessibilityLabel} source={{ uri }} resizeMode="contain" style={tiltArtwork ? styles.tiltedArtwork : StyleSheet.absoluteFill} onError={() => setFailed(true)} />
   ) : (
     <View style={styles.fallback}>
       <Ionicons name="image-outline" size={24} color="#537895" />
@@ -73,6 +76,7 @@ export function FolioStateTag({ state, label, style, fontFamily }: StateTagProps
 const styles = StyleSheet.create({
   artwork: { position: 'relative', width: '100%', aspectRatio: 1, overflow: 'hidden', backgroundColor: '#F5F0E7' },
   aperture: { position: 'absolute', left: '15.5%', top: '16.7%', width: '70.2%', height: '66.8%', overflow: 'hidden', borderRadius: 8, backgroundColor: '#F5F0E7' },
+  tiltedArtwork: { position: 'absolute', width: '94%', height: '94%', left: '3%', top: '3%', transform: [{ rotate: '-2deg' }] },
   fallback: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 5, overflow: 'hidden', backgroundColor: '#F5F0E7' },
   fallbackText: { color: '#8D8175', fontSize: 9, lineHeight: 12 },
   serialTag: { alignItems: 'center', justifyContent: 'center' },

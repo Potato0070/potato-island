@@ -209,7 +209,11 @@ export default function MyNftDetailScreen() {
               {!isOwner ? <View style={styles.notice}><Ionicons name="information-circle-outline" size={18} color={OWNED_COLORS.gold} /><Text style={styles.noticeText}>这张藏品已不在当前金库，操作入口已关闭。</Text></View> : null}
               <View style={[styles.cardStage, { width: Math.min(contentWidth - 38, 540) }]}>
                 <FolioPaperSurface kind="paper" style={styles.detailCard}>
-                  <FolioArtwork uri={imageUri} framed={false} style={styles.detailArtFrame} accessibilityLabel={`${collectionTitle}封面`} />
+                  <View style={styles.detailArtStage}>
+                    <FolioArtwork uri={imageUri} framed style={styles.detailArtFrame} accessibilityLabel={`${collectionTitle}封面`} />
+                    <FolioSerialTag value={serial} style={styles.serialTab} fontFamily={fonts.semibold} />
+                    <FolioStateTag state={statusKey} label={isListed ? '在售' : itemStatus(item.status)} style={styles.detailStateTag} fontFamily={fonts.semibold} />
+                  </View>
                   <View style={styles.detailCardCopy}>
                     <Text style={[styles.detailName, { fontFamily: fonts.semibold }]}>{collectionTitle}</Text>
                     <Text style={styles.detailSerial}>{serial}</Text>
@@ -219,8 +223,6 @@ export default function MyNftDetailScreen() {
                     {item.created_at ? <View style={styles.cardDataRow}><Text style={styles.dataLabel}>生成时间</Text><Text style={styles.dataValue}>{formatIslandTime(item.created_at)}</Text></View> : null}
                   </View>
                   {isListed ? <View style={styles.listedPrice}><Text style={styles.listedPriceLabel}>当前寄售价格</Text><Text style={[styles.listedPriceValue, { fontFamily: fonts.semibold }]}>{money(currencyValue)} <Text style={styles.coinUnit}>土豆币</Text></Text></View> : null}
-                  <FolioSerialTag value={serial} style={styles.serialTab} fontFamily={fonts.semibold} />
-                  <FolioStateTag state={statusKey} label={isListed ? '在售' : itemStatus(item.status)} style={styles.detailStateTag} fontFamily={fonts.semibold} />
                 </FolioPaperSurface>
               </View>
 
@@ -348,7 +350,8 @@ const styles = StyleSheet.create({
   noticeText: { color: '#7F6C4F', flex: 1, fontSize: 12, lineHeight: 17 },
   cardStage: { alignSelf: 'center', minHeight: 500, paddingHorizontal: 12, paddingTop: 9, paddingBottom: 15, justifyContent: 'center', alignItems: 'center', position: 'relative' },
   detailCard: { width: '100%', paddingHorizontal: 21, paddingVertical: 22 },
-  detailArtFrame: { width: '86%', alignSelf: 'center', marginBottom: 9 },
+  detailArtStage: { width: '100%', aspectRatio: 1, position: 'relative', marginBottom: 9 },
+  detailArtFrame: { width: '100%', height: '100%' },
   detailCardCopy: { paddingHorizontal: 7, paddingTop: 4 },
   detailName: { color: OWNED_COLORS.ink, fontSize: 19, lineHeight: 26 },
   detailSerial: { color: OWNED_COLORS.blue, fontSize: 13, lineHeight: 19, marginTop: 2 },
@@ -360,8 +363,8 @@ const styles = StyleSheet.create({
   listedPriceLabel: { color: '#8D8175', fontSize: 12 },
   listedPriceValue: { color: OWNED_COLORS.gold, fontSize: 19 },
   coinUnit: { color: '#8D8175', fontSize: 11 },
-  serialTab: { position: 'absolute', right: 8, top: '22%', zIndex: 3 },
-  detailStateTag: { position: 'absolute', right: 8, top: '48%', zIndex: 3 },
+  serialTab: { position: 'absolute', right: '3%', top: '18%', zIndex: 3 },
+  detailStateTag: { position: 'absolute', right: '3%', top: '46%', zIndex: 3 },
   provenance: { width: '100%', maxWidth: 540, paddingHorizontal: 6, paddingTop: 15, paddingBottom: 11 },
   sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 },
   sectionTitle: { color: OWNED_COLORS.ink, fontSize: 18, lineHeight: 24 },

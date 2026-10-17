@@ -5,7 +5,7 @@ import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Modal, Platfo
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import FolioButton from '../components/FolioButton';
 import FolioPaperSurface from '../components/FolioPaperSurface';
-import { FolioArtwork, FolioSerialTag, FolioStateTag } from '../components/FolioArtwork';
+import { FolioArtwork } from '../components/FolioArtwork';
 import { WEB_TEXT_INPUT_RESET } from '../components/webTextInputStyle';
 import { OWNED_COLORS, itemStatus, money, serialLabel, validateConsignPrice, type OwnedItem } from '../constants/owned-collection';
 import { supabase } from '../supabase';
@@ -37,6 +37,9 @@ const EMPTY_ALBUM_ART = require('../assets/owned-collection/f-card-v1/runtime/em
 const EMPTY_SEARCH_ART = require('../assets/owned-collection/f-card-v1/runtime/empty-search-map.webp');
 const EMPTY_NETWORK_ART = require('../assets/owned-collection/f-card-v1/runtime/empty-network-lighthouse.webp');
 const REQUEST_TIMEOUT_MESSAGE = '连接有点慢，请检查网络后重试';
+const FILM_ITEM_WIDTH = 66;
+const FILM_ITEM_STRIDE = 75;
+const FILM_STRIP_INSET = 20;
 
 function withTimeout<T>(operation: PromiseLike<T>, timeoutMs: number) {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -157,7 +160,8 @@ export default function MyCollectionListScreen() {
   const activeDotIndex = dotCount > 0 ? activeIndex % dotCount : 0;
 
   React.useEffect(() => {
-    const centeredOffset = activeIndex * 71 - Math.max(0, (contentWidth - 62) / 2);
+    const selectedCenter = FILM_STRIP_INSET + activeIndex * FILM_ITEM_STRIDE + FILM_ITEM_WIDTH / 2;
+    const centeredOffset = selectedCenter - contentWidth / 2;
     filmRef.current?.scrollToOffset({ offset: Math.max(0, centeredOffset), animated: true });
   }, [activeIndex, contentWidth]);
 
@@ -286,11 +290,9 @@ export default function MyCollectionListScreen() {
     }
   };
 
-  const renderCard = ({ item, index }: { item: OwnedItem; index: number }) => {
+  const renderCard = ({ item }: { item: OwnedItem }) => {
     const isSelected = selectedIds.includes(item.id);
     const imageUri = imageOf(item);
-    const status = itemStatus(item.status);
-    const statusKey = item.status === 'idle' ? 'idle' : item.status === 'listed' ? 'listed' : 'other';
     return (
       <Pressable
         accessibilityRole="button"
@@ -298,20 +300,12 @@ export default function MyCollectionListScreen() {
         onPress={() => selectItem(item)}
         style={[styles.cardShell, { width: cardWidth }, isSelected && styles.cardShellSelected]}
       >
-        <View style={[styles.collectionCard, { width: cardWidth - 14 }]}>
+        <View style={[styles.collectionCard, { width: cardWidth }]}>
           <View style={styles.coverMount}>
-            <FolioArtwork uri={imageUri} framed={false} style={styles.coverArt} accessibilityLabel={`${collectionOf(item)?.name || '藏品'}封面`} />
+            <FolioArtwork uri={imageUri} framed tiltArtwork style={styles.coverArt} accessibilityLabel={`${collectionOf(item)?.name || '藏品'}封面`} />
+            <Text pointerEvents="none" numberOfLines={1} style={styles.coverSerial}>{serialLabel(item.serial_number)}</Text>
             {batchMode ? <View style={[styles.selectionMark, isSelected && styles.selectionMarkSelected]}>{isSelected ? <Ionicons name="checkmark" size={16} color="#fff" /> : null}</View> : null}
           </View>
-          <View style={styles.cardCaption}>
-            <View style={styles.captionMain}>
-              <Text numberOfLines={1} style={styles.cardName}>{collectionOf(item)?.name || '未命名藏品'}</Text>
-              <Text style={styles.cardSerial}>{serialLabel(item.serial_number)}</Text>
-            </View>
-            <Ionicons name={batchMode ? (isSelected ? 'checkmark-circle' : 'ellipse-outline') : 'chevron-forward'} size={19} color={isSelected ? OWNED_COLORS.blue : '#B6A99B'} />
-          </View>
-          <FolioSerialTag value={serialLabel(item.serial_number)} style={styles.sideNumber} />
-          <FolioStateTag state={statusKey} label={status} style={styles.sideStatus} />
         </View>
       </Pressable>
     );
@@ -385,10 +379,6 @@ export default function MyCollectionListScreen() {
           </View>
         ) : (
           <>
-            <View style={styles.deckHeader}>
-              <View style={styles.deckLabelRow}><View style={styles.deckDot} /><Text style={styles.deckLabel}>{batchMode ? '点选要寄售的藏品' : '轻轻滑动，翻看你的藏品'}</Text></View>
-              <Text style={styles.deckCount}>{activeIndex + 1} / {visibleItems.length}</Text>
-            </View>
             <View style={[styles.carouselFrame, { width: cardWidth }]}>
               {visibleItems.length > 1 ? <Pressable accessibilityRole="button" accessibilityLabel="上一件藏品" onPress={() => moveCarousel(-1)} style={[styles.carouselArrow, styles.carouselArrowLeft]}><Ionicons name="chevron-back" size={20} color={OWNED_COLORS.ink} /></Pressable> : null}
               <FlatList
@@ -423,11 +413,11 @@ export default function MyCollectionListScreen() {
               {visibleItems.length > 1 ? <Pressable accessibilityRole="button" accessibilityLabel="下一件藏品" onPress={() => moveCarousel(1)} style={[styles.carouselArrow, styles.carouselArrowRight]}><Ionicons name="chevron-forward" size={20} color={OWNED_COLORS.ink} /></Pressable> : null}
             </View>
             <View style={styles.pageIndicator}>
+              <Text style={styles.pageLabel}>{activeIndex + 1} / {visibleItems.length}</Text>
               <View style={[styles.dots, { width: dotTrackWidth }]}>
                 {Array.from({ length: dotCount }, (_, index) => <View key={index} style={[styles.dot, { left: index * 14 }]} />)}
                 <View pointerEvents="none" style={[styles.dotActive, { left: activeDotIndex * 14 - 1 }]} />
               </View>
-              <Text style={styles.pageLabel}>{activeItem ? serialLabel(activeItem.serial_number) : ''}</Text>
             </View>
             <FlatList
               ref={filmRef}
@@ -436,15 +426,18 @@ export default function MyCollectionListScreen() {
               extraData={activeIndex}
               renderItem={({ item, index }) => {
                 const selected = activeIndex === index;
+                const statusLabel = itemStatus(item.status);
                 return (
-                  <Pressable accessibilityRole="button" accessibilityLabel={'跳到' + serialLabel(item.serial_number)} onPress={() => { setActiveIndex(index); carouselRef.current?.scrollToOffset({ offset: index * cardInterval, animated: true }); }} style={[styles.filmItem, selected && styles.filmItemSelected]}>
-                    <FolioArtwork uri={imageOf(item)} framed={false} style={styles.filmArt} accessibilityLabel={`${collectionOf(item)?.name || '藏品'}缩略图`} />
-                    <View style={[styles.filmStatus, item.status === 'listed' && styles.filmStatusListed]} />
+                  <Pressable accessibilityRole="button" accessibilityLabel={'跳到' + serialLabel(item.serial_number)} onPress={() => { setActiveIndex(index); carouselRef.current?.scrollToOffset({ offset: index * cardInterval, animated: true }); }} style={styles.filmItem}>
+                    <View style={[styles.filmArtFrame, selected && styles.filmArtFrameSelected]}>
+                      <FolioArtwork uri={imageOf(item)} framed={false} style={styles.filmArt} accessibilityLabel={`${collectionOf(item)?.name || '藏品'}缩略图`} />
+                    </View>
+                    <Text numberOfLines={1} style={[styles.filmStatusLabel, item.status === 'listed' && styles.filmStatusLabelListed]}>{statusLabel}</Text>
                   </Pressable>
                 );
               }}
               keyExtractor={(item) => 'film-' + item.id}
-              getItemLayout={(_, index) => ({ length: 62, offset: 71 * index, index })}
+              getItemLayout={(_, index) => ({ length: FILM_ITEM_WIDTH, offset: FILM_STRIP_INSET + FILM_ITEM_STRIDE * index, index })}
               onScrollToIndexFailed={({ index }) => setTimeout(() => filmRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true }), 80)}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filmStrip}
@@ -534,41 +527,32 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, minWidth: 0, height: 42, padding: 0, margin: 0, borderWidth: 0, ...WEB_TEXT_INPUT_RESET, backgroundColor: 'transparent', color: OWNED_COLORS.ink, fontSize: 16, lineHeight: 22 },
   clearSearch: { width: 32, height: 40, alignItems: 'center', justifyContent: 'center' },
   sortButton: { width: 43, height: 43, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E9E2D9', backgroundColor: '#FCFAF6' },
-  deckHeader: { paddingHorizontal: 25, marginTop: 22, marginBottom: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  deckLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  deckDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: OWNED_COLORS.gold },
-  deckLabel: { color: '#8D8175', fontSize: 12, lineHeight: 18 },
-  deckCount: { color: '#A79A8D', fontSize: 12 },
   carouselFrame: { alignSelf: 'center', position: 'relative', overflow: 'hidden' },
   carouselList: { width: '100%' },
   carouselContent: { paddingHorizontal: 0 },
-  cardShell: { height: undefined, alignItems: 'center', paddingTop: 8, paddingBottom: 7 },
+  cardShell: { height: undefined, alignItems: 'center', paddingTop: 2, paddingBottom: 2 },
   cardShellSelected: { opacity: 0.94 },
-  collectionCard: { position: 'relative', overflow: 'hidden', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8, alignSelf: 'center', borderRadius: 18, borderWidth: 1, borderColor: '#ECE6DE', backgroundColor: '#FFFFFF', shadowColor: '#594A3D', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 1 },
-  coverMount: { width: '100%', aspectRatio: 1, position: 'relative' },
+  collectionCard: { position: 'relative', alignSelf: 'center', aspectRatio: 1 },
+  coverMount: { width: '100%', height: '100%', aspectRatio: 1, position: 'relative' },
   coverArt: { width: '100%', height: '100%' },
+  coverSerial: { position: 'absolute', left: '18%', right: '18%', bottom: '5%', textAlign: 'center', color: OWNED_COLORS.ink, fontSize: 13, lineHeight: 18, fontWeight: '600' },
   selectionMark: { position: 'absolute', top: 12, right: 12, width: 27, height: 27, borderRadius: 14, borderWidth: 1.5, borderColor: '#FFF', backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center' },
   selectionMarkSelected: { backgroundColor: OWNED_COLORS.blue, borderColor: '#FFFFFF' },
-  cardCaption: { minHeight: 58, paddingHorizontal: 5, paddingTop: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  captionMain: { flex: 1, paddingRight: 10 },
-  cardName: { color: OWNED_COLORS.ink, fontSize: 15, lineHeight: 20 },
-  cardSerial: { color: '#8E8175', fontSize: 12, lineHeight: 17, marginTop: 2 },
-  sideNumber: { position: 'absolute', right: 9, top: '17%', zIndex: 2 },
-  sideStatus: { position: 'absolute', right: 9, top: '45%', zIndex: 2 },
   carouselArrow: { position: 'absolute', top: '44%', zIndex: 5, width: 35, height: 35, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.95)', borderWidth: 1, borderColor: '#E7DED2', alignItems: 'center', justifyContent: 'center', shadowColor: '#4D3D31', shadowOpacity: 0.08, shadowRadius: 5, elevation: 2 },
   carouselArrowLeft: { left: 4 },
   carouselArrowRight: { right: 4 },
-  pageIndicator: { marginTop: 1, marginBottom: 8, paddingHorizontal: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 13 },
+  pageIndicator: { marginTop: 1, marginBottom: 4, paddingHorizontal: 24, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1 },
   dots: { height: 12, position: 'relative' },
   dot: { position: 'absolute', top: 2.5, width: 7, height: 7, borderRadius: 4, backgroundColor: '#DED6CA' },
   dotActive: { position: 'absolute', top: 1.5, left: -1, width: 9, height: 9, borderRadius: 5, backgroundColor: OWNED_COLORS.blue },
-  pageLabel: { color: '#988B7D', fontSize: 11 },
-  filmStrip: { paddingHorizontal: 22, paddingTop: 4, paddingBottom: 18, gap: 9 },
-  filmItem: { width: 62, height: 62, padding: 3, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2D9CD' },
-  filmItemSelected: { borderWidth: 2, borderColor: OWNED_COLORS.gold, padding: 2, backgroundColor: '#FCF4E5' },
+  pageLabel: { color: '#988B7D', fontSize: 11, lineHeight: 15, minWidth: 45, textAlign: 'center' },
+  filmStrip: { paddingHorizontal: 20, paddingTop: 3, paddingBottom: 14, gap: 9 },
+  filmItem: { width: FILM_ITEM_WIDTH, alignItems: 'center' },
+  filmArtFrame: { width: 62, height: 62, padding: 3, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2D9CD' },
+  filmArtFrameSelected: { borderWidth: 2, borderColor: OWNED_COLORS.gold, padding: 2, backgroundColor: '#FCF4E5' },
   filmArt: { width: '100%', height: '100%', aspectRatio: 1, borderRadius: 6 },
-  filmStatus: { position: 'absolute', right: 2, bottom: 2, width: 10, height: 10, borderRadius: 5, backgroundColor: OWNED_COLORS.blue, borderWidth: 1.5, borderColor: '#FFFFFF' },
-  filmStatusListed: { backgroundColor: OWNED_COLORS.gold },
+  filmStatusLabel: { maxWidth: FILM_ITEM_WIDTH, minWidth: 34, marginTop: 3, paddingHorizontal: 5, borderRadius: 5, overflow: 'hidden', backgroundColor: '#E9F2F8', color: OWNED_COLORS.blue, fontSize: 9, lineHeight: 13, textAlign: 'center' },
+  filmStatusLabelListed: { backgroundColor: '#FBF0DF', color: OWNED_COLORS.gold },
   loadingState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingBottom: 80 },
   loadingText: { color: '#8D8175', fontSize: 13 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36, paddingBottom: 70, gap: 11 },
