@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FolioArtwork } from '../components/FolioArtwork';
 import FolioButton from '../components/FolioButton';
 import FolioPaperSurface from '../components/FolioPaperSurface';
+import { WEB_TEXT_INPUT_RESET } from '../components/webTextInputStyle';
 import { OWNED_COLORS } from '../constants/owned-collection';
 import { useIslandFonts } from '../hooks/use-island-fonts';
 import { supabase } from '../supabase';
@@ -229,7 +230,7 @@ const styles = StyleSheet.create({
   inputGroup: { paddingHorizontal: 18, marginBottom: 18, borderRadius: 14, borderWidth: 1, borderColor: '#EAE4DC', backgroundColor: '#FCFAF6' },
   inputRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16 },
   inputLabel: { fontSize: 14, color: OWNED_COLORS.ink },
-  inputField: { flex: 1, minWidth: 0, fontSize: 16, color: OWNED_COLORS.ink, borderWidth: 0, outlineStyle: 'solid', outlineWidth: 0, outlineColor: 'transparent', boxShadow: 'none' },
+  inputField: { flex: 1, minWidth: 0, fontSize: 16, color: OWNED_COLORS.ink, borderWidth: 0, ...WEB_TEXT_INPUT_RESET, backgroundColor: 'transparent', borderRadius: 0 },
 
   selectNftPressable: { marginBottom: 18 },
   selectNftBox: { padding: 25, alignItems: 'center', minHeight: 160 },

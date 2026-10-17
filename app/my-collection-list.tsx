@@ -6,6 +6,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import FolioButton from '../components/FolioButton';
 import FolioPaperSurface from '../components/FolioPaperSurface';
 import { FolioArtwork, FolioSerialTag, FolioStateTag } from '../components/FolioArtwork';
+import { WEB_TEXT_INPUT_RESET } from '../components/webTextInputStyle';
 import { OWNED_COLORS, itemStatus, money, serialLabel, validateConsignPrice, type OwnedItem } from '../constants/owned-collection';
 import { supabase } from '../supabase';
 
@@ -150,6 +151,10 @@ export default function MyCollectionListScreen() {
     filmRef.current?.scrollToOffset({ offset: 0, animated: false });
     setSelectedIds((current) => current.filter((id) => items.some((item) => item.id === id && item.status === 'idle')));
   }, [filter, search, items, sortBy]);
+
+  const dotCount = Math.min(8, visibleItems.length);
+  const dotTrackWidth = dotCount > 0 ? dotCount * 7 + (dotCount - 1) * 7 : 0;
+  const activeDotIndex = dotCount > 0 ? activeIndex % dotCount : 0;
 
   React.useEffect(() => {
     const centeredOffset = activeIndex * 71 - Math.max(0, (contentWidth - 62) / 2);
@@ -305,9 +310,9 @@ export default function MyCollectionListScreen() {
             </View>
             <Ionicons name={batchMode ? (isSelected ? 'checkmark-circle' : 'ellipse-outline') : 'chevron-forward'} size={19} color={isSelected ? OWNED_COLORS.blue : '#B6A99B'} />
           </View>
+          <FolioSerialTag value={serialLabel(item.serial_number)} style={styles.sideNumber} />
+          <FolioStateTag state={statusKey} label={status} style={styles.sideStatus} />
         </View>
-        <FolioSerialTag value={serialLabel(item.serial_number)} style={styles.sideNumber} />
-        <FolioStateTag state={statusKey} label={status} style={styles.sideStatus} />
       </Pressable>
     );
   };
@@ -384,10 +389,11 @@ export default function MyCollectionListScreen() {
               <View style={styles.deckLabelRow}><View style={styles.deckDot} /><Text style={styles.deckLabel}>{batchMode ? '点选要寄售的藏品' : '轻轻滑动，翻看你的藏品'}</Text></View>
               <Text style={styles.deckCount}>{activeIndex + 1} / {visibleItems.length}</Text>
             </View>
-            <View style={styles.carouselFrame}>
+            <View style={[styles.carouselFrame, { width: cardWidth }]}>
               {visibleItems.length > 1 ? <Pressable accessibilityRole="button" accessibilityLabel="上一件藏品" onPress={() => moveCarousel(-1)} style={[styles.carouselArrow, styles.carouselArrowLeft]}><Ionicons name="chevron-back" size={20} color={OWNED_COLORS.ink} /></Pressable> : null}
               <FlatList
                 ref={carouselRef}
+                style={styles.carouselList}
                 horizontal
                 data={visibleItems}
                 renderItem={renderCard}
@@ -398,16 +404,18 @@ export default function MyCollectionListScreen() {
                 snapToInterval={cardInterval}
                 snapToAlignment="start"
                 disableIntervalMomentum
-                contentContainerStyle={{ paddingHorizontal: Math.max(16, (contentWidth - cardWidth) / 2) }}
+                contentContainerStyle={styles.carouselContent}
                 ItemSeparatorComponent={() => <View style={{ width: 18 }} />}
                 getItemLayout={(_, index) => ({ length: cardInterval, offset: cardInterval * index, index })}
                 scrollEventThrottle={16}
                 onScroll={(event) => {
-                  const next = Math.max(0, Math.min(visibleItems.length - 1, Math.round(event.nativeEvent.contentOffset.x / cardInterval)));
+                  const offset = Math.max(0, event.nativeEvent.contentOffset.x);
+                  const next = Math.max(0, Math.min(visibleItems.length - 1, Math.round(offset / cardInterval)));
                   setActiveIndex((current) => current === next ? current : next);
                 }}
                 onMomentumScrollEnd={(event) => {
-                  const next = Math.max(0, Math.min(visibleItems.length - 1, Math.round(event.nativeEvent.contentOffset.x / cardInterval)));
+                  const offset = Math.max(0, event.nativeEvent.contentOffset.x);
+                  const next = Math.max(0, Math.min(visibleItems.length - 1, Math.round(offset / cardInterval)));
                   setActiveIndex(next);
                 }}
                 onScrollToIndexFailed={({ index }) => setTimeout(() => carouselRef.current?.scrollToIndex({ index, animated: true }), 80)}
@@ -415,11 +423,10 @@ export default function MyCollectionListScreen() {
               {visibleItems.length > 1 ? <Pressable accessibilityRole="button" accessibilityLabel="下一件藏品" onPress={() => moveCarousel(1)} style={[styles.carouselArrow, styles.carouselArrowRight]}><Ionicons name="chevron-forward" size={20} color={OWNED_COLORS.ink} /></Pressable> : null}
             </View>
             <View style={styles.pageIndicator}>
-              <View style={styles.dots}>{visibleItems.slice(0, Math.min(8, visibleItems.length)).map((item, index) => {
-                const dotCount = Math.min(8, visibleItems.length);
-                const dotIndex = Math.min(dotCount - 1, Math.floor((activeIndex / Math.max(1, visibleItems.length)) * dotCount));
-                return <View key={item.id} style={[styles.dot, index === dotIndex && styles.dotActive]} />;
-              })}</View>
+              <View style={[styles.dots, { width: dotTrackWidth }]}>
+                {Array.from({ length: dotCount }, (_, index) => <View key={index} style={[styles.dot, { left: index * 14 }]} />)}
+                <View pointerEvents="none" style={[styles.dotActive, { left: activeDotIndex * 14 - 1 }]} />
+              </View>
               <Text style={styles.pageLabel}>{activeItem ? serialLabel(activeItem.serial_number) : ''}</Text>
             </View>
             <FlatList
@@ -524,7 +531,7 @@ const styles = StyleSheet.create({
   statusCountSelected: { backgroundColor: 'rgba(255,255,255,0.22)', color: '#FFFFFF' },
   searchRow: { marginHorizontal: 20, marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 9 },
   searchBox: { height: 43, flex: 1, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E9E2D9', backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', gap: 9 },
-  searchInput: { flex: 1, minWidth: 0, height: 42, padding: 0, margin: 0, borderWidth: 0, outlineStyle: 'solid', outlineWidth: 0, outlineColor: 'transparent', boxShadow: 'none', backgroundColor: 'transparent', color: OWNED_COLORS.ink, fontSize: 16, lineHeight: 22 },
+  searchInput: { flex: 1, minWidth: 0, height: 42, padding: 0, margin: 0, borderWidth: 0, ...WEB_TEXT_INPUT_RESET, backgroundColor: 'transparent', color: OWNED_COLORS.ink, fontSize: 16, lineHeight: 22 },
   clearSearch: { width: 32, height: 40, alignItems: 'center', justifyContent: 'center' },
   sortButton: { width: 43, height: 43, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E9E2D9', backgroundColor: '#FCFAF6' },
   deckHeader: { paddingHorizontal: 25, marginTop: 22, marginBottom: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -532,7 +539,9 @@ const styles = StyleSheet.create({
   deckDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: OWNED_COLORS.gold },
   deckLabel: { color: '#8D8175', fontSize: 12, lineHeight: 18 },
   deckCount: { color: '#A79A8D', fontSize: 12 },
-  carouselFrame: { width: '100%', position: 'relative', height: undefined },
+  carouselFrame: { alignSelf: 'center', position: 'relative', overflow: 'hidden' },
+  carouselList: { width: '100%' },
+  carouselContent: { paddingHorizontal: 0 },
   cardShell: { height: undefined, alignItems: 'center', paddingTop: 8, paddingBottom: 7 },
   cardShellSelected: { opacity: 0.94 },
   collectionCard: { position: 'relative', overflow: 'hidden', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8, alignSelf: 'center', borderRadius: 18, borderWidth: 1, borderColor: '#ECE6DE', backgroundColor: '#FFFFFF', shadowColor: '#594A3D', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 1 },
@@ -544,15 +553,15 @@ const styles = StyleSheet.create({
   captionMain: { flex: 1, paddingRight: 10 },
   cardName: { color: OWNED_COLORS.ink, fontSize: 15, lineHeight: 20 },
   cardSerial: { color: '#8E8175', fontSize: 12, lineHeight: 17, marginTop: 2 },
-  sideNumber: { position: 'absolute', right: 8, top: '17%', zIndex: 2 },
-  sideStatus: { position: 'absolute', right: 8, top: '45%', zIndex: 2 },
+  sideNumber: { position: 'absolute', right: 9, top: '17%', zIndex: 2 },
+  sideStatus: { position: 'absolute', right: 9, top: '45%', zIndex: 2 },
   carouselArrow: { position: 'absolute', top: '44%', zIndex: 5, width: 35, height: 35, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.95)', borderWidth: 1, borderColor: '#E7DED2', alignItems: 'center', justifyContent: 'center', shadowColor: '#4D3D31', shadowOpacity: 0.08, shadowRadius: 5, elevation: 2 },
-  carouselArrowLeft: { left: 9 },
-  carouselArrowRight: { right: 9 },
+  carouselArrowLeft: { left: 4 },
+  carouselArrowRight: { right: 4 },
   pageIndicator: { marginTop: 1, marginBottom: 8, paddingHorizontal: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 13 },
-  dots: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#DED6CA' },
-  dotActive: { width: 9, height: 9, borderRadius: 5, backgroundColor: OWNED_COLORS.blue },
+  dots: { height: 12, position: 'relative' },
+  dot: { position: 'absolute', top: 2.5, width: 7, height: 7, borderRadius: 4, backgroundColor: '#DED6CA' },
+  dotActive: { position: 'absolute', top: 1.5, left: -1, width: 9, height: 9, borderRadius: 5, backgroundColor: OWNED_COLORS.blue },
   pageLabel: { color: '#988B7D', fontSize: 11 },
   filmStrip: { paddingHorizontal: 22, paddingTop: 4, paddingBottom: 18, gap: 9 },
   filmItem: { width: 62, height: 62, padding: 3, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2D9CD' },
@@ -594,7 +603,7 @@ const styles = StyleSheet.create({
   inputLabel: { color: OWNED_COLORS.ink, fontSize: 14, lineHeight: 20, marginBottom: 9 },
   currency: { color: '#95887B', fontSize: 12 },
   priceInputWrap: { minHeight: 55, borderRadius: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: '#D8CBBB', backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center' },
-  priceInput: { flex: 1, minWidth: 0, height: 52, padding: 0, borderWidth: 0, outlineStyle: 'solid', outlineWidth: 0, outlineColor: 'transparent', boxShadow: 'none', color: OWNED_COLORS.ink, fontSize: 22 },
+  priceInput: { flex: 1, minWidth: 0, height: 52, padding: 0, borderWidth: 0, ...WEB_TEXT_INPUT_RESET, color: OWNED_COLORS.ink, fontSize: 22 },
   currencySuffix: { color: '#8D8175', fontSize: 13 },
   priceLimit: { color: OWNED_COLORS.blue, fontSize: 12, lineHeight: 18, marginTop: 8 },
   priceTotal: { marginTop: 18, paddingTop: 14, borderTopWidth: 1, borderColor: '#F0EBE4', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

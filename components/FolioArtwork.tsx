@@ -23,7 +23,7 @@ type ArtworkProps = {
   framed?: boolean;
 };
 
-export function FolioArtwork({ uri, style, accessibilityLabel = '藏品封面', framed = true }: ArtworkProps) {
+export function FolioArtwork({ uri, style, accessibilityLabel = '藏品封面', framed = false }: ArtworkProps) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [uri]);
 

@@ -6,6 +6,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import FolioButton from '../components/FolioButton';
 import FolioPaperSurface from '../components/FolioPaperSurface';
 import { FolioArtwork, FolioSerialTag, FolioStateTag } from '../components/FolioArtwork';
+import { WEB_TEXT_INPUT_RESET } from '../components/webTextInputStyle';
 import { OWNED_COLORS, formatIslandTime, itemStatus, money, serialLabel, validateConsignPrice, type OwnedHistory, type OwnedItem } from '../constants/owned-collection';
 import { useIslandFonts } from '../hooks/use-island-fonts';
 import { supabase } from '../supabase';
@@ -218,9 +219,9 @@ export default function MyNftDetailScreen() {
                     {item.created_at ? <View style={styles.cardDataRow}><Text style={styles.dataLabel}>生成时间</Text><Text style={styles.dataValue}>{formatIslandTime(item.created_at)}</Text></View> : null}
                   </View>
                   {isListed ? <View style={styles.listedPrice}><Text style={styles.listedPriceLabel}>当前寄售价格</Text><Text style={[styles.listedPriceValue, { fontFamily: fonts.semibold }]}>{money(currencyValue)} <Text style={styles.coinUnit}>土豆币</Text></Text></View> : null}
+                  <FolioSerialTag value={serial} style={styles.serialTab} fontFamily={fonts.semibold} />
+                  <FolioStateTag state={statusKey} label={isListed ? '在售' : itemStatus(item.status)} style={styles.detailStateTag} fontFamily={fonts.semibold} />
                 </FolioPaperSurface>
-                <FolioSerialTag value={serial} style={styles.serialTab} fontFamily={fonts.semibold} />
-                <FolioStateTag state={statusKey} label={isListed ? '在售' : itemStatus(item.status)} style={styles.detailStateTag} fontFamily={fonts.semibold} />
               </View>
 
               <View style={styles.provenance}>
@@ -347,7 +348,7 @@ const styles = StyleSheet.create({
   noticeText: { color: '#7F6C4F', flex: 1, fontSize: 12, lineHeight: 17 },
   cardStage: { alignSelf: 'center', minHeight: 500, paddingHorizontal: 12, paddingTop: 9, paddingBottom: 15, justifyContent: 'center', alignItems: 'center', position: 'relative' },
   detailCard: { width: '100%', paddingHorizontal: 21, paddingVertical: 22 },
-  detailArtFrame: { width: '100%', marginBottom: 9 },
+  detailArtFrame: { width: '86%', alignSelf: 'center', marginBottom: 9 },
   detailCardCopy: { paddingHorizontal: 7, paddingTop: 4 },
   detailName: { color: OWNED_COLORS.ink, fontSize: 19, lineHeight: 26 },
   detailSerial: { color: OWNED_COLORS.blue, fontSize: 13, lineHeight: 19, marginTop: 2 },
@@ -359,8 +360,8 @@ const styles = StyleSheet.create({
   listedPriceLabel: { color: '#8D8175', fontSize: 12 },
   listedPriceValue: { color: OWNED_COLORS.gold, fontSize: 19 },
   coinUnit: { color: '#8D8175', fontSize: 11 },
-  serialTab: { position: 'absolute', right: 0, top: '22%', zIndex: 3 },
-  detailStateTag: { position: 'absolute', right: 1, top: '48%', zIndex: 3 },
+  serialTab: { position: 'absolute', right: 8, top: '22%', zIndex: 3 },
+  detailStateTag: { position: 'absolute', right: 8, top: '48%', zIndex: 3 },
   provenance: { width: '100%', maxWidth: 540, paddingHorizontal: 6, paddingTop: 15, paddingBottom: 11 },
   sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 },
   sectionTitle: { color: OWNED_COLORS.ink, fontSize: 18, lineHeight: 24 },
@@ -404,7 +405,7 @@ const styles = StyleSheet.create({
   inputUnit: { color: '#95887B', fontSize: 12 },
   inputWrap: { minHeight: 55, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: '#D8CBBB', backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center' },
   inputWrapError: { borderColor: '#C8907D', backgroundColor: '#FFFBF9' },
-  priceInput: { flex: 1, minWidth: 0, height: 52, padding: 0, borderWidth: 0, outlineStyle: 'solid', outlineWidth: 0, outlineColor: 'transparent', boxShadow: 'none', color: OWNED_COLORS.ink, fontSize: 22 },
+  priceInput: { flex: 1, minWidth: 0, height: 52, padding: 0, borderWidth: 0, ...WEB_TEXT_INPUT_RESET, backgroundColor: 'transparent', borderRadius: 0, color: OWNED_COLORS.ink, fontSize: 22 },
   inlineError: { color: '#A65349', fontSize: 12, lineHeight: 18, marginTop: 8 },
   priceCap: { color: OWNED_COLORS.blue, fontSize: 12, lineHeight: 18, marginTop: 8 },
   listingNotice: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 15, marginBottom: 15, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 13, borderWidth: 1, borderColor: '#E9E0D4', backgroundColor: '#FCFAF6' },
