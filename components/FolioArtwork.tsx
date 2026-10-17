@@ -31,7 +31,7 @@ export function FolioArtwork({ uri, style, accessibilityLabel = '藏品封面', 
   useEffect(() => setFailed(false), [uri]);
 
   const artwork = uri && !failed ? (
-    <Image accessibilityLabel={accessibilityLabel} source={{ uri }} resizeMode="contain" style={tiltArtwork ? styles.tiltedArtwork : StyleSheet.absoluteFill} onError={() => setFailed(true)} />
+    <Image accessibilityLabel={accessibilityLabel} source={{ uri }} resizeMode="contain" style={tiltArtwork ? styles.tiltedArtwork : styles.imageFill} onError={() => setFailed(true)} />
   ) : (
     <View style={styles.fallback}>
       <Ionicons name="image-outline" size={24} color="#537895" />
@@ -42,7 +42,7 @@ export function FolioArtwork({ uri, style, accessibilityLabel = '藏品封面', 
   return (
     <View style={[styles.artwork, style]}>
       {framed ? <>
-        <Image source={FRAME} resizeMode="contain" style={StyleSheet.absoluteFill} accessible={false} />
+        <Image source={FRAME} resizeMode="contain" style={styles.imageFill} accessible={false} />
         <View style={styles.aperture}>{artwork}</View>
       </> : artwork}
     </View>
@@ -54,7 +54,7 @@ type SerialTagProps = { value: string; style?: StyleProp<ViewStyle>; fontFamily?
 export function FolioSerialTag({ value, style, fontFamily }: SerialTagProps) {
   return (
     <View accessible accessibilityLabel={`藏品编号 ${value}`} style={[styles.serialTag, style, SERIAL_TAG_SIZE]}>
-      <Image source={SERIAL_TAG} resizeMode="contain" style={StyleSheet.absoluteFill} accessible={false} />
+      <Image source={SERIAL_TAG} resizeMode="contain" style={styles.imageFill} accessible={false} />
       <Text numberOfLines={1} style={[styles.serialText, fontFamily ? { fontFamily } : null]}>{value}</Text>
     </View>
   );
@@ -65,7 +65,7 @@ type StateTagProps = { state: 'idle' | 'listed' | 'other'; label: string; style?
 export function FolioStateTag({ state, label, style, fontFamily }: StateTagProps) {
   return (
     <View accessible accessibilityLabel={`藏品状态 ${label}`} style={[styles.stateTag, style, STATE_TAG_SIZE]}>
-      <Image source={STATE_TAGS[state]} resizeMode="contain" style={StyleSheet.absoluteFill} accessible={false} />
+      <Image source={STATE_TAGS[state]} resizeMode="contain" style={styles.imageFill} accessible={false} />
       <View style={styles.stateLabel}>
         {Array.from(label).map((character, index) => <Text key={`${character}-${index}`} style={[styles.stateCharacter, fontFamily ? { fontFamily } : null]}>{character}</Text>)}
       </View>
@@ -74,6 +74,10 @@ export function FolioStateTag({ state, label, style, fontFamily }: StateTagProps
 }
 
 const styles = StyleSheet.create({
+  // RN Web adds the bundled asset's intrinsic dimensions to Image. Insets alone
+  // do not override them: a 1254px frame would overflow a 350px card. Explicit
+  // percentages keep every local frame/tab inside its measured container.
+  imageFill: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   // The frame is a transparent PNG/WebP with a transparent center aperture.
   // Keep both layers transparent so the square collectible art shows through
   // the opening instead of a beige square leaking behind the frame.

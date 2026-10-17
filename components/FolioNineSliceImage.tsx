@@ -58,7 +58,7 @@ export default function FolioNineSliceImage({ source, insets, style, accessibili
         <Image
           source={source}
           resizeMode="stretch"
-          style={StyleSheet.absoluteFill}
+          style={styles.imageFill}
           {...({ capInsets: insets } as object)}
           accessible={false}
           accessibilityLabel={accessibilityLabel}
@@ -67,3 +67,7 @@ export default function FolioNineSliceImage({ source, insets, style, accessibili
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  imageFill: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+});
