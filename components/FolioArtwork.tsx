@@ -74,8 +74,11 @@ export function FolioStateTag({ state, label, style, fontFamily }: StateTagProps
 }
 
 const styles = StyleSheet.create({
-  artwork: { position: 'relative', width: '100%', aspectRatio: 1, overflow: 'hidden', backgroundColor: '#F5F0E7' },
-  aperture: { position: 'absolute', left: '15.5%', top: '16.7%', width: '70.2%', height: '66.8%', overflow: 'hidden', borderRadius: 8, backgroundColor: '#F5F0E7' },
+  // The frame is a transparent PNG/WebP with a transparent center aperture.
+  // Keep both layers transparent so the square collectible art shows through
+  // the opening instead of a beige square leaking behind the frame.
+  artwork: { position: 'relative', width: '100%', aspectRatio: 1, overflow: 'hidden', backgroundColor: 'transparent' },
+  aperture: { position: 'absolute', left: '15.5%', top: '16.7%', width: '70.2%', height: '66.8%', overflow: 'hidden', borderRadius: 8, backgroundColor: 'transparent' },
   tiltedArtwork: { position: 'absolute', width: '94%', height: '94%', left: '3%', top: '3%', transform: [{ rotate: '-2deg' }] },
   fallback: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 5, overflow: 'hidden', backgroundColor: '#F5F0E7' },
   fallbackText: { color: '#8D8175', fontSize: 9, lineHeight: 12 },
