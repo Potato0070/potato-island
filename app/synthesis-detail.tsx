@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
+import PageReadState from '../components/PageReadState';
+import { readFailureFrom, validPageId, type ReadFailure } from '../components/pageReadStatus';
 
 type Requirement = Record<string, any> & {
   id: string;
@@ -67,7 +69,7 @@ export default function SynthesisDetailScreen() {
   const [tempSelectedNfts, setTempSelectedNfts] = useState<string[]>([]);
   const [selectedNfts, setSelectedNfts] = useState<Record<number, string[]>>({});
   const [toastMsg, setToastMsg] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
+  const [readFailure, setReadFailure] = useState<ReadFailure | null>(null);
 
   const showToast = useCallback((message: string) => {
     setToastMsg(message);
@@ -75,16 +77,17 @@ export default function SynthesisDetailScreen() {
   }, []);
 
   const fetchDetail = useCallback(async () => {
-    if (!id) return;
+    if (!validPageId(id)) { setEventData(null); setReadFailure('missing'); setLoading(false); return; }
     setLoading(true);
-    setErrorMsg('');
+    setReadFailure(null);
     try {
       const { data: event, error: eventError } = await supabase
         .from('synthesis_events')
         .select('*, target_collection:target_collection_id(name, image_url)')
         .eq('id', id)
-        .single();
+        .maybeSingle();
       if (eventError) throw eventError;
+      if (!event) { setEventData(null); setReadFailure('missing'); return; }
 
       const { data: reqRows, error: reqError } = await supabase
         .from('synthesis_requirements')
@@ -106,7 +109,7 @@ export default function SynthesisDetailScreen() {
             .eq('collection_id', req.req_collection_id)
             .eq('owner_id', authData.user!.id)
             .eq('status', 'idle');
-          if (error) return [index, 0] as const;
+          if (error) throw error;
           return [index, data?.length || 0] as const;
         }));
         setOwnedCounts(Object.fromEntries(countEntries));
@@ -114,7 +117,7 @@ export default function SynthesisDetailScreen() {
         setOwnedCounts({});
       }
     } catch (error: any) {
-      setErrorMsg(error?.message || '暂时无法加载合成信息');
+      setReadFailure(readFailureFrom(error));
     } finally {
       setLoading(false);
     }
@@ -238,20 +241,7 @@ export default function SynthesisDetailScreen() {
     }
   };
 
-  if (loading) {
-    return <SafeAreaView style={styles.loadingScreen}><ActivityIndicator color={COLORS.blue} /><Text style={styles.loadingText}>正在读取合成配方…</Text></SafeAreaView>;
-  }
-
-  if (errorMsg || !eventData) {
-    return (
-      <SafeAreaView style={styles.loadingScreen}>
-        <Ionicons name="cloud-offline-outline" size={36} color={COLORS.muted} />
-        <Text style={styles.errorTitle}>合成信息暂时无法显示</Text>
-        <Text style={styles.errorMessage}>{errorMsg || '请稍后重试'}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={fetchDetail}><Text style={styles.retryText}>重新加载</Text></TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
+  if (loading || readFailure || !eventData) return <PageReadState pageTitle="合成详情" subject="这场合成活动" status={loading ? 'loading' : readFailure || 'missing'} fallback="/synthesis-list" backLabel="返回合成列表" onRetry={fetchDetail} />;
 
   const shortageItems = requirements.flatMap((req, index) => {
     const shortage = Math.max(0, Number(req.req_count) - (ownedCounts[index] || 0));

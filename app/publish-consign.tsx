@@ -1,8 +1,10 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
+import PageReadState from '../components/PageReadState';
+import { readFailureFrom, validPageId, type ReadFailure } from '../components/pageReadStatus';
 
 // 💰 千分位金钱格式化
 const formatMoney = (num: number | string) => {
@@ -32,6 +34,7 @@ export default function PublishConsignScreen() {
   const [nft, setNft] = useState<any>(null);
   const [price, setPrice] = useState('');
   const [loading, setLoading] = useState(true);
+  const [readFailure, setReadFailure] = useState<ReadFailure | null>(null);
   const [publishing, setPublishing] = useState(false);
 
   const [toastMsg, setToastMsg] = useState('');
@@ -40,12 +43,19 @@ export default function PublishConsignScreen() {
 
   const PLATFORM_FEE_RATE = 0.05; 
 
-  useEffect(() => {
-    supabase.from('nfts').select('*, collections(*)').eq('id', id).single().then(({data}) => {
+  const fetchNft = useCallback(async () => {
+    if (!validPageId(id)) { setNft(null); setReadFailure('missing'); setLoading(false); return; }
+    setLoading(true);
+    setReadFailure(null);
+    try {
+      const { data, error } = await supabase.from('nfts').select('*, collections(*)').eq('id', id).maybeSingle();
+      if (error) throw error;
       setNft(data);
-      setLoading(false);
-    });
+      if (!data) setReadFailure('missing');
+    } catch (error) { setReadFailure(readFailureFrom(error)); }
+    finally { setLoading(false); }
   }, [id]);
+  useEffect(() => { fetchNft(); }, [fetchNft]);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -83,7 +93,7 @@ export default function PublishConsignScreen() {
     }
   };
 
-  if (loading || !nft) return <View style={styles.center}><ActivityIndicator color="#D49A36" /></View>;
+  if (loading || readFailure || !nft) return <PageReadState pageTitle="发布寄售" subject="这件藏品" status={loading ? 'loading' : readFailure || 'missing'} fallback="/(tabs)/profile" backLabel="返回金库" onRetry={fetchNft} />;
 
   const parsedPrice = parseFloat(price) || 0;
   const fee = parsedPrice * PLATFORM_FEE_RATE;

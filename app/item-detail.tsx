@@ -1,9 +1,11 @@
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
+import PageReadState from '../components/PageReadState';
+import { readFailureFrom, validPageId, type ReadFailure } from '../components/pageReadStatus';
 
 const { width } = Dimensions.get('window');
 
@@ -55,6 +57,7 @@ export default function ItemDetailScreen() {
   const insets = useSafeAreaInsets(); 
 
   const [nft, setNft] = useState<any>(null);
+  const [readFailure, setReadFailure] = useState<ReadFailure | null>(null);
   const [myUserId, setMyUserId] = useState<string>('');
   
   const [currentHistory, setCurrentHistory] = useState<any[]>([]);
@@ -78,19 +81,17 @@ export default function ItemDetailScreen() {
   const [toastMsg, setToastMsg] = useState('');
   const [successModal, setSuccessModal] = useState<{title: string, msg: string} | null>(null);
 
-  useEffect(() => {
-    fetchData();
-  }, [id]);
-
   const showToast = (msg: string) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 2500);
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    if (!validPageId(id)) { setNft(null); setReadFailure('missing'); setLoading(false); return; }
     try {
       setLoading(true);
+      setReadFailure(null);
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
          setMyUserId(user.id);
@@ -98,8 +99,9 @@ export default function ItemDetailScreen() {
          if (prof) setUserBalance(prof.potato_coin_balance);
       }
 
-      const { data: nftData, error: nftErr } = await supabase.from('nfts').select('*, collections(*)').eq('id', id).single();
-      if (nftErr) throw new Error(`藏品查询失败: ${nftErr.message}`);
+      const { data: nftData, error: nftErr } = await supabase.from('nfts').select('*, collections(*)').eq('id', id).maybeSingle();
+      if (nftErr) throw nftErr;
+      if (!nftData) { setNft(null); setReadFailure('missing'); return; }
       setNft(nftData);
 
       // 1. 当前卡片的流水 + 创世出生记录
@@ -148,9 +150,10 @@ export default function ItemDetailScreen() {
          setAllHistory(combinedAll);
       }
     } catch(e: any) { 
-      Alert.alert("详情页加载异常", e.message || JSON.stringify(e));
+      setReadFailure(readFailureFrom(e));
     } finally { setLoading(false); }
-  };
+  }, [id]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const executeBuy = async () => {
     setBuying(true);
@@ -221,7 +224,7 @@ export default function ItemDetailScreen() {
      return `匿名藏友_${uid.substring(0, 4).toUpperCase()}`;
   };
 
-  if (!nft) return <View style={styles.center}><ActivityIndicator color="#D49A36" /></View>;
+  if (loading || readFailure || !nft) return <PageReadState pageTitle="藏品详情" subject="这件藏品" status={loading ? 'loading' : readFailure || 'missing'} fallback="/(tabs)/market" backLabel="返回集市" onRetry={fetchData} />;
 
   const hashString = (nft.id || '').replace(/-/g, '').toUpperCase();
   const displayHistory = historyMode === 'current' ? currentHistory : allHistory;

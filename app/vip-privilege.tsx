@@ -4,6 +4,8 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Dimensions, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
+import PageReadState from '../components/PageReadState';
+import { readFailureFrom, type ReadFailure } from '../components/pageReadStatus';
 
 const { width } = Dimensions.get('window');
 
@@ -23,6 +25,7 @@ export default function VipPrivilegeScreen() {
   const [universalNftIds, setUniversalNftIds] = useState<string[]>([]);
   
   const [loading, setLoading] = useState(true);
+  const [readFailure, setReadFailure] = useState<ReadFailure | null>(null);
   const [processing, setProcessing] = useState(false);
 
   const [upgradeModal, setUpgradeModal] = useState<{visible: boolean, cost: number, nextLv: number, nextName: string} | null>(null);
@@ -35,20 +38,26 @@ export default function VipPrivilegeScreen() {
 
   const fetchProfile = async () => {
     setLoading(true);
+    setReadFailure(null);
     try {
-       const { data: { user } } = await supabase.auth.getUser();
+       const { data: { user }, error: authError } = await supabase.auth.getUser();
+       if (authError) throw authError;
+       if (!user) { setProfile(null); setReadFailure('login'); return; }
        if (user) {
-         const { data } = await supabase.from('profiles').select('id, is_admin, vip_level, total_consumed').eq('id', user.id).single();
+         const { data, error: profileError } = await supabase.from('profiles').select('id, is_admin, vip_level, total_consumed').eq('id', user.id).maybeSingle();
+         if (profileError) throw profileError;
+         if (!data) { setProfile(null); setReadFailure('missing'); return; }
          setProfile(data);
 
          // 🌟 致命卡死性能修复！
          // 之前这里查了用户几千张所有的卡，导致前端过滤 OOM（内存溢出）。
          // 现在用 !inner 联表查询，数据库直接只吐出名叫“万能土豆卡”的卡片，响应只需 10ms！
-         const { data: myNfts } = await supabase.from('nfts')
+         const { data: myNfts, error: inventoryError } = await supabase.from('nfts')
             .select('id, collections!inner(name)')
             .eq('owner_id', user.id)
             .eq('status', 'idle')
             .eq('collections.name', '万能土豆卡');
+         if (inventoryError) throw inventoryError;
             
          if (myNfts) {
             setRealUniversalCount(myNfts.length);
@@ -56,7 +65,7 @@ export default function VipPrivilegeScreen() {
          }
        }
     } catch (e) {
-       console.error("权益页加载异常", e);
+       setReadFailure(readFailureFrom(e));
     } finally {
        setLoading(false);
     }
@@ -97,7 +106,7 @@ export default function VipPrivilegeScreen() {
     }
   };
 
-  if (loading || !profile) return <View style={styles.center}><ActivityIndicator color="#D49A36" /></View>;
+  if (loading || readFailure || !profile) return <PageReadState pageTitle="领主权益" subject="权益信息" status={loading ? 'loading' : readFailure || 'missing'} fallback="/(tabs)" backLabel="返回首页" onRetry={fetchProfile} />;
 
   const displayLevel = profile.is_admin ? 5 : (profile.vip_level || 1);
   const currentTier = VIP_TIERS.find(t => t.level === displayLevel) || VIP_TIERS[0];

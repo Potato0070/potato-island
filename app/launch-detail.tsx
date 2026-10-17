@@ -1,11 +1,11 @@
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, ImageBackground, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, ImageBackground, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
-
-const { width } = Dimensions.get('window');
+import PageReadState from '../components/PageReadState';
+import { readFailureFrom, validPageId, type ReadFailure } from '../components/pageReadStatus';
 
 // 💰 千分位金钱格式化
 const formatMoney = (num: number | string) => {
@@ -21,6 +21,7 @@ export default function LaunchDetailScreen() {
   const { id } = useLocalSearchParams();
   const [launch, setLaunch] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [readFailure, setReadFailure] = useState<ReadFailure | null>(null);
   const [buying, setBuying] = useState(false);
   const [timeLeftStr, setTimeLeftStr] = useState('计算中...');
   const [isStarted, setIsStarted] = useState(false);
@@ -33,22 +34,25 @@ export default function LaunchDetailScreen() {
 
   const [toastMsg, setToastMsg] = useState('');
 
-  useEffect(() => { fetchLaunchData(); }, [id]);
-
   const showToast = (msg: string) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 3000);
   };
 
-  const fetchLaunchData = async () => {
+  const fetchLaunchData = useCallback(async () => {
+    if (!validPageId(id)) { setLaunch(null); setReadFailure('missing'); setLoading(false); return; }
+    setLoading(true);
+    setReadFailure(null);
     try {
-      const { data, error } = await supabase.from('launch_events').select('*, collection:collection_id(*)').eq('id', id).single();
+      const { data, error } = await supabase.from('launch_events').select('*, collection:collection_id(*)').eq('id', id).maybeSingle();
       if (error) throw error;
+      if (!data) { setLaunch(null); setReadFailure('missing'); return; }
       setLaunch(data);
-      if (data.remaining_supply <= 0) setIsSoldOut(true);
-    } catch (err) { console.error(err); } finally { setLoading(false); }
-  };
+      setIsSoldOut(data.remaining_supply <= 0);
+    } catch (err) { setReadFailure(readFailureFrom(err)); } finally { setLoading(false); }
+  }, [id]);
+  useEffect(() => { fetchLaunchData(); }, [fetchLaunchData]);
 
   useEffect(() => {
     if (!launch) return;
@@ -216,7 +220,7 @@ export default function LaunchDetailScreen() {
       if (type === '-' && current > 1) setBuyQuantity((current - 1).toString());
   };
 
-  if (loading || !launch) return <View style={styles.center}><ActivityIndicator color="#D49A36" /></View>;
+  if (loading || readFailure || !launch) return <PageReadState pageTitle="首发详情" subject="这场首发活动" status={loading ? 'loading' : readFailure || 'missing'} fallback="/(tabs)" backLabel="返回首页" onRetry={fetchLaunchData} />;
   const progress = ((launch.total_supply - launch.remaining_supply) / launch.total_supply) * 100;
 
   return (
