@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { isAuthSessionMissingError } from '@supabase/supabase-js';
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -20,6 +21,7 @@ const MENU_GRID = [
   { name: '设置', icon: require('../../assets/treasury/classic-island-v1/runtime/settings.webp'), route: '/change-avatar', original: false },
 ] as const;
 const VIP_NAMES: Record<number, string> = { 1: '大众会员', 2: '黄金会员', 3: '铂金会员', 4: '钻石会员', 5: '黑钻会员' };
+const INVALID_SESSION_CODES = new Set(['bad_jwt', 'session_not_found', 'session_expired', 'refresh_token_not_found', 'refresh_token_already_used', 'user_not_found']);
 type Profile = { id: string; nickname: string | null; avatar_url: string | null; is_admin: boolean; vip_level: number | null; potato_coin_balance: number | string | null };
 type Collection = { id: string; name: string; image_url: string | null };
 type OwnedNft = { id: string; status: string; collections: Collection | Collection[] | null };
@@ -44,6 +46,7 @@ export default function ProfileScreen() {
   const [earnings, setEarnings] = useState({ today: 0, month: 0 });
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loginRequired, setLoginRequired] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
@@ -60,18 +63,37 @@ export default function ProfileScreen() {
   useEffect(() => setAvatarFailed(false), [profile?.avatar_url]);
   useEffect(() => { setSearchOpen(false); setSearchQuery(''); }, [profile?.id]);
 
+  const clearPrivateData = useCallback(() => {
+    loadedProfileId.current = null;
+    setProfile(null); setHoldings([]); setTotalNfts(0);
+    setEarnings({ today: 0, month: 0 });
+    setFailedImages({});
+  }, []);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(event => {
+      if (event !== 'SIGNED_OUT') return;
+      requestId.current++;
+      clearPrivateData();
+      setLoginRequired(true); setError(null); setRefreshing(false);
+    });
+    return () => subscription.unsubscribe();
+  }, [clearPrivateData]);
+
   const fetchProfileData = useCallback(async () => {
     const currentRequest = ++requestId.current;
     setRefreshing(true);
     setError(null);
+    setLoginRequired(false);
     try {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError) throw authError;
       if (currentRequest !== requestId.current) return;
-      if (!user) {
-        loadedProfileId.current = null;
-        setProfile(null); setHoldings([]); setTotalNfts(0);
-        router.replace('/login'); return;
+      const invalidSession = authError && (isAuthSessionMissingError(authError) || authError.status === 401 || INVALID_SESSION_CODES.has(authError.code || ''));
+      if (authError && !invalidSession) throw authError;
+      if (!user || invalidSession) {
+        clearPrivateData();
+        setLoginRequired(true);
+        return;
       }
       if (loadedProfileId.current && loadedProfileId.current !== user.id) {
         setProfile(null); setHoldings([]); setTotalNfts(0);
@@ -121,7 +143,7 @@ export default function ProfileScreen() {
     } finally {
       if (currentRequest === requestId.current) setRefreshing(false);
     }
-  }, [router]);
+  }, [clearPrivateData]);
 
   useFocusEffect(useCallback(() => {
     void fetchProfileData();
@@ -159,7 +181,12 @@ export default function ProfileScreen() {
         <View testID="treasury-content" style={styles.content} onLayout={event => setContentWidth(event.nativeEvent.layout.width)}>
           {!profile ? (
             <View style={styles.initialState}>
-              {error ? <>
+              {loginRequired ? <>
+                <Image source={require('../../assets/homepage/logo-b.png')} style={styles.stateArt} resizeMode="contain" accessible={false} />
+                <Text accessibilityRole="header" style={[styles.guestTitle, semibold]}>登录后查看金库</Text>
+                <Text style={[styles.emptyText, regular]}>登录后查看我的藏品、余额与订单。</Text>
+                <PencilButton label="登录 / 注册" onPress={() => router.push('/login')} fontFamily={fonts.semibold} />
+              </> : error ? <>
                 <Image source={require('../../assets/empty-states/storybook-pencil-v1/runtime/network-unavailable.webp')} style={styles.stateArt} resizeMode="contain" accessible={false} />
                 <Text style={[styles.emptyText, regular]}>{error}</Text>
                 <PencilButton label="重新加载" onPress={fetchProfileData} fontFamily={fonts.semibold} />
@@ -290,6 +317,7 @@ const styles = StyleSheet.create({
   collectionImage: { width: '100%', height: '100%', resizeMode: 'cover' }, collectionName: { color: COLORS.ink, fontSize: 15, lineHeight: 21, marginTop: 8 }, holdingCount: { color: COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 3 },
   emptyCollection: { alignItems: 'center', paddingTop: 4, paddingBottom: 9 }, emptyArt: { width: 152, height: 112 }, emptyText: { color: COLORS.muted, fontSize: 14, lineHeight: 21, marginTop: 10, marginBottom: 12, textAlign: 'center' },
   marketButton: { width: 160, marginBottom: 2 }, initialState: { minHeight: 320, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 }, stateArt: { width: 120, height: 120 },
+  guestTitle: { color: COLORS.ink, fontSize: 20, lineHeight: 28, marginTop: 14, textAlign: 'center' },
   loadingText: { color: COLORS.muted, fontSize: 14, lineHeight: 20, marginTop: 14 }, refreshError: { padding: 12, marginTop: 12, backgroundColor: '#FBF3EE', borderRadius: 10, minHeight: 44, justifyContent: 'center' },
   errorText: { color: '#9A6E51', fontSize: 12, lineHeight: 18 },
   notice: { position: 'absolute', bottom: 118, alignSelf: 'center', backgroundColor: '#51473F', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 11, maxWidth: '90%' }, noticeText: { color: '#FFFFFF', fontSize: 13, lineHeight: 19 },
