@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import FolioNineSliceImage, { type SliceInsets } from './FolioNineSliceImage';
 
 const SURFACES = {
@@ -13,7 +13,9 @@ const SURFACES = {
   },
   texture: {
     source: require('../assets/owned-collection/f-card-v1/runtime/paper-texture.webp'),
-    insets: { top: 42, right: 42, bottom: 42, left: 42 },
+    // This asset is a square sheet with torn edges, not a seamless texture.
+    // Nine-slice the edge so wide cards do not scale the whole sheet to their width.
+    insets: { top: 32, right: 32, bottom: 32, left: 32 },
   },
   confirm: {
     source: require('../assets/owned-collection/f-card-v1/runtime/withdraw-confirm-panel.webp'),
@@ -35,9 +37,7 @@ export default function FolioPaperSurface({ children, kind = 'paper', style }: P
   const surface = SURFACES[kind] as { source: number; insets: SliceInsets };
   return (
     <View style={[styles.surface, style]}>
-      {kind === 'texture'
-        ? <Image source={surface.source} resizeMode="cover" style={StyleSheet.absoluteFill} accessible={false} />
-        : <FolioNineSliceImage source={surface.source} insets={surface.insets} />}
+      <FolioNineSliceImage source={surface.source} insets={surface.insets} />
       {children}
     </View>
   );

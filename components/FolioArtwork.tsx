@@ -69,7 +69,7 @@ export function FolioStateTag({ state, label, style, fontFamily }: StateTagProps
 }
 
 const styles = StyleSheet.create({
-  artwork: { position: 'relative', aspectRatio: 1, overflow: 'visible' },
+  artwork: { position: 'relative', width: '100%', aspectRatio: 1, overflow: 'hidden' },
   aperture: { position: 'absolute', left: '15.5%', top: '16.7%', width: '70.2%', height: '66.8%', overflow: 'hidden', borderRadius: 8, backgroundColor: '#F5F0E7' },
   fallback: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 5, overflow: 'hidden' },
   fallbackText: { color: '#8D8175', fontSize: 9, lineHeight: 12 },

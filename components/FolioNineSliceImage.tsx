@@ -16,17 +16,20 @@ type Props = {
  * the paper/button center to expand to the control's actual size.
  */
 export default function FolioNineSliceImage({ source, insets, style, accessibilityLabel }: Props) {
-  const [height, setHeight] = useState(0);
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const asset = Asset.fromModule(source);
-  const scale = height > 0 && asset?.height ? height / asset.height : 1;
-  const top = Math.max(1, insets.top * scale);
-  const right = Math.max(1, insets.right * scale);
-  const bottom = Math.max(1, insets.bottom * scale);
-  const left = Math.max(1, insets.left * scale);
+  const scaleX = size.width > 0 && asset?.width ? size.width / asset.width : 1;
+  const scaleY = size.height > 0 && asset?.height ? size.height / asset.height : 1;
+  const top = Math.max(1, insets.top * scaleY);
+  const right = Math.max(1, insets.right * scaleX);
+  const bottom = Math.max(1, insets.bottom * scaleY);
+  const left = Math.max(1, insets.left * scaleX);
 
   const handleLayout = (event: LayoutChangeEvent) => {
-    const nextHeight = event.nativeEvent.layout.height;
-    if (Math.abs(nextHeight - height) > 0.5) setHeight(nextHeight);
+    const { width, height } = event.nativeEvent.layout;
+    if (Math.abs(width - size.width) > 0.5 || Math.abs(height - size.height) > 0.5) {
+      setSize({ width, height });
+    }
   };
 
   const webNineSliceStyle = {
