@@ -28,6 +28,17 @@ function imageOf(item: OwnedItem) {
 const EMPTY_ALBUM_ART = require('../assets/owned-collection/f-card-v1/runtime/empty-collection-album.webp');
 const EMPTY_SEARCH_ART = require('../assets/owned-collection/f-card-v1/runtime/empty-search-map.webp');
 const EMPTY_NETWORK_ART = require('../assets/owned-collection/f-card-v1/runtime/empty-network-lighthouse.webp');
+const REQUEST_TIMEOUT_MESSAGE = '连接有点慢，请检查网络后重试';
+
+function withTimeout<T>(operation: PromiseLike<T>, timeoutMs: number) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(REQUEST_TIMEOUT_MESSAGE)), timeoutMs);
+  });
+  return Promise.race([Promise.resolve(operation), timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
 
 export default function MyCollectionListScreen() {
   const router = useRouter();
@@ -63,7 +74,7 @@ export default function MyCollectionListScreen() {
     setLoading(true);
     setError('');
     try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      const { data: { user }, error: userError } = await withTimeout(supabase.auth.getUser(), 8000);
       if (userError) throw userError;
       if (!user) {
         setItems([]);
@@ -76,12 +87,14 @@ export default function MyCollectionListScreen() {
         .neq('status', 'burned')
         .order('serial_number', { ascending: true });
       if (collectionId) query = query.eq('collection_id', collectionId);
-      const { data, error: queryError } = await query;
+      const { data, error: queryError } = await withTimeout(query, 12000);
       if (queryError) throw queryError;
       setItems((data || []) as unknown as OwnedItem[]);
     } catch (cause) {
       console.error('读取持仓藏品失败', cause);
-      setError('藏品暂时没有装订好，请稍后重试');
+      setError(cause instanceof Error && cause.message === REQUEST_TIMEOUT_MESSAGE
+        ? REQUEST_TIMEOUT_MESSAGE
+        : '藏品暂时没有装订好，请稍后重试');
     } finally {
       setLoading(false);
     }
