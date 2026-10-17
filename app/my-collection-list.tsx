@@ -316,7 +316,7 @@ export default function MyCollectionListScreen() {
       <View style={[styles.page, { maxWidth: 760 }]}>
         <View style={styles.pageHeader}>
           <Pressable accessibilityRole="button" accessibilityLabel="返回金库" onPress={() => router.replace('/profile')} style={styles.treasuryBack}>
-            <Ionicons name="chevron-back" size={20} color={OWNED_COLORS.ink} /><Text style={styles.treasuryBackText}>金库</Text>
+            <Ionicons name="chevron-back" size={24} color={OWNED_COLORS.ink} />
           </Pressable>
           <View style={styles.headerCopy}>
             <Text accessibilityRole="header" style={styles.title}>{batchMode ? '批量管理' : '我的藏品'}</Text>
@@ -514,8 +514,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#FFFFFF' },
   page: { flex: 1, alignSelf: 'center', width: '100%', backgroundColor: '#FFFFFF' },
   pageHeader: { minHeight: 76, paddingHorizontal: 22, paddingTop: 8, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  treasuryBack: { minWidth: 48, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: -8, marginRight: 6 },
-  treasuryBackText: { color: OWNED_COLORS.ink, fontSize: 12 },
+  treasuryBack: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -12, marginRight: 4 },
   headerCopy: { flex: 1, minWidth: 0, paddingRight: 8 },
   title: { color: OWNED_COLORS.ink, fontSize: 22, lineHeight: 28 },
   subtitle: { color: OWNED_COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 3 },
