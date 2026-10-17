@@ -90,13 +90,19 @@ export default function HomeScreen() {
 
   const fetchHomeData = async () => {
     try {
-      const { data: hotData } = await supabase.from('collections').select('*').eq('is_tradeable', true).order('floor_price_cache', { ascending: false }).limit(4);
+      // Independent public queries should share one network wait on slow links.
+      const [hotResult, announcementResult, launchResult] = await Promise.all([
+        supabase.from('collections').select('*').eq('is_tradeable', true).order('floor_price_cache', { ascending: false }).limit(4),
+        supabase.from('announcements').select('title, is_featured').order('created_at', { ascending: false }).limit(1).single(),
+        supabase.from('launch_events').select('*, collection:collection_id(name, image_url)').eq('is_active', true).order('start_time', { ascending: true }).limit(1).single(),
+      ]);
+      const { data: hotData } = hotResult;
       if (hotData) setHotCollections(hotData);
 
-      const { data: annData } = await supabase.from('announcements').select('title, is_featured').order('created_at', { ascending: false }).limit(1).single();
+      const { data: annData } = announcementResult;
       if (annData) setLatestAnnounce(annData);
 
-      const { data: launchData } = await supabase.from('launch_events').select('*, collection:collection_id(name, image_url)').eq('is_active', true).order('start_time', { ascending: true }).limit(1).single();
+      const { data: launchData } = launchResult;
       if (launchData) setLaunchEvent(launchData); else setLaunchEvent(null);
 
     } catch (e) { console.error(e); } finally { setRefreshing(false); setInitLoading(false); }
