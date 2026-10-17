@@ -295,7 +295,7 @@ export default function MyCollectionListScreen() {
       >
         <View style={[styles.collectionCard, { width: cardWidth - 14 }]}>
           <View style={styles.coverMount}>
-            <FolioArtwork uri={imageUri} style={styles.coverArt} accessibilityLabel={`${collectionOf(item)?.name || '藏品'}封面`} />
+            <FolioArtwork uri={imageUri} framed={false} style={styles.coverArt} accessibilityLabel={`${collectionOf(item)?.name || '藏品'}封面`} />
             {batchMode ? <View style={[styles.selectionMark, isSelected && styles.selectionMarkSelected]}>{isSelected ? <Ionicons name="checkmark" size={16} color="#fff" /> : null}</View> : null}
           </View>
           <View style={styles.cardCaption}>
