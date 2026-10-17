@@ -18,8 +18,10 @@ type Props = {
 export default function FolioNineSliceImage({ source, insets, style, accessibilityLabel }: Props) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const asset = Asset.fromModule(source);
-  const scaleX = size.width > 0 && asset?.width ? size.width / asset.width : 1;
-  const scaleY = size.height > 0 && asset?.height ? size.height / asset.height : 1;
+  const scale = size.width > 0 && size.height > 0 && asset?.width && asset?.height
+    ? Math.min(1, size.width / asset.width, size.height / asset.height) : 1;
+  const scaleX = scale;
+  const scaleY = scale;
   const top = Math.max(1, insets.top * scaleY);
   const right = Math.max(1, insets.right * scaleX);
   const bottom = Math.max(1, insets.bottom * scaleY);

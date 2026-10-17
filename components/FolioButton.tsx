@@ -32,4 +32,4 @@ export default function FolioButton({ label, onPress, tone = 'blue', disabled = 
     <Text numberOfLines={1} style={[styles.text, { color, fontFamily }]}>{label}</Text>
   </Pressable>;
 }
-const styles = StyleSheet.create({ button: { minHeight: 48, minWidth: 84, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 }, pencilIcon: { width: 22, height: 22 }, text: { fontSize: 14, lineHeight: 20 }, pressed: { opacity: 0.84, transform: [{ scale: 0.98 }] }, disabled: { opacity: 0.48 } });
+const styles = StyleSheet.create({ button: { minHeight: 48, minWidth: 84, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 }, pencilIcon: { width: 22, height: 22 }, text: { flexShrink: 1, minWidth: 0, fontSize: 14, lineHeight: 20 }, pressed: { opacity: 0.84, transform: [{ scale: 0.98 }] }, disabled: { opacity: 0.48 } });

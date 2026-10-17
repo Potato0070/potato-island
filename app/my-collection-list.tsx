@@ -315,9 +315,12 @@ export default function MyCollectionListScreen() {
     <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
       <View style={[styles.page, { maxWidth: 760 }]}>
         <View style={styles.pageHeader}>
+          <Pressable accessibilityRole="button" accessibilityLabel="返回金库" onPress={() => router.replace('/profile')} style={styles.treasuryBack}>
+            <Ionicons name="chevron-back" size={20} color={OWNED_COLORS.ink} /><Text style={styles.treasuryBackText}>金库</Text>
+          </Pressable>
           <View style={styles.headerCopy}>
             <Text accessibilityRole="header" style={styles.title}>{batchMode ? '批量管理' : '我的藏品'}</Text>
-            <Text style={styles.subtitle}>持有 {items.length.toLocaleString('zh-CN')} 件{collectionName ? ' ' + collectionName : ''}</Text>
+            <Text numberOfLines={1} style={styles.subtitle}>持有 {items.length.toLocaleString('zh-CN')} 件{collectionName ? ' ' + collectionName : ''}</Text>
           </View>
           <FolioButton
             label={batchMode ? '退出' : '批量管理'}
@@ -511,7 +514,9 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#FFFFFF' },
   page: { flex: 1, alignSelf: 'center', width: '100%', backgroundColor: '#FFFFFF' },
   pageHeader: { minHeight: 76, paddingHorizontal: 22, paddingTop: 8, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerCopy: { flex: 1, paddingRight: 12 },
+  treasuryBack: { minWidth: 48, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: -8, marginRight: 6 },
+  treasuryBackText: { color: OWNED_COLORS.ink, fontSize: 12 },
+  headerCopy: { flex: 1, minWidth: 0, paddingRight: 8 },
   title: { color: OWNED_COLORS.ink, fontSize: 22, lineHeight: 28 },
   subtitle: { color: OWNED_COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 3 },
   batchButton: { minWidth: 102, minHeight: 42, paddingHorizontal: 10 },
@@ -535,7 +540,7 @@ const styles = StyleSheet.create({
   collectionCard: { position: 'relative', alignSelf: 'center', aspectRatio: 1 },
   coverMount: { width: '100%', height: '100%', aspectRatio: 1, position: 'relative' },
   coverArt: { width: '100%', height: '100%' },
-  coverSerial: { position: 'absolute', left: '18%', right: '18%', bottom: '5%', textAlign: 'center', color: OWNED_COLORS.ink, fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  coverSerial: { position: 'absolute', left: '18%', right: '18%', bottom: '9%', textAlign: 'center', color: OWNED_COLORS.ink, fontSize: 13, lineHeight: 18, fontWeight: '600', transform: [{ rotate: '-2deg' }] },
   selectionMark: { position: 'absolute', top: 12, right: 12, width: 27, height: 27, borderRadius: 14, borderWidth: 1.5, borderColor: '#FFF', backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center' },
   selectionMarkSelected: { backgroundColor: OWNED_COLORS.blue, borderColor: '#FFFFFF' },
   carouselArrow: { position: 'absolute', top: '44%', zIndex: 5, width: 35, height: 35, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.95)', borderWidth: 1, borderColor: '#E7DED2', alignItems: 'center', justifyContent: 'center', shadowColor: '#4D3D31', shadowOpacity: 0.08, shadowRadius: 5, elevation: 2 },

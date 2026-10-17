@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Dimensions, Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, Modal, SafeAreaView as RNSafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FolioArtwork } from '../components/FolioArtwork';
 import FolioButton from '../components/FolioButton';
@@ -11,14 +11,13 @@ import { OWNED_COLORS } from '../constants/owned-collection';
 import { useIslandFonts } from '../hooks/use-island-fonts';
 import { supabase } from '../supabase';
 
-const { height } = Dimensions.get('window');
-
 const EMPTY_TRANSFER_ART = require('../assets/owned-collection/f-card-v1/runtime/empty-transfer-inventory.webp');
 const TRANSFER_SUCCESS_ART = require('../assets/owned-collection/f-card-v1/runtime/transfer-success-tudooo-sailboat.webp');
 
 export default function TransferScreen() {
   const router = useRouter();
   const fonts = useIslandFonts();
+  const { height } = useWindowDimensions();
   const { nftId } = useLocalSearchParams<{ nftId?: string }>();
   const [receiverId, setReceiverId] = useState('');
   const [transferCards, setTransferCards] = useState(0);
@@ -110,7 +109,7 @@ export default function TransferScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.navBar}>
-         <TouchableOpacity accessibilityRole="button" accessibilityLabel="返回藏品详情" onPress={() => router.back()} style={styles.navBtn}><Ionicons name="chevron-back" size={24} color={OWNED_COLORS.ink} /></TouchableOpacity>
+         <TouchableOpacity accessibilityRole="button" accessibilityLabel="返回藏品详情" onPress={() => router.canGoBack() ? router.back() : router.replace('/profile')} style={styles.navBtn}><Ionicons name="chevron-back" size={24} color={OWNED_COLORS.ink} /></TouchableOpacity>
          <Text style={[styles.navTitle, { fontFamily: fonts.semibold }]}>资产转赠</Text>
         <View style={styles.navBtn} />
       </View>
@@ -128,13 +127,13 @@ export default function TransferScreen() {
          <TouchableOpacity accessibilityRole="button" accessibilityLabel="选择要转赠的藏品" style={styles.selectNftPressable} onPress={openNftPicker} activeOpacity={0.8}>
           <FolioPaperSurface kind="plaque" style={styles.selectNftBox}>
             {selectedNft ? (
-              <View style={{alignItems: 'center'}}>
+              <View style={styles.selectedNftContent}>
                   <FolioArtwork uri={selectedNft.image_url || selectedNft.collections?.image_url || null} framed={false} style={styles.selectedImg} accessibilityLabel={`${selectedNft.collections?.name || '藏品'}封面`} />
                   <Text style={[styles.selectedName, { fontFamily: fonts.semibold }]}>{selectedNft.collections?.name}</Text>
                   <Text style={styles.selectedSerial}>#{String(selectedNft.serial_number).padStart(6, '0')}</Text>
               </View>
             ) : (
-              <View style={{alignItems: 'center'}}>
+              <View style={styles.selectedNftContent}>
                   <Image source={require('../assets/owned-collection/f-card-v1/runtime/icon-collection-pencil.webp')} resizeMode="contain" style={styles.emptyNftIcon} accessible={false} />
                   <Text style={[styles.emptyNftText, { fontFamily: fonts.semibold }]}>点击选择要转赠的藏品</Text>
               </View>
@@ -168,12 +167,12 @@ export default function TransferScreen() {
       <Modal visible={showPicker} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <RNSafeAreaView style={styles.pickerSafeArea}>
-          <FolioPaperSurface kind="paper" style={styles.bottomSheet}>
+          <FolioPaperSurface kind="paper" style={[styles.bottomSheet, { height: Math.min(height * 0.75, 680) }]}>
              <View style={styles.sheetHeader}>
                 <Text style={[styles.sheetTitle, { fontFamily: fonts.semibold }]}>选择藏品</Text>
-                <TouchableOpacity accessibilityRole="button" accessibilityLabel="取消选择" onPress={() => setShowPicker(false)}><Ionicons name="close" size={22} color={OWNED_COLORS.ink} /></TouchableOpacity>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="取消选择" style={styles.pickerClose} onPress={() => setShowPicker(false)}><Ionicons name="close" size={22} color={OWNED_COLORS.ink} /></TouchableOpacity>
              </View>
-             <ScrollView style={{padding: 16}}>
+             <ScrollView style={styles.pickerScroll} contentContainerStyle={styles.pickerContent}>
                 {myNfts.length === 0 ? <View style={styles.noNfts}><Image source={EMPTY_TRANSFER_ART} resizeMode="contain" style={styles.noNftsArt} accessible={false} /><Text style={[styles.noNftsText, { fontFamily: fonts.semibold }]}>金库里还没有可转赠的藏品</Text></View> : null}
                 {myNfts.map(nft => (
                    <TouchableOpacity key={nft.id} style={[styles.nftPickRow, selectedNft?.id === nft.id && styles.nftPickRowActive]} onPress={() => { setSelectedNft(nft); setShowPicker(false); }}>
@@ -210,7 +209,7 @@ export default function TransferScreen() {
                <Image source={TRANSFER_SUCCESS_ART} resizeMode="contain" style={styles.transferSuccessArt} accessibilityLabel="Tudooo乘坐帆船运送礼物" />
                <Text style={[styles.confirmTitle, { fontFamily: fonts.semibold, color: OWNED_COLORS.blue }]}>转赠成功</Text>
                <Text style={styles.confirmDesc}>藏品已送达对方金库。</Text>
-               <FolioButton label="返回金库" tone="blue" pencilIcon="collection" onPress={() => { setResultModal(false); router.back(); }} style={styles.resultAction} fontFamily={fonts.semibold} />
+               <FolioButton label="返回金库" tone="blue" pencilIcon="collection" onPress={() => { setResultModal(false); router.replace('/profile'); }} style={styles.resultAction} fontFamily={fonts.semibold} />
             </FolioPaperSurface>
          </View>
       </Modal>
@@ -228,16 +227,17 @@ const styles = StyleSheet.create({
   toastText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
 
   inputGroup: { paddingHorizontal: 18, marginBottom: 18, borderRadius: 14, borderWidth: 1, borderColor: '#EAE4DC', backgroundColor: '#FCFAF6' },
-  inputRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16 },
-  inputLabel: { fontSize: 14, color: OWNED_COLORS.ink },
-  inputField: { flex: 1, minWidth: 0, fontSize: 16, color: OWNED_COLORS.ink, borderWidth: 0, ...WEB_TEXT_INPUT_RESET, backgroundColor: 'transparent', borderRadius: 0 },
+  inputRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingVertical: 16 },
+  inputLabel: { flexShrink: 0, fontSize: 14, color: OWNED_COLORS.ink },
+  inputField: { flex: 1, minWidth: 0, textAlign: 'right', fontSize: 16, color: OWNED_COLORS.ink, borderWidth: 0, ...WEB_TEXT_INPUT_RESET, backgroundColor: 'transparent', borderRadius: 0 },
 
   selectNftPressable: { marginBottom: 18 },
   selectNftBox: { padding: 25, alignItems: 'center', minHeight: 160 },
+  selectedNftContent: { width: '100%', alignItems: 'center' },
   emptyNftIcon: { width: 54, height: 54, marginBottom: 10 },
-  emptyNftText: { color: OWNED_COLORS.blue, fontSize: 14 },
+  emptyNftText: { width: '100%', textAlign: 'center', color: OWNED_COLORS.blue, fontSize: 14 },
   selectedImg: { width: 116, marginBottom: 10 },
-  selectedName: { fontSize: 16, color: OWNED_COLORS.ink, marginBottom: 3 },
+  selectedName: { width: '100%', textAlign: 'center', fontSize: 16, lineHeight: 22, color: OWNED_COLORS.ink, marginBottom: 3 },
   selectedSerial: { fontSize: 12, color: OWNED_COLORS.muted, fontVariant: ['tabular-nums'] },
 
   costBox: { padding: 17, marginBottom: 18, borderRadius: 14, borderWidth: 1, borderColor: '#EAE4DC', backgroundColor: '#FCFAF6' },
@@ -252,10 +252,13 @@ const styles = StyleSheet.create({
 
   submitBtn: { width: '100%', minHeight: 52 },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.28)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.28)', justifyContent: 'flex-end', alignItems: 'center' },
   modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(44,30,22,0.3)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 18 },
-  pickerSafeArea: { flex: 1, justifyContent: 'flex-end' },
-  bottomSheet: { width: '100%', height: height * 0.65, paddingHorizontal: 30, paddingTop: 16 },
+  pickerSafeArea: { flex: 1, width: '100%', justifyContent: 'flex-end', alignItems: 'center' },
+  bottomSheet: { width: '100%', maxWidth: 560, paddingHorizontal: 30, paddingTop: 16 },
+  pickerClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  pickerScroll: { flex: 1, minHeight: 0 },
+  pickerContent: { paddingVertical: 14 },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 8, paddingBottom: 14, borderBottomWidth: 1, borderColor: '#EAE0D5' },
   sheetTitle: { fontSize: 18, color: OWNED_COLORS.ink },
   nftPickRow: { flexDirection: 'row', alignItems: 'center', padding: 10, marginBottom: 9 },
@@ -271,10 +274,10 @@ const styles = StyleSheet.create({
   modalArtIcon: { width: 58, height: 58, marginBottom: 9 },
   transferSuccessArt: { width: 188, height: 188, aspectRatio: 1, marginBottom: 2 },
   confirmTitle: { fontSize: 19, color: OWNED_COLORS.ink, marginBottom: 10 },
-  confirmDesc: { fontSize: 13, color: OWNED_COLORS.muted, textAlign: 'center', lineHeight: 21, marginBottom: 18 },
+  confirmDesc: { width: '100%', fontSize: 13, color: OWNED_COLORS.muted, textAlign: 'center', lineHeight: 21, marginBottom: 18 },
   warningText: { fontWeight: '700', color: OWNED_COLORS.gold },
   receiverText: { fontWeight: '700', color: OWNED_COLORS.ink },
-  confirmBtnRow: { flexDirection: 'row', width: '100%', gap: 9 },
-  confirmAction: { flex: 1, minWidth: 0, minHeight: 46 },
+  confirmBtnRow: { flexDirection: 'row', flexWrap: 'wrap', width: '100%', gap: 9 },
+  confirmAction: { flex: 1, minWidth: 112, minHeight: 46 },
   resultAction: { width: '100%', minHeight: 46 },
 });

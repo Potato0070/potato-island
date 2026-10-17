@@ -192,7 +192,7 @@ export default function MyNftDetailScreen() {
     <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
       <View style={[styles.page, { maxWidth: 760 }]}>
         <View style={styles.navBar}>
-          <Pressable accessibilityRole="button" accessibilityLabel="返回藏品册" onPress={() => router.back()} style={styles.backButton}><Ionicons name="chevron-back" size={25} color={OWNED_COLORS.ink} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="返回藏品册" onPress={() => router.canGoBack() ? router.back() : router.replace('/my-collection-list')} style={styles.backButton}><Ionicons name="chevron-back" size={25} color={OWNED_COLORS.ink} /></Pressable>
           <Text accessibilityRole="header" style={[styles.navTitle, { fontFamily: fonts.semibold }]}>藏品详情</Text>
           <View style={styles.navSpacer} />
         </View>
@@ -209,7 +209,7 @@ export default function MyNftDetailScreen() {
               {!isOwner ? <View style={styles.notice}><Ionicons name="information-circle-outline" size={18} color={OWNED_COLORS.gold} /><Text style={styles.noticeText}>这张藏品已不在当前金库，操作入口已关闭。</Text></View> : null}
               <View style={[styles.cardStage, { width: Math.min(contentWidth - 38, 540) }]}>
                 <FolioPaperSurface kind="paper" style={styles.detailCard}>
-                  <View style={styles.detailArtStage}>
+                  <View style={[styles.detailArtStage, { width: Math.min(contentWidth - 38, 540) - 66 }]}>
                     <FolioArtwork uri={imageUri} framed style={styles.detailArtFrame} accessibilityLabel={`${collectionTitle}封面`} />
                     <FolioSerialTag value={serial} style={styles.serialTab} fontFamily={fonts.semibold} />
                     <FolioStateTag state={statusKey} label={isListed ? '在售' : itemStatus(item.status)} style={styles.detailStateTag} fontFamily={fonts.semibold} />
@@ -272,9 +272,10 @@ export default function MyNftDetailScreen() {
           <FolioPaperSurface kind="paper" style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) }]}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
-              <View><Text style={[styles.sheetTitle, { fontFamily: fonts.semibold }]}>发布寄售</Text><Text style={styles.sheetSubtitle}>将这张藏品放入土豆岛集市</Text></View>
+              <View style={styles.sheetHeadingCopy}><Text style={[styles.sheetTitle, { fontFamily: fonts.semibold }]}>发布寄售</Text><Text style={styles.sheetSubtitle}>将这张藏品放入土豆岛集市</Text></View>
               <Pressable accessibilityRole="button" accessibilityLabel="关闭寄售面板" onPress={closePriceSheet} disabled={busy} style={styles.sheetClose}><Ionicons name="close" size={20} color={OWNED_COLORS.ink} /></Pressable>
             </View>
+            <ScrollView style={styles.sheetScroll} contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
             {item ? <View style={styles.sheetItem}>
               <FolioArtwork uri={imageUri} framed={false} style={styles.sheetArt} accessibilityLabel={`${collectionTitle}封面`} />
               <View style={styles.sheetItemCopy}><Text numberOfLines={1} style={[styles.sheetItemName, { fontFamily: fonts.semibold }]}>{collectionTitle}</Text><Text style={styles.sheetItemSerial}>{serial}</Text><Text style={styles.sheetItemStatus}>{itemStatus(item.status)}</Text></View>
@@ -287,6 +288,7 @@ export default function MyNftDetailScreen() {
             {inlineError ? <Text accessibilityLiveRegion="polite" style={styles.inlineError}>{inlineError}</Text> : collection?.max_consign_price ? <Text style={styles.priceCap}>该系列最高寄售价为 {money(collection.max_consign_price)} 土豆币</Text> : null}
             <View style={styles.listingNotice}><Image source={CONSIGN_NOTICE_ART} resizeMode="contain" style={styles.listingNoticeArt} accessible={false} /><Text style={styles.listingNoticeText}>上架后暂时不能转赠；撤回寄售后会回到金库。</Text></View>
             <FolioButton label="确认上架" tone="blue" pencilIcon="consign" onPress={publishConsign} loading={busy} style={styles.submitButton} fontFamily={fonts.semibold} />
+            </ScrollView>
           </FolioPaperSurface>
         </KeyboardAvoidingView>
       </Modal>
@@ -324,7 +326,7 @@ export default function MyNftDetailScreen() {
             </View> : null}
             <View style={styles.resultActions}>
               <FolioButton label="继续查看" tone="paper" pencilIcon="album" onPress={() => setResult(null)} style={styles.resultButton} fontFamily={fonts.semibold} />
-              <FolioButton label="返回藏品册" tone="blue" pencilIcon="collection" onPress={() => { setResult(null); router.back(); }} style={styles.resultButton} fontFamily={fonts.semibold} />
+              <FolioButton label="返回藏品册" tone="blue" pencilIcon="collection" onPress={() => { setResult(null); router.replace('/my-collection-list'); }} style={styles.resultButton} fontFamily={fonts.semibold} />
             </View>
           </FolioPaperSurface>
         </View>
@@ -350,7 +352,7 @@ const styles = StyleSheet.create({
   noticeText: { color: '#7F6C4F', flex: 1, fontSize: 12, lineHeight: 17 },
   cardStage: { alignSelf: 'center', minHeight: 500, paddingHorizontal: 12, paddingTop: 9, paddingBottom: 15, justifyContent: 'center', alignItems: 'center', position: 'relative' },
   detailCard: { width: '100%', paddingHorizontal: 21, paddingVertical: 22 },
-  detailArtStage: { width: '100%', aspectRatio: 1, position: 'relative', marginBottom: 9 },
+  detailArtStage: { alignSelf: 'center', aspectRatio: 1, position: 'relative', marginBottom: 9 },
   detailArtFrame: { width: '100%', height: '100%' },
   detailCardCopy: { paddingHorizontal: 7, paddingTop: 4 },
   detailName: { color: OWNED_COLORS.ink, fontSize: 19, lineHeight: 26 },
@@ -390,11 +392,14 @@ const styles = StyleSheet.create({
   fullAction: { flex: 1, minHeight: 48 },
   unavailableAction: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   unavailableText: { color: '#93877D', fontSize: 13 },
-  modalRoot: { flex: 1, justifyContent: 'flex-end' },
+  modalRoot: { flex: 1, justifyContent: 'flex-end', alignItems: 'center' },
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(42,37,31,0.28)' },
-  sheet: { width: '100%', maxHeight: '90%', paddingHorizontal: 31, paddingTop: 16 },
+  sheet: { width: '100%', maxWidth: 560, maxHeight: '90%', paddingHorizontal: 31, paddingTop: 16 },
   sheetHandle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 3, backgroundColor: '#D9D1C6', marginBottom: 15 },
   sheetHeader: { minHeight: 53, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 14, borderBottomWidth: 1, borderColor: '#F0EBE4' },
+  sheetHeadingCopy: { flex: 1, minWidth: 0, paddingRight: 8 },
+  sheetScroll: { flexShrink: 1, minHeight: 0 },
+  sheetBody: { paddingBottom: 2 },
   sheetTitle: { color: OWNED_COLORS.ink, fontSize: 19, lineHeight: 26 },
   sheetSubtitle: { color: '#8E8175', fontSize: 12, lineHeight: 18, marginTop: 3 },
   sheetClose: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F7F4EF', alignItems: 'center', justifyContent: 'center' },
@@ -420,14 +425,14 @@ const styles = StyleSheet.create({
   confirmIllustration: { width: 56, height: 56, alignSelf: 'center', marginBottom: 10 },
   confirmTitle: { color: OWNED_COLORS.ink, fontSize: 18, lineHeight: 24, textAlign: 'center' },
   confirmDescription: { color: '#8C8074', fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 6, marginBottom: 15 },
-  confirmItem: { minHeight: 67, padding: 8, flexDirection: 'row', alignItems: 'center', borderRadius: 13, borderWidth: 1, borderColor: '#EAE3D9', backgroundColor: '#FCFAF6' },
+  confirmItem: { minHeight: 67, padding: 8, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', borderRadius: 13, borderWidth: 1, borderColor: '#EAE3D9', backgroundColor: '#FCFAF6' },
   confirmArt: { width: 49, height: 49, borderRadius: 7 },
-  confirmItemCopy: { flex: 1, paddingHorizontal: 10 },
+  confirmItemCopy: { flex: 1, minWidth: 60, paddingHorizontal: 10 },
   confirmItemName: { color: OWNED_COLORS.ink, fontSize: 13, lineHeight: 18 },
   confirmItemSerial: { color: '#95887B', fontSize: 11, lineHeight: 16 },
-  confirmItemPrice: { color: OWNED_COLORS.gold, fontSize: 13 },
-  confirmActions: { flexDirection: 'row', gap: 9, marginTop: 18 },
-  confirmButton: { flex: 1, minHeight: 46, minWidth: 0 },
+  confirmItemPrice: { flexShrink: 1, color: OWNED_COLORS.gold, fontSize: 13 },
+  confirmActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, marginTop: 18 },
+  confirmButton: { flex: 1, minHeight: 46, minWidth: 112 },
   resultCard: { width: '100%', maxWidth: 440, paddingHorizontal: 26, paddingVertical: 23, alignItems: 'center' },
   resultArt: { width: 174, height: 146, marginTop: 2 },
   resultTitle: { color: OWNED_COLORS.ink, fontSize: 22, lineHeight: 29, marginTop: 1 },
@@ -438,6 +443,6 @@ const styles = StyleSheet.create({
   resultName: { color: OWNED_COLORS.ink, fontSize: 12, lineHeight: 17 },
   resultMeta: { color: '#93877D', fontSize: 11, lineHeight: 15, marginTop: 2 },
   resultPrice: { color: OWNED_COLORS.gold, fontSize: 13 },
-  resultActions: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 18 },
-  resultButton: { flex: 1, minWidth: 0, minHeight: 46 },
+  resultActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, width: '100%', marginTop: 18 },
+  resultButton: { flex: 1, minWidth: 112, minHeight: 46 },
 });
