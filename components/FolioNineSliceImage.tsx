@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Image, Platform, StyleSheet, View, type ImageSourcePropType, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { Asset } from 'expo-asset';
+import { Image, Platform, StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 
 export type SliceInsets = { top: number; right: number; bottom: number; left: number };
 
 type Props = {
-  source: ImageSourcePropType;
+  source: number;
   insets: SliceInsets;
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
@@ -16,7 +17,7 @@ type Props = {
  */
 export default function FolioNineSliceImage({ source, insets, style, accessibilityLabel }: Props) {
   const [height, setHeight] = useState(0);
-  const asset = Image.resolveAssetSource(source);
+  const asset = Asset.fromModule(source);
   const scale = height > 0 && asset?.height ? height / asset.height : 1;
   const top = Math.max(1, insets.top * scale);
   const right = Math.max(1, insets.right * scale);
