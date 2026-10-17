@@ -7,7 +7,6 @@ import FolioButton from '../components/FolioButton';
 import FolioPaperSurface from '../components/FolioPaperSurface';
 import { FolioArtwork, FolioSerialTag, FolioStateTag } from '../components/FolioArtwork';
 import { OWNED_COLORS, itemStatus, money, serialLabel, validateConsignPrice, type OwnedItem } from '../constants/owned-collection';
-import { useIslandFonts } from '../hooks/use-island-fonts';
 import { supabase } from '../supabase';
 
 type StatusFilter = 'all' | 'idle' | 'listed';
@@ -35,7 +34,6 @@ export default function MyCollectionListScreen() {
   const { collectionId, collectionName } = useLocalSearchParams<{ collectionId?: string; collectionName?: string }>();
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const fonts = useIslandFonts();
   const carouselRef = useRef<FlatList<OwnedItem>>(null);
   const [items, setItems] = useState<OwnedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -218,14 +216,14 @@ export default function MyCollectionListScreen() {
           </View>
           <View style={styles.cardCaption}>
             <View style={styles.captionMain}>
-              <Text numberOfLines={1} style={[styles.cardName, { fontFamily: fonts.semibold }]}>{collectionOf(item)?.name || '未命名藏品'}</Text>
+              <Text numberOfLines={1} style={styles.cardName}>{collectionOf(item)?.name || '未命名藏品'}</Text>
               <Text style={styles.cardSerial}>{serialLabel(item.serial_number)}</Text>
             </View>
             <Ionicons name={batchMode ? (isSelected ? 'checkmark-circle' : 'ellipse-outline') : 'chevron-forward'} size={19} color={isSelected ? OWNED_COLORS.blue : '#B6A99B'} />
           </View>
         </FolioPaperSurface>
-        <FolioSerialTag value={serialLabel(item.serial_number)} style={styles.sideNumber} fontFamily={fonts.semibold} />
-        <FolioStateTag state={statusKey} label={status} style={styles.sideStatus} fontFamily={fonts.semibold} />
+        <FolioSerialTag value={serialLabel(item.serial_number)} style={styles.sideNumber} />
+        <FolioStateTag state={statusKey} label={status} style={styles.sideStatus} />
       </Pressable>
     );
   };
@@ -235,7 +233,7 @@ export default function MyCollectionListScreen() {
       <View style={[styles.page, { maxWidth: 760 }]}>
         <View style={styles.pageHeader}>
           <View style={styles.headerCopy}>
-            <Text accessibilityRole="header" style={[styles.title, { fontFamily: fonts.semibold }]}>{batchMode ? '批量管理' : '我的藏品'}</Text>
+            <Text accessibilityRole="header" style={styles.title}>{batchMode ? '批量管理' : '我的藏品'}</Text>
             <Text style={styles.subtitle}>持有 {items.length.toLocaleString('zh-CN')} 件{collectionName ? ' ' + collectionName : ''}</Text>
           </View>
           <FolioButton
@@ -244,7 +242,6 @@ export default function MyCollectionListScreen() {
             icon={batchMode ? 'close' : 'checkbox-outline'}
             onPress={toggleBatchMode}
             style={styles.batchButton}
-            fontFamily={fonts.semibold}
           />
         </View>
 
@@ -253,7 +250,7 @@ export default function MyCollectionListScreen() {
             const selected = filter === key;
             return (
               <Pressable key={key} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => setFilter(key)} style={[styles.statusTab, selected && styles.statusTabSelected]}>
-                <Text style={[styles.statusTabText, { fontFamily: selected ? fonts.semibold : fonts.regular }, selected && styles.statusTabTextSelected]}>{label}</Text>
+                <Text style={[styles.statusTabText, selected && styles.statusTabTextSelected]}>{label}</Text>
                 <Text style={[styles.statusCount, selected && styles.statusCountSelected]}>{getCount(key)}</Text>
               </Pressable>
             );
@@ -269,7 +266,7 @@ export default function MyCollectionListScreen() {
               onChangeText={setSearch}
               placeholder="搜索藏品名称或编号"
               placeholderTextColor="#A89C8E"
-              style={[styles.searchInput, { fontFamily: fonts.regular }]}
+              style={styles.searchInput}
               returnKeyType="search"
               maxLength={40}
               underlineColorAndroid="transparent"
@@ -287,15 +284,15 @@ export default function MyCollectionListScreen() {
         ) : error ? (
           <View style={styles.emptyState}>
             <Image source={EMPTY_NETWORK_ART} resizeMode="contain" style={styles.emptyNetworkArt} accessible={false} />
-            <Text style={[styles.emptyTitle, { fontFamily: fonts.semibold }]}>{error}</Text>
-            <FolioButton label="重新载入" tone="paper" onPress={() => void fetchItems()} style={styles.retryButton} fontFamily={fonts.semibold} />
+            <Text style={styles.emptyTitle}>{error}</Text>
+            <FolioButton label="重新载入" tone="paper" onPress={() => void fetchItems()} style={styles.retryButton} />
           </View>
         ) : visibleItems.length === 0 ? (
           <View style={styles.emptyState}>
             <Image source={search ? EMPTY_SEARCH_ART : EMPTY_ALBUM_ART} resizeMode="contain" style={search ? styles.emptySearchArt : styles.emptyAlbumArt} accessible={false} />
-            <Text style={[styles.emptyTitle, { fontFamily: fonts.semibold }]}>{search ? '没有找到这张藏品' : filter === 'listed' ? '目前还没有寄售藏品' : '这一页藏品册还是空白'}</Text>
+            <Text style={styles.emptyTitle}>{search ? '没有找到这张藏品' : filter === 'listed' ? '目前还没有寄售藏品' : '这一页藏品册还是空白'}</Text>
             <Text style={styles.emptyHint}>{search ? '试试藏品名称或完整编号的一部分' : filter === 'idle' ? '已寄售或暂不可操作的藏品不会出现在这里' : '获得藏品后，会在这里逐张归档'}</Text>
-            {search ? <FolioButton label="清除搜索" tone="paper" onPress={() => setSearch('')} style={styles.retryButton} fontFamily={fonts.semibold} /> : null}
+            {search ? <FolioButton label="清除搜索" tone="paper" onPress={() => setSearch('')} style={styles.retryButton} /> : null}
           </View>
         ) : (
           <>
@@ -349,8 +346,8 @@ export default function MyCollectionListScreen() {
 
         {batchMode && !loading && visibleItems.length > 0 ? (
           <View style={[styles.batchBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-            <View style={styles.batchSummary}><Text style={[styles.batchCount, { fontFamily: fonts.semibold }]}>已选 {selectedIds.length}<Text style={styles.batchLimit}> / 20</Text></Text><Text style={styles.batchNote}>仅在库藏品可上架</Text></View>
-              <FolioButton label="统一标价" tone="gold" pencilIcon="consign" onPress={openConsignSheet} disabled={!selectedIds.length || busy} style={styles.batchAction} fontFamily={fonts.semibold} />
+            <View style={styles.batchSummary}><Text style={styles.batchCount}>已选 {selectedIds.length}<Text style={styles.batchLimit}> / 20</Text></Text><Text style={styles.batchNote}>仅在库藏品可上架</Text></View>
+              <FolioButton label="统一标价" tone="gold" pencilIcon="consign" onPress={openConsignSheet} disabled={!selectedIds.length || busy} style={styles.batchAction} />
           </View>
         ) : null}
       </View>
@@ -363,22 +360,22 @@ export default function MyCollectionListScreen() {
           <FolioPaperSurface kind="paper" style={[styles.priceSheet, { paddingBottom: Math.max(insets.bottom, 18) }]}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
-              <View><Text style={[styles.sheetTitle, { fontFamily: fonts.semibold }]}>批量寄售</Text><Text style={styles.sheetSubtitle}>为 {selectedIds.length} 张藏品设置相同的单件价格</Text></View>
+              <View><Text style={styles.sheetTitle}>批量寄售</Text><Text style={styles.sheetSubtitle}>为 {selectedIds.length} 张藏品设置相同的单件价格</Text></View>
               <Pressable accessibilityRole="button" accessibilityLabel="关闭" onPress={() => !busy && setPriceSheetOpen(false)} style={styles.sheetClose}><Ionicons name="close" size={20} color={OWNED_COLORS.ink} /></Pressable>
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetContent}>
               <View style={styles.batchPreviewCard}>
                 {activeItem ? <FolioArtwork uri={imageOf(activeItem)} style={styles.sheetPreviewArt} accessibilityLabel={`${collectionOf(activeItem)?.name || '藏品'}缩略图`} /> : <View style={styles.sheetPreviewArt} />}
-                <View style={styles.batchPreviewCopy}><Text style={[styles.previewCollection, { fontFamily: fonts.semibold }]}>{collectionName || activeCollection?.name || '我的藏品'}</Text><Text style={styles.previewCount}>{selectedIds.length} 件藏品 · 统一寄售价</Text></View>
+                <View style={styles.batchPreviewCopy}><Text style={styles.previewCollection}>{collectionName || activeCollection?.name || '我的藏品'}</Text><Text style={styles.previewCount}>{selectedIds.length} 件藏品 · 统一寄售价</Text></View>
                 <Ionicons name="albums-outline" size={20} color={OWNED_COLORS.blue} />
               </View>
-              <Text style={[styles.inputLabel, { fontFamily: fonts.semibold }]}>每件寄售价 <Text style={styles.currency}>(土豆币)</Text></Text>
-              <View style={styles.priceInputWrap}><TextInput accessibilityLabel="每件寄售价" value={batchPrice} onChangeText={setBatchPrice} placeholder="输入价格" placeholderTextColor="#B2A79B" keyboardType="decimal-pad" style={[styles.priceInput, { fontFamily: fonts.semibold }]} underlineColorAndroid="transparent" selectionColor={OWNED_COLORS.blue} maxLength={14} /><Text style={styles.currencySuffix}>土豆币</Text></View>
+              <Text style={styles.inputLabel}>每件寄售价 <Text style={styles.currency}>(土豆币)</Text></Text>
+              <View style={styles.priceInputWrap}><TextInput accessibilityLabel="每件寄售价" value={batchPrice} onChangeText={setBatchPrice} placeholder="输入价格" placeholderTextColor="#B2A79B" keyboardType="decimal-pad" style={styles.priceInput} underlineColorAndroid="transparent" selectionColor={OWNED_COLORS.blue} maxLength={14} /><Text style={styles.currencySuffix}>土豆币</Text></View>
               {activeCollection?.max_consign_price ? <Text style={styles.priceLimit}>系列最高寄售价 {money(activeCollection.max_consign_price)} 土豆币</Text> : null}
-              <View style={styles.priceTotal}><Text style={styles.priceTotalLabel}>挂单总额参考</Text><Text style={[styles.priceTotalValue, { fontFamily: fonts.semibold }]}>{money(Number(batchPrice || 0) * selectedIds.length)} <Text style={styles.currency}>土豆币</Text></Text></View>
+              <View style={styles.priceTotal}><Text style={styles.priceTotalLabel}>挂单总额参考</Text><Text style={styles.priceTotalValue}>{money(Number(batchPrice || 0) * selectedIds.length)} <Text style={styles.currency}>土豆币</Text></Text></View>
               <Text style={styles.noticeText}>提交后藏品会进入寄售状态。批量寄售权益由平台规则校验。</Text>
-              <FolioButton label="确认批量寄售" tone="blue" pencilIcon="consign" onPress={submitBatchConsign} loading={busy} disabled={!batchPrice.trim()} style={styles.submitButton} fontFamily={fonts.semibold} />
-              <Pressable accessibilityRole="button" onPress={() => setPriceSheetOpen(false)} disabled={busy} style={styles.sheetCancel}><Text style={[styles.sheetCancelText, { fontFamily: fonts.semibold }]}>再检查一下</Text></Pressable>
+              <FolioButton label="确认批量寄售" tone="blue" pencilIcon="consign" onPress={submitBatchConsign} loading={busy} disabled={!batchPrice.trim()} style={styles.submitButton} />
+              <Pressable accessibilityRole="button" onPress={() => setPriceSheetOpen(false)} disabled={busy} style={styles.sheetCancel}><Text style={styles.sheetCancelText}>再检查一下</Text></Pressable>
             </ScrollView>
           </FolioPaperSurface>
         </KeyboardAvoidingView>
