@@ -1,357 +1,156 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FolioArtwork } from '../components/FolioArtwork';
+import PageReadState from '../components/PageReadState';
+import SeasideButton from '../components/SeasideButton';
+import SeasideResultDialog from '../components/SeasideResultDialog';
+import SeasideSheet from '../components/SeasideSheet';
+import SeasideSurface from '../components/SeasideSurface';
+import SeasideTextInput from '../components/SeasideTextInput';
+import TradeConfirmDialog from '../components/TradeConfirmDialog';
+import { orderError, orderMoney, orderPrice, orderQuantity, orderTotal } from '../constants/order-ui';
 import { supabase } from '../supabase';
 
-const { height } = Dimensions.get('window');
-
-// 💰 引入千分位金钱格式化
-const formatMoney = (num: number | string) => {
-  const n = Number(num);
-  if (isNaN(n)) return '0.00';
-  let parts = n.toFixed(2).split(".");
-  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return parts.join(".");
-};
-
-const FallbackImage = ({ uri, style }: { uri: string, style: any }) => {
-  const [hasError, setHasError] = useState(false);
-  return (
-    <View style={[style, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' }]}>
-      {!hasError ? (
-        <Image source={{ uri: uri || 'invalid_url' }} style={[style, { position: 'absolute', width: '100%', height: '100%' }]} onError={() => setHasError(true)} />
-      ) : (
-        <Text style={{ fontSize: 24 }}>🥔</Text>
-      )}
-    </View>
-  );
-};
-
+type Collection = { id: string; name: string; image_url?: string; on_sale_count?: number; floor_price_cache?: number; max_consign_price?: number };
 export default function CreateBuyOrderScreen() {
   const router = useRouter();
-  const { colId } = useLocalSearchParams();
-  
-  const [activeCollectionId, setActiveCollectionId] = useState<string | null>((colId as string) || null);
-  const [collection, setCollection] = useState<any>(null);
-  const [allCollections, setAllCollections] = useState<any[]>([]);
-  const [showPicker, setShowPicker] = useState(false);
-
+  const insets = useSafeAreaInsets();
+  const { colId } = useLocalSearchParams<{ colId?: string | string[] }>();
+  const initialId = Array.isArray(colId) ? colId[0] : colId;
+  const [activeId, setActiveId] = useState(initialId || '');
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [collection, setCollection] = useState<Collection | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [readError, setReadError] = useState('');
+  const [accountError, setAccountError] = useState('');
+  const [userId, setUserId] = useState('');
+  const [balance, setBalance] = useState<number | null>(null);
+  const [potatoIds, setPotatoIds] = useState<string[]>([]);
+  const [picker, setPicker] = useState(false);
+  const [search, setSearch] = useState('');
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('1');
-  const [loading, setLoading] = useState(true);
+  const [priceError, setPriceError] = useState('');
+  const [quantityError, setQuantityError] = useState('');
+  const [formError, setFormError] = useState('');
+  const [confirm, setConfirm] = useState(false);
   const [publishing, setPublishing] = useState(false);
-
-  const [minPriceLimit, setMinPriceLimit] = useState(0);
-  const [maxPriceLimit, setMaxPriceLimit] = useState(Infinity);
-  const [orderMode, setOrderMode] = useState<'buy' | 'bid'>('buy'); 
-
-  const [potatoIds, setPotatoIds] = useState<string[]>([]);
-  const [userBalance, setUserBalance] = useState(0); // 🌟 新增：用户真实余额
-  const [confirmModal, setConfirmModal] = useState(false);
-  const [toastMsg, setToastMsg] = useState('');
-
-  useEffect(() => {
-    supabase.from('collections').select('*').eq('is_tradeable', true).then(({data}) => {
-       if (data) setAllCollections(data);
-    });
-
-    supabase.auth.getUser().then(async ({data: {user}}) => {
-       if (user) {
-          // 🌟 核心拦截机制：拉取用户真实余额
-          const { data: profile } = await supabase.from('profiles').select('potato_coin_balance').eq('id', user.id).single();
-          if (profile) setUserBalance(profile.potato_coin_balance || 0);
-
-          const { data: myNfts } = await supabase.from('nfts').select('id, collections(name)').eq('owner_id', user.id).eq('status', 'idle');
-          if (myNfts) {
-             const pCards = myNfts.filter((nft: any) => {
-                const colName = Array.isArray(nft.collections) ? nft.collections[0]?.name : nft.collections?.name;
-                return colName === 'Potato卡';
-             });
-             setPotatoIds(pCards.map(nft => nft.id));
-          }
-       }
-    });
-  }, []);
-
-  useEffect(() => {
-    if (activeCollectionId) {
-      supabase.from('collections').select('*').eq('id', activeCollectionId).single().then(({data}) => {
-        setCollection(data);
-        const isOnSale = (data?.on_sale_count || 0) > 0;
-        if (isOnSale) {
-           setOrderMode('buy');
-           setMinPriceLimit((data?.floor_price_cache || 0) * 0.7);
-           setMaxPriceLimit(data?.max_consign_price || 999999);
-        } else {
-           setOrderMode('bid');
-           setMinPriceLimit(data?.max_consign_price || 0);
-           setMaxPriceLimit(Infinity);
-        }
-        setLoading(false);
-      });
-    } else {
-      setCollection(null);
-      setMinPriceLimit(0);
-      setMaxPriceLimit(Infinity);
-      setLoading(false);
-    }
-  }, [activeCollectionId]);
-
-  const showToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 2500);
-  };
-
-  const handlePublishClick = () => {
-    if (!collection) return showToast('请先选择藏品系列！');
-    
-    const p = parseFloat(price);
-    const q = parseInt(quantity);
-    if (isNaN(p) || p <= 0) return showToast('请输入有效价格');
-    if (isNaN(q) || q <= 0) return showToast('数量不能少于 1');
-    
-    if (p < minPriceLimit) return showToast(`出价过低！不可低于：¥${minPriceLimit.toFixed(2)}`);
-    if (p > maxPriceLimit) return showToast(`触发熔断！求购上限不得超过：¥${maxPriceLimit.toFixed(2)}`);
-    
-    if (potatoIds.length < 1) return showToast('金库现货不足！需持有至少 1 张 Potato卡');
-
-    setConfirmModal(true);
-  };
-
-  const executePublish = async () => {
-    setPublishing(true);
+  const [submitError, setSubmitError] = useState('');
+  const [needsReview, setNeedsReview] = useState(false);
+  const [result, setResult] = useState(false);
+  const lock = useRef(false);
+  const readVersion = useRef(0);
+  const load = useCallback(async () => {
+    const version = ++readVersion.current;
+    setLoading(true); setReadError(''); setAccountError(''); setBalance(null);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const totalCost = parseFloat(price) * parseInt(quantity);
-      
-      if (userBalance < totalCost) throw new Error('土豆币钱包余额不足！');
-      
-      await supabase.from('profiles').update({ potato_coin_balance: userBalance - totalCost }).eq('id', user?.id);
-      await supabase.from('nfts').update({ status: 'burned' }).eq('id', potatoIds[0]);
-
-      const { error } = await supabase.from('buy_orders').insert([{ 
-         collection_id: collection.id, 
-         buyer_id: user?.id, 
-         price: parseFloat(price), 
-         quantity: parseInt(quantity),
-         order_type: orderMode
-      }]);
-      if (error) throw error;
-      
-      setConfirmModal(false);
-      showToast('✅ 发布成功！资金已冻结并进入大盘排队');
-      setTimeout(() => router.back(), 1500);
-    } catch (err: any) { 
-       setConfirmModal(false);
-       showToast(`发布失败: ${err.message}`); 
-    } finally { 
-       setPublishing(false); 
-    }
+      const [list, selected, auth] = await Promise.all([
+        supabase.from('collections').select('*').eq('is_tradeable', true),
+        activeId ? supabase.from('collections').select('*').eq('id', activeId).maybeSingle() : Promise.resolve({ data: null, error: null }),
+        supabase.auth.getUser(),
+      ]);
+      if (version !== readVersion.current) return;
+      if (list.error) throw list.error;
+      if (selected.error) throw selected.error;
+      if (activeId && !selected.data) throw new Error('该藏品系列暂时无法查看，请返回后重新选择。');
+      setCollections(list.data || []); setCollection(selected.data); setUserId(auth.data.user?.id || ''); setPotatoIds([]);
+      if (auth.error && auth.error.name !== 'AuthSessionMissingError') setAccountError('登录状态暂时无法读取，请重新加载。');
+      if (auth.data.user) {
+        const [profile, nfts] = await Promise.all([
+          supabase.from('profiles').select('potato_coin_balance').eq('id', auth.data.user.id).single(),
+          supabase.from('nfts').select('id, collections(name)').eq('owner_id', auth.data.user.id).eq('status', 'idle'),
+        ]);
+        if (version !== readVersion.current) return;
+        if (profile.error || nfts.error || !profile.data) setAccountError('余额或 Potato卡暂时无法读取，请重新加载。');
+        else {
+          setBalance(Number(profile.data.potato_coin_balance || 0));
+          setPotatoIds((nfts.data || []).filter(n => (Array.isArray(n.collections) ? n.collections[0]?.name : (n.collections as { name?: string })?.name) === 'Potato卡').map(n => n.id));
+        }
+      }
+    } catch (error) { if (version === readVersion.current) setReadError(orderError(error, '藏品系列暂时无法读取。')); }
+    finally { if (version === readVersion.current) setLoading(false); }
+  }, [activeId]);
+  useEffect(() => { void load(); return () => { readVersion.current += 1; }; }, [load]);
+  // Existing mode/limit rules retained; this UI pass does not redefine delisting.
+  const mode = collection && (collection.on_sale_count || 0) > 0 ? 'buy' : 'bid';
+  const action = mode === 'bid' ? '竞价' : '求购';
+  const min = mode === 'buy' ? (collection?.floor_price_cache || 0) * .7 : collection?.max_consign_price || 0;
+  const max = mode === 'buy' ? collection?.max_consign_price || 999999 : Infinity;
+  const parsedPrice = orderPrice(price), parsedQuantity = orderQuantity(quantity);
+  const total = orderTotal(parsedPrice, parsedQuantity);
+  const insufficient = total !== null && balance !== null && total > balance;
+  const check = () => {
+    setPriceError(''); setQuantityError(''); setFormError('');
+    if (!userId) { router.push('/login'); return; }
+    if (!collection) { setFormError('请先选择藏品系列。'); return; }
+    if (accountError || balance === null) { setFormError('账户信息尚未读完，请重新加载。'); return; }
+    let invalid = false;
+    if (parsedPrice === null) { setPriceError('请输入大于 0 的单价，最多保留两位小数。'); invalid = true; }
+    else if (parsedPrice < min || parsedPrice > max) { setPriceError(`单价不得低于 ${orderMoney(min)} 土豆币${Number.isFinite(max) ? `，不得高于 ${orderMoney(max)} 土豆币` : ''}。`); invalid = true; }
+    if (parsedQuantity === null) { setQuantityError('请输入至少 1 件的整数数量。'); invalid = true; }
+    if (invalid) return;
+    if (total === null) { setFormError('订单金额过大，请减少数量或单价。'); return; }
+    if (insufficient) { setFormError('可用余额不足，请调整价格或数量。'); return; }
+    if (!potatoIds.length) { setFormError('发起订单需要 1 张在库的 Potato卡。'); return; }
+    setSubmitError(''); setConfirm(true);
   };
-
-  if (loading) return <View style={styles.center}><ActivityIndicator color="#D49A36" /></View>;
-
-  // 🌟 实时计算成本与拦截判断
-  const currentTotalCost = (parseFloat(price) || 0) * (parseInt(quantity) || 1);
-  const isBalanceInsufficient = currentTotalCost > userBalance;
-  const isInvalidPrice = orderMode === 'buy' && (parseFloat(price) > maxPriceLimit || parseFloat(price) < minPriceLimit);
-  const isBtnDisabled = !collection || isBalanceInsufficient || isInvalidPrice || currentTotalCost <= 0;
-
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.navBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}><Text style={styles.iconText}>〈 </Text></TouchableOpacity>
-        <Text style={styles.navTitle}>{orderMode === 'bid' ? '发起竞价' : '发布求购单'}</Text>
-        <View style={styles.navBtn} />
-      </View>
-
-      {toastMsg ? <View style={styles.toastBox}><Text style={styles.toastText}>{toastMsg}</Text></View> : null}
-
-      <ScrollView contentContainerStyle={{padding: 20}}>
-        <TouchableOpacity style={styles.targetHeader} activeOpacity={0.8} onPress={() => setShowPicker(true)}>
-           {collection ? (
-              <>
-                 <FallbackImage uri={collection.image_url} style={styles.targetImg} />
-                 <View style={styles.targetInfo}>
-                    <Text style={styles.targetName} numberOfLines={1}>{collection.name}</Text>
-                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                       <View style={[styles.modeTag, orderMode === 'bid' ? {backgroundColor: '#FFD700'} : {backgroundColor: '#FDF8F0', borderWidth: 1, borderColor: '#D49A36'}]}>
-                          <Text style={[styles.modeTagText, orderMode === 'bid' ? {color: '#111'} : {color: '#D49A36'}]}>{orderMode === 'bid' ? '竞价模式' : '求购模式'}</Text>
-                       </View>
-                       <Text style={styles.targetSubHighlight}>下限: ¥{formatMoney(minPriceLimit)}</Text>
-                    </View>
-                 </View>
-                 <Text style={{color: '#8D6E63', fontSize: 13, fontWeight: '900'}}>更换 〉</Text>
-              </>
-           ) : (
-              <View style={{flexDirection: 'row', alignItems: 'center', flex: 1}}>
-                 <View style={[styles.targetImg, {justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0', borderWidth: 1, borderColor: '#EAE0D5'}]}><Text style={{fontSize: 24, color: '#D49A36'}}>+</Text></View>
-                 <View style={styles.targetInfo}>
-                    <Text style={[styles.targetName, {color: '#D49A36'}]}>点击选择藏品</Text>
-                 </View>
-                 <Text style={{color: '#D49A36', fontSize: 13, fontWeight: '900'}}>去选择 〉</Text>
-              </View>
-           )}
-        </TouchableOpacity>
-
-        <View style={styles.inputGroup}>
-           <View style={styles.inputRow}>
-              <Text style={styles.inputLabel}>{orderMode === 'bid' ? '竞拍价 (¥)' : '求购价 (¥)'}</Text>
-              <TextInput 
-                 style={styles.inputField} 
-                 placeholder={`最低 ¥${formatMoney(minPriceLimit)}`} 
-                 placeholderTextColor="#A1887F" 
-                 keyboardType="decimal-pad" 
-                 value={price} 
-                 onChangeText={(val) => setPrice(val.replace(/[^0-9.]/g, ''))} // 🌟 防呆：限制非法字符
-                 textAlign="right" 
-                 editable={!!collection} 
-              />
-           </View>
-           <View style={[styles.inputRow, {borderBottomWidth: 0}]}>
-              <Text style={styles.inputLabel}>需求数量</Text>
-              <View style={styles.stepper}>
-                 <TouchableOpacity onPress={() => setQuantity(Math.max(1, parseInt(quantity)-1).toString())} disabled={!collection}><Text style={styles.stepperBtn}>-</Text></TouchableOpacity>
-                 <TextInput 
-                    style={styles.stepperInput} 
-                    value={quantity} 
-                    onChangeText={(val) => setQuantity(val.replace(/[^0-9]/g, ''))} // 🌟 防呆：彻底干掉负数和小数点
-                    onEndEditing={() => setQuantity(Math.max(1, parseInt(quantity)||1).toString())}
-                    keyboardType="number-pad" 
-                    textAlign="center" 
-                    editable={!!collection} 
-                 />
-                 <TouchableOpacity onPress={() => setQuantity((parseInt(quantity)+1).toString())} disabled={!collection}><Text style={styles.stepperBtn}>+</Text></TouchableOpacity>
-              </View>
-           </View>
-        </View>
-
-        <View style={styles.ruleBox}>
-           <Text style={styles.ruleTitle}>交易说明</Text>
-           <Text style={styles.ruleText}>1. 发起需销毁 1 张 Potato卡。</Text>
-           <Text style={styles.ruleText}>2. <Text style={{fontWeight: '900', color: '#4E342E'}}>【求购】</Text>系列未退市时触发。最低价为地板价70%，上限为最高限价。</Text>
-           <Text style={styles.ruleText}>3. <Text style={{fontWeight: '900', color: '#4E342E'}}>【竞价】</Text>系列退市后触发。最低价为退市价(最高限价)，上不封顶！</Text>
-        </View>
-      </ScrollView>
-
-      <View style={styles.bottomBar}>
-         <View style={styles.payInfo}>
-            <Text style={{fontSize: 12, color: '#8D6E63', fontWeight: '800'}}>需冻结资金 (当前余额: ¥{formatMoney(userBalance)})</Text>
-            {/* 🌟 钱不够时数字变红 */}
-            <Text style={{fontSize: 24, fontWeight: '900', color: isBalanceInsufficient ? '#FF3B30' : '#4E342E'}}>
-               ¥ {formatMoney(currentTotalCost)}
-            </Text>
-         </View>
-         {/* 🌟 终极前置拦截：钱不够直接按钮变灰并改字 */}
-         <TouchableOpacity style={[styles.payBtn, isBtnDisabled && {backgroundColor: '#EAE0D5'}]} onPress={handlePublishClick} disabled={isBtnDisabled}>
-            <Text style={[styles.payBtnText, isBtnDisabled && {color: '#A1887F'}]}>
-               {isBalanceInsufficient ? '余额不足' : (orderMode === 'bid' ? '发起竞拍' : '确认支付')}
-            </Text>
-         </TouchableOpacity>
-      </View>
-
-      <Modal visible={showPicker} transparent animationType="slide">
-        <View style={styles.bottomSheetOverlay}>
-          <View style={styles.bottomSheet}>
-             <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>选择目标藏品</Text>
-                <TouchableOpacity onPress={() => setShowPicker(false)}><Text style={{color: '#8D6E63', fontSize: 15, fontWeight: '900'}}>取消</Text></TouchableOpacity>
-             </View>
-             <ScrollView style={{padding: 16}}>
-                {allCollections.map(c => {
-                   const isBidMode = (c.on_sale_count || 0) === 0;
-                   return (
-                     <TouchableOpacity key={c.id} style={styles.colPickRow} onPress={() => { setActiveCollectionId(c.id); setShowPicker(false); }}>
-                        <FallbackImage uri={c.image_url} style={styles.pickImg} />
-                        <View style={{flex: 1}}>
-                           <Text style={styles.pickTitle}>{c.name}</Text>
-                           <Text style={styles.pickSub}>在售: <Text style={{color: '#4E342E', fontWeight: '900'}}>{formatMoney(c.on_sale_count || 0).replace('.00','')}</Text> | {isBidMode ? `退市价: ¥${formatMoney(c.max_consign_price)}` : `底价: ¥${formatMoney(c.floor_price_cache || 0)}`}</Text>
-                        </View>
-                        <View style={[styles.miniTag, isBidMode ? {backgroundColor: '#FFD700'} : {backgroundColor: '#FDF8F0', borderWidth: 1, borderColor: '#D49A36'}]}>
-                           <Text style={[styles.miniTagText, isBidMode ? {color: '#111'} : {color: '#D49A36'}]}>{isBidMode ? '竞价' : '求购'}</Text>
-                        </View>
-                     </TouchableOpacity>
-                   )
-                })}
-             </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={confirmModal} transparent animationType="fade">
-         <View style={styles.modalOverlayCenter}>
-            <View style={styles.confirmBox}>
-               <Text style={styles.confirmTitle}>📝 订单确认</Text>
-               <Text style={styles.confirmDesc}>将冻结 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{formatMoney(currentTotalCost)}</Text> 资金，并强制销毁 <Text style={{fontWeight:'900', color: '#4E342E'}}>1 张 Potato卡</Text>。是否继续？</Text>
-               <View style={styles.confirmBtnRow}>
-                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmModal(false)}><Text style={styles.cancelBtnText}>取消</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.confirmBtn} onPress={executePublish} disabled={publishing}>
-                     {publishing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认并发布</Text>}
-                  </TouchableOpacity>
-               </View>
-            </View>
-         </View>
-      </Modal>
-    </SafeAreaView>
-  );
+  const publish = async () => {
+    if (lock.current || needsReview || !collection || parsedPrice === null || parsedQuantity === null || total === null || balance === null) return;
+    lock.current = true; setPublishing(true); setSubmitError('');
+    let writeStarted = false;
+    try {
+      const auth = await supabase.auth.getUser();
+      if (auth.error || !auth.data.user || auth.data.user.id !== userId) throw new Error('登录状态已变化，请重新登录后继续。');
+      if (balance < total || !potatoIds.length) throw new Error('余额或 Potato卡不足，请返回核对。');
+      writeStarted = true;
+      const debit = await supabase.from('profiles').update({ potato_coin_balance: balance - total }).eq('id', userId).select('id').maybeSingle();
+      if (debit.error) throw debit.error;
+      if (!debit.data) throw new Error('未收到处理确认');
+      const card = await supabase.from('nfts').update({ status: 'burned' }).eq('id', potatoIds[0]).select('id').maybeSingle();
+      if (card.error) throw card.error;
+      if (!card.data) throw new Error('未收到处理确认');
+      const order = await supabase.from('buy_orders').insert([{ collection_id: collection.id, buyer_id: userId, price: parsedPrice, quantity: parsedQuantity, order_type: mode }]).select('id').maybeSingle();
+      if (order.error) throw order.error;
+      if (!order.data) throw new Error('未收到处理确认');
+      setConfirm(false); setResult(true);
+    } catch (error) {
+      setNeedsReview(writeStarted);
+      setSubmitError(writeStarted ? '订单处理结果暂未确认，请到订单管理核对，暂勿重复提交。' : orderError(error, '发布未完成，填写内容已保留。'));
+    } finally { lock.current = false; setPublishing(false); }
+  };
+  const goOrders = () => { setConfirm(false); setResult(false); router.replace('/my-orders'); };
+  const closeConfirm = () => { if (!lock.current) { setConfirm(false); setFormError(needsReview ? submitError : ''); } };
+  if (loading || readError) return <PageReadState pageTitle="发起订单" subject="藏品系列" status={loading ? 'loading' : 'error'} fallback="/market" backLabel="返回集市" onRetry={() => void load()} />;
+  return <SafeAreaView style={styles.screen} edges={['top']}>
+    <View style={styles.nav}><Pressable accessibilityRole="button" accessibilityLabel="返回集市" style={styles.back} onPress={() => router.canGoBack() ? router.back() : router.replace('/market')}><Ionicons name="chevron-back" size={26} color="#493D35" /></Pressable><Text accessibilityRole="header" style={styles.title}>{collection ? `发起${action}` : '发起订单'}</Text><View style={styles.back} /></View>
+    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+      <Pressable accessibilityRole="button" accessibilityLabel="选择藏品系列" disabled={publishing || needsReview} onPress={() => { setSearch(''); setPicker(true); }} style={styles.collection}>
+        <FolioArtwork uri={collection?.image_url || null} framed={false} style={styles.art} accessibilityLabel="藏品封面" />
+        <View style={{ flex: 1, minWidth: 0 }}><Text style={styles.name}>{collection?.name || '选择藏品系列'}</Text><Text style={styles.muted}>{collection ? `当前为${action}模式` : '选择后查看出价范围'}</Text></View><Ionicons name="chevron-forward" size={20} color="#789DB4" />
+      </Pressable>
+      <SeasideTextInput label={collection ? `${action}单价` : '出价单价'} unit="土豆币" placeholder="请输入单件价格" value={price} keyboardType="decimal-pad" editable={!!collection && !publishing && !needsReview} maxLength={14}
+        onChangeText={v => { setPrice(v); setPriceError(''); setFormError(''); }} error={priceError} hint={collection ? `最低 ${orderMoney(min)} 土豆币${Number.isFinite(max) ? `，最高 ${orderMoney(max)} 土豆币` : ''}` : '请先选择藏品系列'} />
+      <SeasideTextInput label="需求数量" unit="件" placeholder="至少 1 件" value={quantity} keyboardType="number-pad" editable={!!collection && !publishing && !needsReview} maxLength={9}
+        onChangeText={v => { setQuantity(v); setQuantityError(''); setFormError(''); }} error={quantityError} hint="成交数量以订单实际记录为准" />
+      <View style={styles.summary}><Text style={styles.muted}>预计冻结金额</Text><Text style={styles.amount}>{total === null ? '—' : orderMoney(total)} 土豆币</Text><Text style={styles.muted}>可用余额：{balance === null ? '尚未读取' : `${orderMoney(balance)} 土豆币`}</Text><Text style={styles.muted}>发起消耗：1 张 Potato卡 · 当前在库 {potatoIds.length} 张</Text></View>
+      <SeasideSurface kind="notice"><Text style={styles.copy}>确认后将冻结订单金额，并消耗 1 张 Potato卡。提交前请核对藏品、单价和数量。</Text></SeasideSurface>
+      {!!accountError && <><Text accessibilityRole="alert" style={styles.error}>{accountError}</Text><SeasideButton label="重新加载" tone="secondary" onPress={() => void load()} /></>}
+      {!!formError && <Text accessibilityRole="alert" style={styles.error}>{formError}</Text>}
+      {insufficient && <Text accessibilityRole="alert" style={styles.error}>可用余额不足，请调整价格或数量。</Text>}
+      {!!userId && !accountError && !potatoIds.length && <SeasideButton label="去集市补齐" tone="secondary" onPress={() => router.push('/market')} />}
+    </ScrollView>
+    <View style={[styles.footer, { paddingBottom: Math.max(14, insets.bottom) }]}><SeasideButton label={needsReview ? '查看订单' : !userId ? '登录后继续' : collection ? `核对${action}` : '选择藏品'} tone="transaction" onPress={needsReview ? goOrders : !collection && userId ? () => setPicker(true) : check} disabled={publishing || (!!userId && (!!accountError || insufficient))} /></View>
+    <SeasideSheet visible={picker} title="选择藏品系列" onClose={() => setPicker(false)}>
+      <SeasideTextInput label="搜索藏品" placeholder="输入藏品名称" value={search} onChangeText={setSearch} />
+      {collections.filter(c => c.name.toLowerCase().includes(search.trim().toLowerCase())).map(c => <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`选择${c.name}`} style={styles.pickRow} onPress={() => { setActiveId(c.id); setPicker(false); setPrice(''); setPriceError(''); setFormError(''); }}><FolioArtwork uri={c.image_url || null} framed={false} style={styles.thumb} accessibilityLabel={`${c.name}封面`} /><View style={{ flex: 1 }}><Text style={styles.name}>{c.name}</Text><Text style={styles.muted}>{(c.on_sale_count || 0) > 0 ? '求购' : '竞价'}</Text></View></Pressable>)}
+      {!collections.some(c => c.name.toLowerCase().includes(search.trim().toLowerCase())) && <Text style={styles.muted}>没有找到符合条件的藏品系列</Text>}
+    </SeasideSheet>
+    <TradeConfirmDialog visible={confirm} title={`确认${action}`} description={`${collection?.name || ''}\n单价 ${orderMoney(parsedPrice)} 土豆币 × ${parsedQuantity || 0} 件\n预计冻结 ${orderMoney(total)} 土豆币，并消耗 1 张 Potato卡。`}
+      cancelLabel={needsReview ? '关闭提示' : '返回修改'} confirmLabel={needsReview ? '查看订单' : '确认发布'} busy={publishing} error={submitError} onCancel={closeConfirm} onConfirm={needsReview ? goOrders : publish} />
+    <SeasideResultDialog visible={result} title={`${action}已发布`} description={`${collection?.name || ''}\n请在订单管理查看成交进度与处理结果。`} primaryLabel="查看订单" onClose={goOrders} />
+  </SafeAreaView>;
 }
-
-const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDF8F0' },
-  container: { flex: 1, backgroundColor: '#FDF8F0' },
-  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, backgroundColor: '#FDF8F0', borderBottomWidth: 1, borderColor: '#EAE0D5' },
-  navBtn: { width: 40, justifyContent: 'center' },
-  iconText: { fontSize: 22, color: '#4E342E', fontWeight: '900' },
-  navTitle: { fontSize: 17, fontWeight: '900', color: '#4E342E' },
-  
-  toastBox: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(78,52,46,0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, zIndex: 100 },
-  toastText: { color: '#FFF', fontSize: 14, fontWeight: '900' },
-  
-  targetHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: '#F0E6D2', shadowColor: '#4E342E', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
-  targetImg: { width: 70, height: 70, borderRadius: 8, backgroundColor: '#FDF8F0', marginRight: 16, borderWidth: 1, borderColor: '#EAE0D5' },
-  targetInfo: { flex: 1, justifyContent: 'center' },
-  targetName: { fontSize: 16, fontWeight: '900', color: '#4E342E', marginBottom: 6 },
-  targetSubHighlight: { fontSize: 11, color: '#FF3B30', fontWeight: '900', marginLeft: 8 },
-  modeTag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  modeTagText: { fontSize: 10, fontWeight: '900' },
-  
-  inputGroup: { backgroundColor: '#FFF', borderRadius: 16, paddingHorizontal: 16, marginBottom: 20, borderWidth: 1, borderColor: '#F0E6D2' },
-  inputRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderColor: '#F5EFE6' },
-  inputLabel: { fontSize: 15, fontWeight: '900', color: '#4E342E' },
-  inputField: { flex: 1, fontSize: 16, color: '#D49A36', fontWeight: '900' },
-  
-  stepper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FDF8F0', borderRadius: 8, borderWidth: 1, borderColor: '#EAE0D5' },
-  stepperBtn: { paddingHorizontal: 12, paddingVertical: 6, fontSize: 18, color: '#4E342E', fontWeight: '900' },
-  stepperInput: { width: 40, fontSize: 15, fontWeight: '900', color: '#D49A36' },
-  
-  ruleBox: { backgroundColor: '#FDF8F0', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#EAE0D5' },
-  ruleTitle: { fontSize: 14, fontWeight: '900', color: '#D49A36', marginBottom: 10 },
-  ruleText: { fontSize: 12, color: '#8D6E63', lineHeight: 20, marginBottom: 6, fontWeight: '700' },
-  
-  bottomBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 30, borderTopWidth: 1, borderColor: '#EAE0D5', shadowColor: '#4E342E', shadowOpacity: 0.05, shadowOffset: {width: 0, height: -5}, elevation: 10 },
-  payInfo: { flex: 1 },
-  payBtn: { backgroundColor: '#D49A36', paddingHorizontal: 30, paddingVertical: 14, borderRadius: 24, shadowColor: '#D49A36', shadowOpacity: 0.3, shadowRadius: 8, elevation: 2 },
-  payBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
-
-  bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(44,30,22,0.6)', justifyContent: 'flex-end' },
-  bottomSheet: { backgroundColor: '#FDF8F0', height: height * 0.65, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderColor: '#EAE0D5', backgroundColor: '#FFF' },
-  sheetTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E' },
-  colPickRow: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#FFF', borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#F0E6D2' },
-  pickImg: { width: 50, height: 50, borderRadius: 8, marginRight: 12 },
-  pickTitle: { fontSize: 15, fontWeight: '900', color: '#4E342E', marginBottom: 4 },
-  pickSub: { fontSize: 12, color: '#8D6E63', fontWeight: '600' },
-  miniTag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  miniTagText: { fontSize: 10, fontWeight: '900' },
-  
-  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(44,30,22,0.7)', justifyContent: 'center', alignItems: 'center' },
-  confirmBox: { width: '80%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
-  confirmTitle: { fontSize: 18, fontWeight: '900', color: '#4E342E', marginBottom: 16 },
-  confirmDesc: { fontSize: 14, color: '#8D6E63', textAlign: 'center', lineHeight: 22, marginBottom: 24, fontWeight: '700' },
-  confirmBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  cancelBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#FDF8F0', alignItems: 'center', borderWidth: 1, borderColor: '#EAE0D5' },
-  cancelBtnText: { color: '#8D6E63', fontSize: 15, fontWeight: '900' },
-  confirmBtn: { flex: 0.48, paddingVertical: 14, borderRadius: 16, backgroundColor: '#D49A36', alignItems: 'center' },
-  confirmBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900' }
-});
+const styles = StyleSheet.create({ screen: { flex: 1, backgroundColor: '#FFFDF8' }, nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 56, paddingHorizontal: 12 }, back: { width: 44, height: 44, justifyContent: 'center' }, title: { color: '#493D35', fontSize: 21, fontWeight: '700' }, content: { width: '100%', maxWidth: 560, alignSelf: 'center', padding: 20, gap: 22 }, collection: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, backgroundColor: '#F5F0E7', borderRadius: 14 }, art: { width: 64, height: 64 }, name: { color: '#493D35', fontSize: 16, lineHeight: 24, fontWeight: '700' }, muted: { color: '#84786B', fontSize: 14, lineHeight: 23 }, copy: { color: '#74695E', fontSize: 14, lineHeight: 24 }, summary: { gap: 7 }, amount: { color: '#70522D', fontSize: 23, lineHeight: 32, fontWeight: '700' }, error: { color: '#9B4030', fontSize: 14, lineHeight: 23 }, footer: { padding: 16, width: '100%', maxWidth: 560, alignSelf: 'center', backgroundColor: '#FFFDF8', borderTopWidth: 1, borderColor: '#E8E1D5' }, pickRow: { flexDirection: 'row', gap: 12, alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderColor: '#E8E1D5' }, thumb: { width: 52, height: 52 } });

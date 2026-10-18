@@ -1,0 +1,105 @@
+{
+  "count": 20,
+  "assets": [
+    {
+      "id": "badge-neutral",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "banner-notice",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "button-danger-clay",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "button-primary-blue",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "button-secondary-ivory",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "button-transaction-gold",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "checkbox-checked",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "checkbox-unchecked",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "control-back",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "control-close",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "control-filter",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "control-search",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "field-input",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "panel-confirm",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "panel-drawer",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "status-in-vault",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "status-listed",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "tab-default",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "tab-selected",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    },
+    {
+      "id": "tag-serial",
+      "sameDimensions": true,
+      "maxAlphaDifference": 0
+    }
+  ]
+}

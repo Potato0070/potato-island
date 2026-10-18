@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
-import FolioButton from '../components/FolioButton';
+import SeasideButton from '../components/SeasideButton';
 import TradeConfirmDialog from '../components/TradeConfirmDialog';
 
 export default function ConsignScreen() {
@@ -74,7 +74,7 @@ export default function ConsignScreen() {
       </View>
       <View style={{alignItems: 'flex-end'}}>
          <Text style={styles.price}>{item.consign_price} 土豆币</Text>
-         <FolioButton label="购买" disabled={buying} onPress={() => { setTradeError(''); setNotice(''); setSelected(item); }} />
+         <SeasideButton label="购买" tone="transaction" disabled={buying} onPress={() => { setTradeError(''); setNotice(''); setSelected(item); }} />
       </View>
     </View>
   );
@@ -88,7 +88,7 @@ export default function ConsignScreen() {
       </View>
       {!!notice && <Text accessibilityRole="alert" style={styles.notice}>{notice}</Text>}
       {loading ? <ActivityIndicator style={{marginTop: 50}} color="#D49A36" /> : readError ? (
-        <View style={styles.state}><Text style={styles.notice}>{readError}</Text>{!!id && <FolioButton label="重新加载" onPress={fetchListed} />}</View>
+        <View style={styles.state}><Text style={styles.notice}>{readError}</Text>{!!id && <SeasideButton label="重新加载" onPress={fetchListed} />}</View>
       ) : (
         <FlatList data={listedNfts} renderItem={renderItem} keyExtractor={item => item.id} contentContainerStyle={{padding: 16}}
           ListEmptyComponent={<Text style={{textAlign: 'center', marginTop: 20, color: '#999'}}>盘口已被扫空，暂无现货</Text>}
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
   navBtn: { width: 60, minHeight: 44, justifyContent: 'center' },
   iconText: { fontSize: 16, color: '#4A2E1B', fontWeight: '700' },
   navTitle: { fontSize: 18, fontWeight: '900', color: '#4A2E1B' },
-  card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4 },
+  card: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4 },
   serial: { fontSize: 16, fontWeight: '900', color: '#333', fontFamily: 'monospace' },
   seller: { fontSize: 12, color: '#999', marginTop: 4 },
   price: { fontSize: 18, fontWeight: '900', color: '#FF3B30', marginBottom: 8 },

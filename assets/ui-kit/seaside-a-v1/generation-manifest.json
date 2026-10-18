@@ -1,0 +1,127 @@
+{
+  "generator": "built-in imagegen",
+  "selectedConcept": "A 海边卡册",
+  "created": "2026-10-18",
+  "assets": [
+    {
+      "id": "button-primary-blue",
+      "prompt": "Use case: precise-object-edit. Input is the master colored-pencil A 海边卡册 blue button. Make the reusable production master TIGHTLY FRAMED: output a 3:1 landscape image, and reshape the same button to occupy 96% of canvas width and 90% of canvas HEIGHT, with only a very thin even transparent margin on all sides. The BUTTON ITSELF should have aspect ratio approximately 3.2:1, not a skinny 5:1 shape floating in a tall transparent canvas. Increase its height while keeping symmetry, corner shape and handmade fog blue pencil fill, warm-brown outer contour and thin ivory inset border. Entire button flat, level, no tilt. Empty center, no text, no icons. All four border contours fully visible, not cropped. No fake checkerboard, no background, no extra shadows. Real transparent alpha outside the single button. This is a production button texture intended for nine-slice scaling. Color and material remain the same as the input.",
+      "path": "masters/button-primary-blue.png",
+      "sourceFile": "exec-54b335ac-6389-4b22-925f-02bc1723d309.png"
+    },
+    {
+      "id": "button-transaction-gold",
+      "prompt": "Use case: precise-object-edit. Recolor the supplied single production A 海边卡册 button master. Change ONLY the palette to warm muted honey gold ochre pencil fill, ivory inset line, same warm brown outer contour. Keep the exact input canvas, silhouette, complete border shape, proportions, transparent padding, line thickness and colored-pencil grain; no geometry changes. It must remain one EMPTY front-facing level button, no text, no icon, no additional object or shadow. Match reference geometry closely, tight framing. Real alpha transparency outside the button; preserve transparency. This is one matching semantic color variant of a reusable asset, not a board.",
+      "path": "masters/button-transaction-gold.png",
+      "sourceFile": "exec-56548691-290c-4c6b-8b47-d506bbd58aa4.png"
+    },
+    {
+      "id": "button-secondary-ivory",
+      "prompt": "Use case: precise-object-edit. Recolor the supplied single production A 海边卡册 button master. Change ONLY the palette to warm light IVORY paper fill, fog-blue thin inset line, same warm brown outer contour. Keep the exact input canvas, silhouette, complete border shape, proportions, transparent padding, line thickness and colored-pencil grain; no geometry changes. It must remain one EMPTY front-facing level button, no text, no icon, no additional object or shadow. Match reference geometry closely, tight framing. Real alpha transparency outside the button; preserve transparency. This is one matching semantic color variant of a reusable asset, not a board.",
+      "path": "masters/button-secondary-ivory.png",
+      "sourceFile": "exec-b83539e2-e4fb-4f1e-8b89-14a3aa6670a4.png"
+    },
+    {
+      "id": "button-danger-clay",
+      "prompt": "Use case: precise-object-edit. Recolor the supplied single production A 海边卡册 button master. Change ONLY the palette to muted soft terracotta red pencil fill, ivory inset line, same warm brown outer contour; calm earthy red, no bright crimson. Keep the exact input canvas, silhouette, complete border shape, proportions, transparent padding, line thickness and colored-pencil grain; no geometry changes. It must remain one EMPTY front-facing level button, no text, no icon, no additional object or shadow. Match reference geometry closely, tight framing. Real alpha transparency outside the button; preserve transparency. This is one matching semantic color variant of a reusable asset, not a board.",
+      "path": "masters/button-danger-clay.png",
+      "sourceFile": "exec-b68b4cb0-9ecf-422b-bab9-47f17205f359.png"
+    },
+    {
+      "id": "panel-confirm",
+      "prompt": "Use case: ui-mockup. Production reusable UI art texture from APPROVED A 海边卡册 sheet, supplied as style reference. Draw exactly ONE isolated flat front-facing asset. Colored-pencil illustration, warm ivory paper, restrained thin fog-blue inset rule and warm brown outer contour, no heavy ornament, no perspective or rotation. Truly TRANSPARENT background outside silhouette; opaque ivory PAPER inside. Complete uncut silhouette, tight even small outer margin. At least central 80% blank usable area. NO letters, words, numbers, icons, close X, buttons, grab handles, placeholder strokes or watermark baked into this asset. Paper color and delicate pencil grain must match A. No scene, no collection art, no mascot. Border only near perimeter. This is a separate production texture, not a styleboard. One landscape 4:3 confirmation dialog paper panel. Rounded rectangular ivory sheet, thin blue inset line, one very restrained offset fog-blue backing paper corner at top left and bottom right, as on A. Extremely thin backing edge, no multiple stacked frames. Big entirely empty center, symmetrical content safe area.",
+      "path": "masters/panel-confirm.png",
+      "sourceFile": "exec-0aafd5a7-0054-4b88-b15c-73f90a85586e.png"
+    },
+    {
+      "id": "panel-drawer",
+      "prompt": "Use case: ui-mockup. Production reusable UI art texture from APPROVED A 海边卡册 sheet, supplied as style reference. Draw exactly ONE isolated flat front-facing asset. Colored-pencil illustration, warm ivory paper, restrained thin fog-blue inset rule and warm brown outer contour, no heavy ornament, no perspective or rotation. Truly TRANSPARENT background outside silhouette; opaque ivory PAPER inside. Complete uncut silhouette, tight even small outer margin. At least central 80% blank usable area. NO letters, words, numbers, icons, close X, buttons, grab handles, placeholder strokes or watermark baked into this asset. Paper color and delicate pencil grain must match A. No scene, no collection art, no mascot. Border only near perimeter. This is a separate production texture, not a styleboard. One portrait 2:3 bottom drawer paper panel. Rounded rectangular ivory sheet with thin blue inset rule and warm brown outer outline. Very restrained tiny offset fog-blue backing paper corners as on A. Leave header, body, footer entirely EMPTY: no drag handle, no close icon, no buttons. Consistent edge thickness around the entire panel, no big folds intruding inward.",
+      "path": "masters/panel-drawer.png",
+      "sourceFile": "exec-6c880ad7-2ac3-431e-809a-bca25534d299.png"
+    },
+    {
+      "id": "field-input",
+      "prompt": "Use case: ui-mockup. Production reusable UI art texture from APPROVED A 海边卡册 sheet, supplied as style reference. Draw exactly ONE isolated flat front-facing asset. Colored-pencil illustration, warm ivory paper, restrained thin fog-blue inset rule and warm brown outer contour, no heavy ornament, no perspective or rotation. Truly TRANSPARENT background outside silhouette; opaque ivory PAPER inside. Complete uncut silhouette, tight even small outer margin. At least central 80% blank usable area. NO letters, words, numbers, icons, close X, buttons, grab handles, placeholder strokes or watermark baked into this asset. Paper color and delicate pencil grain must match A. No scene, no collection art, no mascot. Border only near perimeter. This is a separate production texture, not a styleboard. One very wide horizontal input frame, 3:1 landscape output, low rounded corners, single thin fog-blue inner line with very thin warm brown outline, ivory paper blank center. No stacked paper and no fancy corner notches. Shape fills 96% width and 88% height of canvas. Center entirely clean for typed text.",
+      "path": "masters/field-input.png",
+      "sourceFile": "exec-7f52764d-c61a-4510-9bf8-7a25e30395b7.png"
+    },
+    {
+      "id": "banner-notice",
+      "prompt": "Use case: ui-mockup. Production reusable UI art texture from APPROVED A 海边卡册 sheet, supplied as style reference. Draw exactly ONE isolated flat front-facing asset. Colored-pencil illustration, warm ivory paper, restrained thin fog-blue inset rule and warm brown outer contour, no heavy ornament, no perspective or rotation. Truly TRANSPARENT background outside silhouette; opaque ivory PAPER inside. Complete uncut silhouette, tight even small outer margin. At least central 80% blank usable area. NO letters, words, numbers, icons, close X, buttons, grab handles, placeholder strokes or watermark baked into this asset. Paper color and delicate pencil grain must match A. No scene, no collection art, no mascot. Border only near perimeter. This is a separate production texture, not a styleboard. One wide 3:1 horizontal information notice plaque matching A. Restrained clipped/rounded corners, thin blue inset line, warm brown outline, VERY PALE blue pencil-tinted paper center (nearly ivory, not saturated). No illustration, no icon. Shape fills 96% canvas width and 88% height.",
+      "path": "masters/banner-notice.png",
+      "sourceFile": "exec-6d6725c6-3de3-4ddb-8dfb-7aecfff0aca7.png"
+    },
+    {
+      "id": "badge-neutral",
+      "prompt": "Use case: ui-mockup. Production reusable UI art texture from APPROVED A 海边卡册 sheet, supplied as style reference. Draw exactly ONE isolated flat front-facing asset. Colored-pencil illustration, warm ivory paper, restrained thin fog-blue inset rule and warm brown outer contour, no heavy ornament, no perspective or rotation. Truly TRANSPARENT background outside silhouette; opaque ivory PAPER inside. Complete uncut silhouette, tight even small outer margin. At least central 80% blank usable area. NO letters, words, numbers, icons, close X, buttons, grab handles, placeholder strokes or watermark baked into this asset. Paper color and delicate pencil grain must match A. No scene, no collection art, no mascot. Border only near perimeter. This is a separate production texture, not a styleboard. One compact horizontal 3:1 blank status label plaque matching A, ivory fill, thin blue inner line, warm brown outer line. Tiny understated shaped corners. Entirely blank center. Tight framing, complete edges. No hole, no attachment string.",
+      "path": "masters/badge-neutral.png",
+      "sourceFile": "exec-d880eb4f-f2df-4d61-935d-85926e7a9726.png"
+    },
+    {
+      "id": "tag-serial",
+      "prompt": "Use case: ui-mockup. Production reusable UI art texture from APPROVED A 海边卡册 sheet, supplied as style reference. Draw exactly ONE isolated flat front-facing asset. Colored-pencil illustration, warm ivory paper, restrained thin fog-blue inset rule and warm brown outer contour, no heavy ornament, no perspective or rotation. Truly TRANSPARENT background outside silhouette; opaque ivory PAPER inside. Complete uncut silhouette, tight even small outer margin. At least central 80% blank usable area. NO letters, words, numbers, icons, close X, buttons, grab handles, placeholder strokes or watermark baked into this asset. Paper color and delicate pencil grain must match A. No scene, no collection art, no mascot. Border only near perimeter. This is a separate production texture, not a styleboard. One portrait 2:3 blank serial number paper tag matching A. Ivory paper fill, very thin blue inset line, warm brown outer contour, tiny clipped top corners with a single small ring hole centered near top. Completely blank generous area under hole. No numbers, no letters, no string. Tight transparent margin, all edges complete.",
+      "path": "masters/tag-serial.png",
+      "sourceFile": "exec-ad3d1a63-06f3-4a3e-a3db-0ec1110eec26.png"
+    },
+    {
+      "id": "tab-selected",
+      "prompt": "Use case: ui-mockup. Generate a SINGLE reusable small UI asset matching APPROVED A 海边卡册 reference sheet. Flat front view, zero tilt, delicate colored-pencil handwork on warm paper, no 3D. One HORIZONTAL pill-shaped selected filter tab. 3:1 aspect canvas, rounded capsule, muted fog blue pencil fill, very thin ivory inset rule, subtle warm-brown outline. No labels. Fills 94% width,80% height. Real transparent alpha outside the complete uncut silhouette. Even small transparent margin. No words, numbers, titles, backdrop, watermark, poster or other elements. Shape and thin border must remain legible at 24-36px UI height. Decorative detail confined to edges, keep 75% blank safe center. This is an individual texture, NOT a catalogue.",
+      "path": "masters/tab-selected.png",
+      "sourceFile": "exec-2d52888c-616e-40f6-96bb-d859f7aff548.png"
+    },
+    {
+      "id": "tab-default",
+      "prompt": "Use case: ui-mockup. Generate a SINGLE reusable small UI asset matching APPROVED A 海边卡册 reference sheet. Flat front view, zero tilt, delicate colored-pencil handwork on warm paper, no 3D. One HORIZONTAL pill-shaped default unselected filter tab. 3:1 aspect canvas, rounded capsule, ivory paper fill, very thin fog blue inset rule, subtle warm-brown outline. No labels. Fills 94% width,80% height. Real transparent alpha outside the complete uncut silhouette. Even small transparent margin. No words, numbers, titles, backdrop, watermark, poster or other elements. Shape and thin border must remain legible at 24-36px UI height. Decorative detail confined to edges, keep 75% blank safe center. This is an individual texture, NOT a catalogue.",
+      "path": "masters/tab-default.png",
+      "sourceFile": "exec-79e440f6-a92c-46b0-b5e8-993b5beee96c.png"
+    },
+    {
+      "id": "status-in-vault",
+      "prompt": "Use case: ui-mockup. Generate a SINGLE reusable small UI asset matching APPROVED A 海边卡册 reference sheet. Flat front view, zero tilt, delicate colored-pencil handwork on warm paper, no 3D. One HORIZONTAL compact IN-VAULT STATUS BADGE BASE. 3:1 aspect canvas, small modest clipped corners, pale fog-blue pencil-tinted fill, thin blue inset rule, warm-brown thin outer edge. Center completely EMPTY: do NOT write in-vault or Chinese or numbers. No hole, icon or string. Fills94% width,80% height. Real transparent alpha outside the complete uncut silhouette. Even small transparent margin. No words, numbers, titles, backdrop, watermark, poster or other elements. Shape and thin border must remain legible at 24-36px UI height. Decorative detail confined to edges, keep 75% blank safe center. This is an individual texture, NOT a catalogue.",
+      "path": "masters/status-in-vault.png",
+      "sourceFile": "exec-d6b52430-c463-4f44-a71f-fc84e458a6d5.png"
+    },
+    {
+      "id": "status-listed",
+      "prompt": "Use case: ui-mockup. Generate a SINGLE reusable small UI asset matching APPROVED A 海边卡册 reference sheet. Flat front view, zero tilt, delicate colored-pencil handwork on warm paper, no 3D. One HORIZONTAL compact LISTED STATUS BADGE BASE. 3:1 aspect canvas, small modest clipped corners, pale honey-gold pencil-tinted fill, thin warm-gold inset rule, warm-brown thin outer edge. Center completely EMPTY: do NOT write listed or Chinese or numbers. No hole, icon or string. Fills94% width,80% height. Real transparent alpha outside the complete uncut silhouette. Even small transparent margin. No words, numbers, titles, backdrop, watermark, poster or other elements. Shape and thin border must remain legible at 24-36px UI height. Decorative detail confined to edges, keep 75% blank safe center. This is an individual texture, NOT a catalogue.",
+      "path": "masters/status-listed.png",
+      "sourceFile": "exec-76a55167-1f84-4f66-b48f-824ca82c5c15.png"
+    },
+    {
+      "id": "control-back",
+      "prompt": "Use case: ui-mockup. Create ONE square UI control art asset for A 海边卡册, exactly matching the approved reference's small square controls. Square 1:1 canvas. The rounded-square ivory paper plaque occupies about 88% of canvas width and height with thin fog-blue inset line and subtle warm-brown pencil outline. Real TRANSPARENT alpha outside plaque, complete uncropped edge, equal margin, flat straight front view, no perspective, zero rotation. Inside depict a single simple LEFT-POINTING ARROW in fog-blue pencil, clearly recognizable, centered. Stroke strong enough to read at 24px icon size within a 44px click target, no tiny decoration. Light colored-pencil grain, calm clean handmade style. No words, letters, labels, mascot, cast shadow, glowing effect, outer background or extra objects. Single isolated production PNG asset, not a styleboard.",
+      "path": "masters/control-back.png",
+      "sourceFile": "exec-0dfa55d7-17fd-44c3-8896-55f50ea11306.png"
+    },
+    {
+      "id": "control-close",
+      "prompt": "Use case: ui-mockup. Create ONE square UI control art asset for A 海边卡册, exactly matching the approved reference's small square controls. Square 1:1 canvas. The rounded-square ivory paper plaque occupies about 88% of canvas width and height with thin fog-blue inset line and subtle warm-brown pencil outline. Real TRANSPARENT alpha outside plaque, complete uncropped edge, equal margin, flat straight front view, no perspective, zero rotation. Inside depict a single simple CLOSE X in fog-blue pencil, clearly recognizable, centered. Stroke strong enough to read at 24px icon size within a 44px click target, no tiny decoration. Light colored-pencil grain, calm clean handmade style. No words, letters, labels, mascot, cast shadow, glowing effect, outer background or extra objects. Single isolated production PNG asset, not a styleboard.",
+      "path": "masters/control-close.png",
+      "sourceFile": "exec-b1cc6309-7d2c-4aca-937a-8a86950af3e7.png"
+    },
+    {
+      "id": "control-search",
+      "prompt": "Use case: ui-mockup. Create ONE square UI control art asset for A 海边卡册, exactly matching the approved reference's small square controls. Square 1:1 canvas. The rounded-square ivory paper plaque occupies about 88% of canvas width and height with thin fog-blue inset line and subtle warm-brown pencil outline. Real TRANSPARENT alpha outside plaque, complete uncropped edge, equal margin, flat straight front view, no perspective, zero rotation. Inside depict a single simple MAGNIFYING GLASS in fog-blue pencil, clearly recognizable, centered. Stroke strong enough to read at 24px icon size within a 44px click target, no tiny decoration. Light colored-pencil grain, calm clean handmade style. No words, letters, labels, mascot, cast shadow, glowing effect, outer background or extra objects. Single isolated production PNG asset, not a styleboard.",
+      "path": "masters/control-search.png",
+      "sourceFile": "exec-404cec3f-fc40-4a15-9b36-3388ef439b0f.png"
+    },
+    {
+      "id": "control-filter",
+      "prompt": "Use case: ui-mockup. Create ONE square UI control art asset for A 海边卡册, exactly matching the approved reference's small square controls. Square 1:1 canvas. The rounded-square ivory paper plaque occupies about 88% of canvas width and height with thin fog-blue inset line and subtle warm-brown pencil outline. Real TRANSPARENT alpha outside plaque, complete uncropped edge, equal margin, flat straight front view, no perspective, zero rotation. Inside depict a single simple THREE-HORIZONTAL-SLIDERS filter symbol in fog-blue pencil, with small knobs, centered. Stroke strong enough to read at 24px icon size within a 44px click target, no tiny decoration. Light colored-pencil grain, calm clean handmade style. No words, letters, labels, mascot, cast shadow, glowing effect, outer background or extra objects. Single isolated production PNG asset, not a styleboard.",
+      "path": "masters/control-filter.png",
+      "sourceFile": "exec-0c305502-61c7-4064-aa7a-7d9045f4150d.png"
+    },
+    {
+      "id": "checkbox-checked",
+      "prompt": "Use case: ui-mockup. Create ONE square UI control art asset for A 海边卡册, exactly matching the approved reference's small square controls. Square 1:1 canvas. The rounded-square ivory paper plaque occupies about 88% of canvas width and height with thin fog-blue inset line and subtle warm-brown pencil outline. Real TRANSPARENT alpha outside plaque, complete uncropped edge, equal margin, flat straight front view, no perspective, zero rotation. Inside depict a fog-blue pencil filled square center and a bold simple ivory CHECKMARK. Outer square shape uses modest rounded corners, identical ivory inset border and brown outer pencil edge. Stroke strong enough to read at 24px icon size within a 44px click target, no tiny decoration. Light colored-pencil grain, calm clean handmade style. No words, letters, labels, mascot, cast shadow, glowing effect, outer background or extra objects. Single isolated production PNG asset, not a styleboard.",
+      "path": "masters/checkbox-checked.png",
+      "sourceFile": "exec-3696b605-4f04-4dfe-8c9f-941693e43ccb.png"
+    },
+    {
+      "id": "checkbox-unchecked",
+      "prompt": "Use case: ui-mockup. Create ONE square UI control art asset for A 海边卡册, exactly matching the approved reference's small square controls. Square 1:1 canvas. The rounded-square ivory paper plaque occupies about 88% of canvas width and height with thin fog-blue inset line and subtle warm-brown pencil outline. Real TRANSPARENT alpha outside plaque, complete uncropped edge, equal margin, flat straight front view, no perspective, zero rotation. Inside depict a completely EMPTY ivory paper center, no symbol and no marks. Modest rounded-square corners, thin fog-blue inset rule and thin brown outer pencil edge. This is the unchecked state of a checkbox. Stroke strong enough to read at 24px icon size within a 44px click target, no tiny decoration. Light colored-pencil grain, calm clean handmade style. No words, letters, labels, mascot, cast shadow, glowing effect, outer background or extra objects. Single isolated production PNG asset, not a styleboard.",
+      "path": "masters/checkbox-unchecked.png",
+      "sourceFile": "exec-9f04a4d7-027d-4042-9d82-3afc80b37d23.png"
+    }
+  ]
+}

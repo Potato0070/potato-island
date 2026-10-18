@@ -1,0 +1,280 @@
+{
+  "version": "seaside-a-v1",
+  "generator": "built-in imagegen",
+  "assets": [
+    {
+      "id": "badge-neutral",
+      "source": "masters/badge-neutral.png",
+      "web": "runtime/badge-neutral.webp",
+      "width": 2172,
+      "height": 724,
+      "sourceBytes": 1572646,
+      "webBytes": 155756,
+      "contentSafeArea": {
+        "left": 0.16,
+        "top": 0.34,
+        "right": 0.84,
+        "bottom": 0.66
+      }
+    },
+    {
+      "id": "banner-notice",
+      "source": "masters/banner-notice.png",
+      "web": "runtime/banner-notice.webp",
+      "width": 2172,
+      "height": 724,
+      "sourceBytes": 1723773,
+      "webBytes": 174652,
+      "contentSafeArea": {
+        "left": 0.16,
+        "top": 0.34,
+        "right": 0.84,
+        "bottom": 0.66
+      }
+    },
+    {
+      "id": "button-danger-clay",
+      "source": "masters/button-danger-clay.png",
+      "web": "runtime/button-danger-clay.webp",
+      "width": 2172,
+      "height": 724,
+      "sourceBytes": 2177670,
+      "webBytes": 198334,
+      "contentSafeArea": {
+        "left": 0.15,
+        "top": 0.31,
+        "right": 0.85,
+        "bottom": 0.69
+      }
+    },
+    {
+      "id": "button-primary-blue",
+      "source": "masters/button-primary-blue.png",
+      "web": "runtime/button-primary-blue.webp",
+      "width": 2172,
+      "height": 724,
+      "sourceBytes": 2339154,
+      "webBytes": 344404,
+      "contentSafeArea": {
+        "left": 0.15,
+        "top": 0.31,
+        "right": 0.85,
+        "bottom": 0.69
+      }
+    },
+    {
+      "id": "button-secondary-ivory",
+      "source": "masters/button-secondary-ivory.png",
+      "web": "runtime/button-secondary-ivory.webp",
+      "width": 2172,
+      "height": 724,
+      "sourceBytes": 1858277,
+      "webBytes": 143366,
+      "contentSafeArea": {
+        "left": 0.15,
+        "top": 0.31,
+        "right": 0.85,
+        "bottom": 0.69
+      }
+    },
+    {
+      "id": "button-transaction-gold",
+      "source": "masters/button-transaction-gold.png",
+      "web": "runtime/button-transaction-gold.webp",
+      "width": 2172,
+      "height": 724,
+      "sourceBytes": 2151080,
+      "webBytes": 192006,
+      "contentSafeArea": {
+        "left": 0.15,
+        "top": 0.31,
+        "right": 0.85,
+        "bottom": 0.69
+      }
+    },
+    {
+      "id": "checkbox-checked",
+      "source": "masters/checkbox-checked.png",
+      "web": "runtime/checkbox-checked.webp",
+      "width": 1254,
+      "height": 1254,
+      "sourceBytes": 2210193,
+      "webBytes": 449996,
+      "contentSafeArea": null
+    },
+    {
+      "id": "checkbox-unchecked",
+      "source": "masters/checkbox-unchecked.png",
+      "web": "runtime/checkbox-unchecked.webp",
+      "width": 1254,
+      "height": 1254,
+      "sourceBytes": 1537724,
+      "webBytes": 201998,
+      "contentSafeArea": null
+    },
+    {
+      "id": "control-back",
+      "source": "masters/control-back.png",
+      "web": "runtime/control-back.webp",
+      "width": 1254,
+      "height": 1254,
+      "sourceBytes": 1501049,
+      "webBytes": 237568,
+      "contentSafeArea": null
+    },
+    {
+      "id": "control-close",
+      "source": "masters/control-close.png",
+      "web": "runtime/control-close.webp",
+      "width": 1254,
+      "height": 1254,
+      "sourceBytes": 1524022,
+      "webBytes": 243112,
+      "contentSafeArea": null
+    },
+    {
+      "id": "control-filter",
+      "source": "masters/control-filter.png",
+      "web": "runtime/control-filter.webp",
+      "width": 1254,
+      "height": 1254,
+      "sourceBytes": 1883272,
+      "webBytes": 288218,
+      "contentSafeArea": null
+    },
+    {
+      "id": "control-search",
+      "source": "masters/control-search.png",
+      "web": "runtime/control-search.webp",
+      "width": 1254,
+      "height": 1254,
+      "sourceBytes": 1711276,
+      "webBytes": 267124,
+      "contentSafeArea": null
+    },
+    {
+      "id": "field-input",
+      "source": "masters/field-input.png",
+      "web": "runtime/field-input.webp",
+      "width": 2172,
+      "height": 724,
+      "sourceBytes": 1641458,
+      "webBytes": 145346,
+      "contentSafeArea": {
+        "left": 0.16,
+        "top": 0.34,
+        "right": 0.84,
+        "bottom": 0.66
+      }
+    },
+    {
+      "id": "panel-confirm",
+      "source": "masters/panel-confirm.png",
+      "web": "runtime/panel-confirm.webp",
+      "width": 1448,
+      "height": 1086,
+      "sourceBytes": 1728645,
+      "webBytes": 115366,
+      "contentSafeArea": {
+        "left": 0.12,
+        "top": 0.15,
+        "right": 0.88,
+        "bottom": 0.85
+      }
+    },
+    {
+      "id": "panel-drawer",
+      "source": "masters/panel-drawer.png",
+      "web": "runtime/panel-drawer.webp",
+      "width": 1024,
+      "height": 1536,
+      "sourceBytes": 2027507,
+      "webBytes": 119348,
+      "contentSafeArea": {
+        "left": 0.12,
+        "top": 0.15,
+        "right": 0.88,
+        "bottom": 0.85
+      }
+    },
+    {
+      "id": "status-in-vault",
+      "source": "masters/status-in-vault.png",
+      "web": "runtime/status-in-vault.webp",
+      "width": 2172,
+      "height": 724,
+      "sourceBytes": 1454085,
+      "webBytes": 211898,
+      "contentSafeArea": {
+        "left": 0.16,
+        "top": 0.34,
+        "right": 0.84,
+        "bottom": 0.66
+      }
+    },
+    {
+      "id": "status-listed",
+      "source": "masters/status-listed.png",
+      "web": "runtime/status-listed.webp",
+      "width": 2172,
+      "height": 724,
+      "sourceBytes": 1706951,
+      "webBytes": 250862,
+      "contentSafeArea": {
+        "left": 0.16,
+        "top": 0.34,
+        "right": 0.84,
+        "bottom": 0.66
+      }
+    },
+    {
+      "id": "tab-default",
+      "source": "masters/tab-default.png",
+      "web": "runtime/tab-default.webp",
+      "width": 2172,
+      "height": 724,
+      "sourceBytes": 1483637,
+      "webBytes": 181640,
+      "contentSafeArea": {
+        "left": 0.16,
+        "top": 0.34,
+        "right": 0.84,
+        "bottom": 0.66
+      }
+    },
+    {
+      "id": "tab-selected",
+      "source": "masters/tab-selected.png",
+      "web": "runtime/tab-selected.webp",
+      "width": 2172,
+      "height": 724,
+      "sourceBytes": 1848236,
+      "webBytes": 306046,
+      "contentSafeArea": {
+        "left": 0.16,
+        "top": 0.34,
+        "right": 0.84,
+        "bottom": 0.66
+      }
+    },
+    {
+      "id": "tag-serial",
+      "source": "masters/tag-serial.png",
+      "web": "runtime/tag-serial.webp",
+      "width": 1024,
+      "height": 1536,
+      "sourceBytes": 2024317,
+      "webBytes": 141994,
+      "contentSafeArea": {
+        "left": 0.28,
+        "top": 0.28,
+        "right": 0.72,
+        "bottom": 0.83
+      }
+    }
+  ],
+  "sourceBytes": 36104972,
+  "webBytes": 4369034,
+  "status": "assets-generated; first-batch-integrated",
+  "notes": "WebP format export preserves dimensions and alpha. Text safe areas are initial guides, not final page verification."
+}

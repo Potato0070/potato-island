@@ -1,12 +1,15 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 import PageReadState from '../components/PageReadState';
 import { readFailureFrom, validPageId, type ReadFailure } from '../components/pageReadStatus';
 import TradeConfirmDialog from '../components/TradeConfirmDialog';
-import { WEB_TEXT_INPUT_RESET } from '../components/webTextInputStyle';
+import SeasideButton from '../components/SeasideButton';
+import SeasideTextInput from '../components/SeasideTextInput';
+import SeasideSurface from '../components/SeasideSurface';
+import SeasideResultDialog from '../components/SeasideResultDialog';
 
 // 💰 千分位金钱格式化
 const formatMoney = (num: number | string) => {
@@ -133,23 +136,9 @@ export default function PublishConsignScreen() {
         </View>
 
         <View style={styles.inputBox}>
-           <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 12}}>
-              <Text style={styles.inputLabel}>寄售价格（土豆币）</Text>
-              {/* 🌟 核心：输入价格瞬间，立刻显示到手收益 */}
-              {parsedPrice > 0 && (
-                  <Text style={{fontSize: 12, color: '#D49A36', fontWeight: '800'}}>
-                     预计到手：{formatMoney(income)} 土豆币
-                  </Text>
-              )}
-           </View>
-           <TextInput 
-              accessibilityLabel="寄售价格" editable={!publishing} style={[styles.inputField, WEB_TEXT_INPUT_RESET]}
-              placeholder="请输入您的挂单价" 
-              placeholderTextColor="#A1887F"
-              keyboardType="decimal-pad" 
-              value={price} 
-              onChangeText={(val) => setPrice(val.replace(/[^0-9.]/g, ''))} // 🌟 防呆拦截非法输入
-           />
+           <SeasideTextInput label="寄售价格" unit="土豆币" editable={!publishing} hint="请输入大于 0 的金额，最多保留两位小数。"
+              placeholder="请输入寄售价格" keyboardType="decimal-pad" value={price}
+              onChangeText={(val) => setPrice(val.replace(/[^0-9.]/g, ''))} />
         </View>
 
         <View style={styles.feeBox}>
@@ -168,28 +157,16 @@ export default function PublishConsignScreen() {
            </View>
         </View>
 
-        <Text style={styles.hintText}>* 上架后资产将被冻结，直至取消挂单或被买家买走。成交后收益将自动打入您的土豆币金库。</Text>
-
-        <TouchableOpacity style={[styles.submitBtn, parsedPrice <= 0 && {backgroundColor: '#EAE0D5'}]} onPress={handlePublishClick} disabled={publishing || parsedPrice <= 0}>
-           <Text style={[styles.submitBtnText, parsedPrice <= 0 && {color: '#A1887F'}]}>确认上架大盘</Text>
-        </TouchableOpacity>
+        <SeasideSurface kind="notice" style={{ marginBottom: 20 }}><Text style={{ color: '#74695E', fontSize: 14, lineHeight: 23 }}>上架后暂不能转赠；撤回寄售后可继续转赠。成交后收益进入您的土豆币金库。</Text></SeasideSurface>
+        <SeasideButton label="核对寄售" tone="transaction" onPress={handlePublishClick} disabled={publishing || parsedPrice <= 0} />
       </ScrollView>
 
       <TradeConfirmDialog visible={confirmModalVisible} title="确认寄售" confirmLabel="确认上架"
         description={`寄售价格：${formatMoney(parsedPrice)} 土豆币\n扣除版税后预计到手：${formatMoney(income)} 土豆币。\n上架后暂不能转赠，撤回寄售后恢复。`}
         error={publishError} busy={publishing} onCancel={() => { if (!mutationLock.current) setConfirmModalVisible(false); }} onConfirm={executePublish} />
 
-      <Modal visible={!!successModal} transparent animationType="fade">
-         <View style={styles.modalOverlayCenter}>
-            <View style={[styles.confirmBox, {borderColor: '#D49A36', borderWidth: 2}]}>
-               <Text style={[styles.confirmTitle, {color: '#D49A36', fontSize: 22}]}>{successModal?.title}</Text>
-               <Text style={[styles.confirmDesc, {fontSize: 15, color: '#4E342E', fontWeight: '900', lineHeight: 22}]}>{successModal?.msg}</Text>
-               <TouchableOpacity style={[styles.confirmBtn, {width: '100%', backgroundColor: '#D49A36'}]} onPress={() => { setSuccessModal(null); router.replace('/(tabs)/profile'); }}>
-                  <Text style={styles.confirmBtnText}>回金库等待捷报</Text>
-               </TouchableOpacity>
-            </View>
-         </View>
-      </Modal>
+      <SeasideResultDialog visible={!!successModal} title={successModal?.title || ''} description={successModal?.msg || ''}
+        primaryLabel="返回金库" onClose={() => { setSuccessModal(null); router.replace('/(tabs)/profile'); }} />
 
     </SafeAreaView>
   );

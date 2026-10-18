@@ -1,0 +1,522 @@
+[
+  {
+    "id": "badge-neutral",
+    "width": 2172,
+    "height": 724,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      66,
+      145,
+      2107,
+      573
+    ],
+    "bytes": 1572646
+  },
+  {
+    "id": "banner-notice",
+    "width": 2172,
+    "height": 724,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      31,
+      104,
+      2141,
+      616
+    ],
+    "bytes": 1723773
+  },
+  {
+    "id": "button-danger-clay",
+    "width": 2172,
+    "height": 724,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      29,
+      92,
+      2145,
+      628
+    ],
+    "bytes": 2177670
+  },
+  {
+    "id": "button-primary-blue",
+    "width": 2172,
+    "height": 724,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      30,
+      94,
+      2143,
+      626
+    ],
+    "bytes": 2339154
+  },
+  {
+    "id": "button-secondary-ivory",
+    "width": 2172,
+    "height": 724,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      29,
+      93,
+      2143,
+      626
+    ],
+    "bytes": 1858277
+  },
+  {
+    "id": "button-transaction-gold",
+    "width": 2172,
+    "height": 724,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      29,
+      93,
+      2144,
+      628
+    ],
+    "bytes": 2151080
+  },
+  {
+    "id": "checkbox-checked",
+    "width": 1254,
+    "height": 1254,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      153,
+      154,
+      1101,
+      1103
+    ],
+    "bytes": 2210193
+  },
+  {
+    "id": "checkbox-unchecked",
+    "width": 1254,
+    "height": 1254,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      129,
+      145,
+      1125,
+      1108
+    ],
+    "bytes": 1537724
+  },
+  {
+    "id": "control-back",
+    "width": 1254,
+    "height": 1254,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      158,
+      176,
+      1096,
+      1081
+    ],
+    "bytes": 1501049
+  },
+  {
+    "id": "control-close",
+    "width": 1254,
+    "height": 1254,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      174,
+      177,
+      1081,
+      1079
+    ],
+    "bytes": 1524022
+  },
+  {
+    "id": "control-filter",
+    "width": 1254,
+    "height": 1254,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0
+    ],
+    "bboxAlpha32": [
+      113,
+      135,
+      1142,
+      1124
+    ],
+    "bytes": 1883272
+  },
+  {
+    "id": "control-search",
+    "width": 1254,
+    "height": 1254,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      134,
+      157,
+      1120,
+      1099
+    ],
+    "bytes": 1711276
+  },
+  {
+    "id": "field-input",
+    "width": 2172,
+    "height": 724,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      27,
+      112,
+      2145,
+      611
+    ],
+    "bytes": 1641458
+  },
+  {
+    "id": "panel-confirm",
+    "width": 1448,
+    "height": 1086,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      54,
+      100,
+      1406,
+      990
+    ],
+    "bytes": 1728645
+  },
+  {
+    "id": "panel-drawer",
+    "width": 1024,
+    "height": 1536,
+    "alphaRange": [
+      0,
+      254
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      30,
+      50,
+      1004,
+      1486
+    ],
+    "bytes": 2027507
+  },
+  {
+    "id": "status-in-vault",
+    "width": 2172,
+    "height": 724,
+    "alphaRange": [
+      0,
+      254
+    ],
+    "perimeterAlpha": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      59,
+      162,
+      2113,
+      561
+    ],
+    "bytes": 1454085
+  },
+  {
+    "id": "status-listed",
+    "width": 2172,
+    "height": 724,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      60,
+      135,
+      2113,
+      590
+    ],
+    "bytes": 1706951
+  },
+  {
+    "id": "tab-default",
+    "width": 2172,
+    "height": 724,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      55,
+      141,
+      2117,
+      580
+    ],
+    "bytes": 1483637
+  },
+  {
+    "id": "tab-selected",
+    "width": 2172,
+    "height": 724,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      73,
+      146,
+      2099,
+      575
+    ],
+    "bytes": 1848236
+  },
+  {
+    "id": "tag-serial",
+    "width": 1024,
+    "height": 1536,
+    "alphaRange": [
+      0,
+      254
+    ],
+    "perimeterAlpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bboxAlpha32": [
+      115,
+      65,
+      911,
+      1477
+    ],
+    "bytes": 2024317
+  }
+]

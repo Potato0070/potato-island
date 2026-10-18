@@ -1,12 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import FolioButton from '../components/FolioButton';
 import FolioPaperSurface from '../components/FolioPaperSurface';
 import { FolioArtwork, FolioSerialTag, FolioStateTag } from '../components/FolioArtwork';
 import { WEB_TEXT_INPUT_RESET } from '../components/webTextInputStyle';
+import SeasideSheet from '../components/SeasideSheet';
+import SeasideTextInput from '../components/SeasideTextInput';
+import SeasideSurface from '../components/SeasideSurface';
+import SeasideButton from '../components/SeasideButton';
+import SeasideResultDialog from '../components/SeasideResultDialog';
+import TradeConfirmDialog from '../components/TradeConfirmDialog';
 import { OWNED_COLORS, formatIslandTime, itemStatus, money, serialLabel, validateConsignPrice, type OwnedHistory, type OwnedItem } from '../constants/owned-collection';
 import { useIslandFonts } from '../hooks/use-island-fonts';
 import { supabase } from '../supabase';
@@ -266,71 +272,36 @@ export default function MyNftDetailScreen() {
         )}
       </View>
 
-      <Modal visible={priceSheetOpen} transparent animationType="slide" onRequestClose={closePriceSheet}>
-        <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Pressable accessibilityLabel="关闭寄售面板" style={styles.scrim} onPress={closePriceSheet} />
-          <FolioPaperSurface kind="paper" style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) }]}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <View style={styles.sheetHeadingCopy}><Text style={[styles.sheetTitle, { fontFamily: fonts.semibold }]}>发布寄售</Text><Text style={styles.sheetSubtitle}>将这张藏品放入土豆岛集市</Text></View>
-              <Pressable accessibilityRole="button" accessibilityLabel="关闭寄售面板" onPress={closePriceSheet} disabled={busy} style={styles.sheetClose}><Ionicons name="close" size={20} color={OWNED_COLORS.ink} /></Pressable>
-            </View>
-            <ScrollView style={styles.sheetScroll} contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
-            {item ? <View style={styles.sheetItem}>
-              <FolioArtwork uri={imageUri} framed={false} style={styles.sheetArt} accessibilityLabel={`${collectionTitle}封面`} />
-              <View style={styles.sheetItemCopy}><Text numberOfLines={1} style={[styles.sheetItemName, { fontFamily: fonts.semibold }]}>{collectionTitle}</Text><Text style={styles.sheetItemSerial}>{serial}</Text><Text style={styles.sheetItemStatus}>{itemStatus(item.status)}</Text></View>
-            </View> : null}
-            <Text style={[styles.inputLabel, { fontFamily: fonts.semibold }]}>寄售价格 <Text style={styles.inputUnit}>土豆币</Text></Text>
-            <View style={[styles.inputWrap, Boolean(inlineError) && styles.inputWrapError]}>
-              <TextInput accessibilityLabel="寄售价格" value={price} onChangeText={(value) => { setPrice(value); setInlineError(''); }} placeholder="填写藏品价格" placeholderTextColor="#B0A497" keyboardType="decimal-pad" maxLength={14} style={[styles.priceInput, { fontFamily: fonts.semibold }]} underlineColorAndroid="transparent" selectionColor={OWNED_COLORS.blue} />
-              <Text style={styles.inputUnit}>土豆币</Text>
-            </View>
-            {inlineError ? <Text accessibilityLiveRegion="polite" style={styles.inlineError}>{inlineError}</Text> : collection?.max_consign_price ? <Text style={styles.priceCap}>该系列最高寄售价为 {money(collection.max_consign_price)} 土豆币</Text> : null}
-            <View style={styles.listingNotice}><Image source={CONSIGN_NOTICE_ART} resizeMode="contain" style={styles.listingNoticeArt} accessible={false} /><Text style={styles.listingNoticeText}>上架后暂时不能转赠；撤回寄售后会回到金库。</Text></View>
-            <FolioButton label="确认上架" tone="blue" pencilIcon="consign" onPress={publishConsign} loading={busy} style={styles.submitButton} fontFamily={fonts.semibold} />
-            </ScrollView>
-          </FolioPaperSurface>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      <Modal visible={withdrawOpen} transparent animationType="fade" onRequestClose={() => !busy && setWithdrawOpen(false)}>
-        <View style={styles.centerOverlay}>
-          <FolioPaperSurface kind="confirm" style={styles.confirmCard}>
-            <Image source={require('../assets/owned-collection/f-card-v1/runtime/icon-withdraw-pencil.webp')} resizeMode="contain" style={styles.confirmIllustration} accessible={false} />
-            <Text style={[styles.confirmTitle, { fontFamily: fonts.semibold }]}>撤回这张寄售藏品？</Text>
-            <Text style={styles.confirmDescription}>撤回后，藏品会回到金库并恢复转赠。当前寄售价将一并取消。</Text>
-            {item ? <View style={styles.confirmItem}>
-              <FolioArtwork uri={imageUri} framed={false} style={styles.confirmArt} accessibilityLabel={`${collectionTitle}封面`} />
-              <View style={styles.confirmItemCopy}><Text numberOfLines={1} style={[styles.confirmItemName, { fontFamily: fonts.semibold }]}>{collectionTitle}</Text><Text style={styles.confirmItemSerial}>{serial}</Text></View>
-              <Text style={[styles.confirmItemPrice, { fontFamily: fonts.semibold }]}>{money(currencyValue)}</Text>
-            </View> : null}
-            {inlineError ? <Text accessibilityLiveRegion="polite" style={styles.inlineError}>{inlineError}</Text> : null}
-            <View style={styles.confirmActions}>
-              <FolioButton label="保留寄售" tone="paper" onPress={() => setWithdrawOpen(false)} disabled={busy} style={styles.confirmButton} fontFamily={fonts.semibold} />
-              <FolioButton label="确认撤回" tone="gold" pencilIcon="withdraw" onPress={withdrawConsign} loading={busy} style={styles.confirmButton} fontFamily={fonts.semibold} />
-            </View>
-          </FolioPaperSurface>
+      <SeasideSheet visible={priceSheetOpen} title="发布寄售" busy={busy} onClose={closePriceSheet}
+        footer={<SeasideButton label="确认上架" tone="transaction" onPress={publishConsign} loading={busy} />}>
+        <Text style={styles.sheetSubtitle}>将这张藏品放入土豆岛集市</Text>
+        {item ? <View style={styles.sheetItem}>
+          <FolioArtwork uri={imageUri} framed={false} style={styles.sheetArt} accessibilityLabel={`${collectionTitle}封面`} />
+          <View style={styles.sheetItemCopy}><Text style={styles.sheetItemName}>{collectionTitle}</Text><Text style={styles.sheetItemSerial}>{serial}</Text><Text style={styles.sheetItemStatus}>{itemStatus(item.status)}</Text></View>
+        </View> : null}
+        <SeasideTextInput label="寄售价格" unit="土豆币" value={price} onChangeText={value => { setPrice(value); setInlineError(''); }}
+          placeholder="填写藏品价格" keyboardType="decimal-pad" maxLength={14} editable={!busy} error={inlineError}
+          hint={collection?.max_consign_price ? `该系列最高寄售价为 ${money(collection.max_consign_price)} 土豆币` : '请输入大于 0 的金额，最多两位小数'} />
+        <SeasideSurface kind="notice" style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+          <Image source={CONSIGN_NOTICE_ART} resizeMode="contain" style={styles.listingNoticeArt} accessible={false} />
+          <Text style={styles.listingNoticeText}>上架后暂时不能转赠；撤回寄售后会回到金库。</Text>
+        </SeasideSurface>
+      </SeasideSheet>
+      <TradeConfirmDialog visible={withdrawOpen} title="撤回寄售" description="撤回后，藏品会回到金库并恢复转赠，当前寄售价同时取消。"
+        cancelLabel="保留寄售" confirmLabel="确认撤回" tone="danger" busy={busy} error={inlineError}
+        onCancel={() => setWithdrawOpen(false)} onConfirm={withdrawConsign}>
+        <View style={styles.confirmItem}>
+          <FolioArtwork uri={imageUri} framed={false} style={styles.confirmArt} accessibilityLabel={`${collectionTitle}封面`} />
+          <View style={styles.confirmItemCopy}><Text style={styles.confirmItemName}>{collectionTitle}</Text><Text style={styles.confirmItemSerial}>{serial}</Text></View>
+          <Text style={styles.confirmItemPrice}>{money(currencyValue)} 土豆币</Text>
         </View>
-      </Modal>
-
-      <Modal visible={Boolean(result)} transparent animationType="fade" onRequestClose={() => setResult(null)}>
-        <View style={styles.centerOverlay}>
-          <FolioPaperSurface kind="result" style={styles.resultCard}>
-            <Image source={result?.kind === 'listed' ? require('../assets/owned-collection/f-card-v1/runtime/island-market-stall.webp') : require('../assets/owned-collection/f-card-v1/runtime/island-archive-tray.webp')} resizeMode="contain" style={styles.resultArt} accessible={false} />
-            <Text style={[styles.resultTitle, { fontFamily: fonts.semibold }]}>{result?.kind === 'listed' ? '上架成功' : '已收回金库'}</Text>
-            <Text style={styles.resultSubtitle}>{result?.kind === 'listed' ? '这张藏品已经加入土豆岛集市' : '寄售已撤回，藏品回到了你的金库'}</Text>
-            {item ? <View style={styles.resultSummary}>
-              <FolioArtwork uri={imageUri} framed={false} style={styles.resultThumb} accessibilityLabel={`${collectionTitle}封面`} />
-              <View style={styles.resultCopy}><Text numberOfLines={1} style={[styles.resultName, { fontFamily: fonts.semibold }]}>{collectionTitle} · {serial}</Text><Text style={styles.resultMeta}>{result?.kind === 'listed' ? '寄售价格' : '原寄售价'}</Text></View>
-              <Text style={[styles.resultPrice, { fontFamily: fonts.semibold }]}>{money(result?.price || 0)}</Text>
-            </View> : null}
-            <View style={styles.resultActions}>
-              <FolioButton label="继续查看" tone="paper" pencilIcon="album" onPress={() => setResult(null)} style={styles.resultButton} fontFamily={fonts.semibold} />
-              <FolioButton label="返回藏品册" tone="blue" pencilIcon="collection" onPress={() => { setResult(null); router.replace('/my-collection-list'); }} style={styles.resultButton} fontFamily={fonts.semibold} />
-            </View>
-          </FolioPaperSurface>
-        </View>
-      </Modal>
+      </TradeConfirmDialog>
+      <SeasideResultDialog visible={Boolean(result)} title={result?.kind === 'listed' ? '上架成功' : '撤回成功'}
+        description={`${collectionTitle} ${serial}\n${result?.kind === 'listed' ? '已加入土豆岛集市' : '已回到金库，可以继续转赠'}`}
+        onClose={() => setResult(null)} primaryLabel="返回藏品册" onPrimary={() => { setResult(null); router.replace('/my-collection-list'); }}>
+        <Text style={{ color: OWNED_COLORS.gold, textAlign: 'center', marginBottom: 14 }}>{result?.kind === 'listed' ? '寄售价格' : '原寄售价'}：{money(result?.price || 0)} 土豆币</Text>
+        <SeasideButton label="继续查看" tone="secondary" onPress={() => setResult(null)} />
+      </SeasideResultDialog>
     </SafeAreaView>
   );
 }
