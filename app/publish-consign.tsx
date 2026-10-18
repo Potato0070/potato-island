@@ -1,10 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../supabase';
 import PageReadState from '../components/PageReadState';
 import { readFailureFrom, validPageId, type ReadFailure } from '../components/pageReadStatus';
+import TradeConfirmDialog from '../components/TradeConfirmDialog';
+import { WEB_TEXT_INPUT_RESET } from '../components/webTextInputStyle';
 
 // 💰 千分位金钱格式化
 const formatMoney = (num: number | string) => {
@@ -36,6 +38,8 @@ export default function PublishConsignScreen() {
   const [loading, setLoading] = useState(true);
   const [readFailure, setReadFailure] = useState<ReadFailure | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const mutationLock = useRef(false);
+  const [publishError, setPublishError] = useState('');
 
   const [toastMsg, setToastMsg] = useState('');
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
@@ -63,39 +67,48 @@ export default function PublishConsignScreen() {
   };
 
   const handlePublishClick = () => {
-    const p = parseFloat(price);
-    if (isNaN(p) || p <= 0) return showToast('请输入有效价格');
+    const p = Number(price);
+    if (!Number.isFinite(p) || p <= 0 || !/^\d+(\.\d{1,2})?$/.test(price)) return showToast('请输入有效价格，最多保留两位小数');
     
     const maxPrice = nft?.collections?.max_consign_price;
     if (maxPrice && p > maxPrice) {
-       return showToast(`违规拦截：全岛最高限价为 ¥${formatMoney(maxPrice)}`);
+       return showToast(`该系列最高寄售价为 ${formatMoney(maxPrice)} 土豆币`);
     }
+    setPublishError('');
     setConfirmModalVisible(true);
   };
 
   const executePublish = async () => {
+    if (mutationLock.current) return;
+    mutationLock.current = true;
     setPublishing(true);
+    setPublishError('');
     try {
-      const p = parseFloat(price);
-      const { error } = await supabase.from('nfts').update({ status: 'listed', consign_price: p }).eq('id', id);
+      const p = Number(price);
+      if (!Number.isFinite(p) || p <= 0 || !/^\d+(\.\d{1,2})?$/.test(price)) throw new Error('请输入有效价格。');
+      if (nft.collections?.max_consign_price && p > nft.collections.max_consign_price) throw new Error('价格超过该系列最高寄售价。');
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) throw new Error('请重新登录后上架。');
+      if (nft.owner_id !== user.id) throw new Error('只能上架自己的藏品。');
+      const { data, error } = await supabase.from('nfts').update({ status: 'listed', consign_price: p })
+        .eq('id', id).eq('owner_id', user.id).eq('status', 'idle').select('id, status, consign_price').maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error('藏品状态已变化，请返回金库核对后再试。');
       
       setConfirmModalVisible(false);
-      setTimeout(() => {
-         setSuccessModal({ title: '✅ 上架成功', msg: '您的藏品已挂入现货大盘，耐心等待老板扫货吧！' });
-      }, 400);
+      setSuccessModal({ title: '上架成功', msg: '藏品已发布到集市，可在金库查看寄售状态。' });
 
-    } catch (err: any) { 
-       setConfirmModalVisible(false);
-       showToast(`上架失败: ${err.message}`); 
-    } finally { 
+    } catch (err: unknown) {
+       setPublishError(err instanceof Error ? err.message : '上架未能完成，价格已保留。请核对藏品状态后重试。');
+    } finally {
+       mutationLock.current = false;
        setPublishing(false); 
     }
   };
 
   if (loading || readFailure || !nft) return <PageReadState pageTitle="发布寄售" subject="这件藏品" status={loading ? 'loading' : readFailure || 'missing'} fallback="/(tabs)/profile" backLabel="返回金库" onRetry={fetchNft} />;
 
-  const parsedPrice = parseFloat(price) || 0;
+  const parsedPrice = /^\d+(\.\d{1,2})?$/.test(price) && Number.isFinite(Number(price)) ? Number(price) : 0;
   const fee = parsedPrice * PLATFORM_FEE_RATE;
   const income = parsedPrice - fee;
 
@@ -115,44 +128,43 @@ export default function PublishConsignScreen() {
            <View style={styles.targetInfo}>
               <Text style={styles.targetName} numberOfLines={1}>{nft.collections?.name}</Text>
               <Text style={styles.targetSub}>唯一编号: #{String(nft.serial_number).padStart(6, '0')}</Text>
-              <Text style={styles.targetSubHighlight}>大盘最高限价: ¥{nft.collections?.max_consign_price ? formatMoney(nft.collections.max_consign_price) : '无限制'}</Text>
+              <Text style={styles.targetSubHighlight}>最高寄售价：{nft.collections?.max_consign_price ? `${formatMoney(nft.collections.max_consign_price)} 土豆币` : '无限制'}</Text>
            </View>
         </View>
 
         <View style={styles.inputBox}>
-           <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12}}>
-              <Text style={styles.inputLabel}>出售价格 (¥)</Text>
+           <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 12}}>
+              <Text style={styles.inputLabel}>寄售价格（土豆币）</Text>
               {/* 🌟 核心：输入价格瞬间，立刻显示到手收益 */}
               {parsedPrice > 0 && (
                   <Text style={{fontSize: 12, color: '#D49A36', fontWeight: '800'}}>
-                     实时预计到手: ¥{formatMoney(income)}
+                     预计到手：{formatMoney(income)} 土豆币
                   </Text>
               )}
            </View>
            <TextInput 
-              style={styles.inputField} 
+              accessibilityLabel="寄售价格" editable={!publishing} style={[styles.inputField, WEB_TEXT_INPUT_RESET]}
               placeholder="请输入您的挂单价" 
               placeholderTextColor="#A1887F"
               keyboardType="decimal-pad" 
               value={price} 
               onChangeText={(val) => setPrice(val.replace(/[^0-9.]/g, ''))} // 🌟 防呆拦截非法输入
-              autoFocus
            />
         </View>
 
         <View style={styles.feeBox}>
            <View style={styles.feeRow}>
               <Text style={styles.feeLabel}>挂单金额</Text>
-              <Text style={styles.feeValue}>¥ {formatMoney(parsedPrice)}</Text>
+              <Text style={styles.feeValue}>{formatMoney(parsedPrice)} 土豆币</Text>
            </View>
            <View style={styles.feeRow}>
               <Text style={styles.feeLabel}>创作者版税 (5%)</Text>
               {/* 🌟 红色预警版税，并加上负号 */}
-              <Text style={[styles.feeValue, {color: '#FF3B30'}]}>- ¥ {formatMoney(fee)}</Text>
+              <Text style={[styles.feeValue, {color: '#FF3B30'}]}>- {formatMoney(fee)} 土豆币</Text>
            </View>
            <View style={[styles.feeRow, styles.feeTotalRow]}>
               <Text style={styles.feeLabelTotal}>预计到手收益</Text>
-              <Text style={styles.feeValueTotal}>¥ {formatMoney(income)}</Text>
+              <Text style={styles.feeValueTotal}>{formatMoney(income)} 土豆币</Text>
            </View>
         </View>
 
@@ -163,20 +175,9 @@ export default function PublishConsignScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      <Modal visible={confirmModalVisible} transparent animationType="fade">
-         <View style={styles.modalOverlayCenter}>
-            <View style={styles.confirmBox}>
-               <Text style={styles.confirmTitle}>📝 寄售二次确认</Text>
-               <Text style={styles.confirmDesc}>您即将以 <Text style={{color:'#FF3B30', fontWeight:'900'}}>¥{formatMoney(parsedPrice)}</Text> 的价格将此藏品挂入大盘。扣除版税后，预计到手 <Text style={{color:'#D49A36', fontWeight:'900'}}>¥{formatMoney(income)}</Text>，是否继续？</Text>
-               <View style={styles.confirmBtnRow}>
-                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setConfirmModalVisible(false)}><Text style={styles.cancelBtnText}>再想想</Text></TouchableOpacity>
-                  <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#D49A36'}]} onPress={executePublish} disabled={publishing}>
-                     {publishing ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmBtnText}>确认无误，上架</Text>}
-                  </TouchableOpacity>
-               </View>
-            </View>
-         </View>
-      </Modal>
+      <TradeConfirmDialog visible={confirmModalVisible} title="确认寄售" confirmLabel="确认上架"
+        description={`寄售价格：${formatMoney(parsedPrice)} 土豆币\n扣除版税后预计到手：${formatMoney(income)} 土豆币。\n上架后暂不能转赠，撤回寄售后恢复。`}
+        error={publishError} busy={publishing} onCancel={() => { if (!mutationLock.current) setConfirmModalVisible(false); }} onConfirm={executePublish} />
 
       <Modal visible={!!successModal} transparent animationType="fade">
          <View style={styles.modalOverlayCenter}>
